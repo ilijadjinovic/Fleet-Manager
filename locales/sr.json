@@ -18,7 +18,6 @@
   "error": "Greška",
   "success": "Uspešno",
   "required_field": "Obavezno polje",
-
   "login_title": "Prijava",
   "login_google": "Prijavi se Google nalogom",
   "login_or": "ili",
@@ -27,7 +26,6 @@
   "login_btn": "Prijavi se",
   "login_error": "Pogrešno korisničko ime ili lozinka",
   "logout": "Odjavi se",
-
   "tab_dashboard": "Pregled",
   "tab_vehicles": "Vozila",
   "tab_drivers": "Vozači",
@@ -36,10 +34,8 @@
   "tab_report": "Prijave",
   "tab_reports": "Izveštaji",
   "tab_profile": "Profil",
-
   "company_select": "Izaberi firmu",
   "company_all": "Sve firme",
-
   "dashboard_total_vehicles": "Ukupno vozila",
   "dashboard_active": "U funkciji",
   "dashboard_in_service": "Na servisu",
@@ -48,7 +44,6 @@
   "dashboard_upcoming_service": "Zakazani servisi",
   "dashboard_no_upcoming": "Nema nadolazećih",
   "dashboard_days_left": "dana",
-
   "vehicle_add": "Dodaj vozilo",
   "vehicle_list": "Lista vozila",
   "vehicle_brand": "Marka",
@@ -82,7 +77,6 @@
   "vehicle_tab_finance": "Finansijski podaci",
   "vehicle_tab_service": "Servisna istorija",
   "vehicle_tab_assignments": "Zaduženja",
-
   "driver_add": "Dodaj vozača",
   "driver_list": "Lista vozača",
   "driver_firstname": "Ime",
@@ -98,7 +92,6 @@
   "driver_password_hint": "Ostavite prazno ako ne dozvoljavate prijavu",
   "driver_active": "Aktivan",
   "driver_inactive": "Neaktivan",
-
   "assignment_add": "Zaduži vozilo",
   "assignment_list": "Lista zaduženja",
   "assignment_vehicle": "Vozilo",
@@ -118,7 +111,6 @@
   "assignment_unassign": "Razduži",
   "assignment_km_mismatch": "Neslaganje u kilometraži",
   "assignment_km_mismatch_msg": "Vozač je uneo kilometražu {{driverKm}} km, a poslednja evidentirane je {{systemKm}} km. Molimo proverite.",
-
   "trip_add": "Nova vožnja",
   "trip_start_km": "Početna km",
   "trip_end_km": "Krajnja km",
@@ -131,7 +123,6 @@
   "trip_fuel_receipt": "Broj računa",
   "trip_no_fueling": "Bez točenja",
   "trip_with_fueling": "Sa točenjem",
-
   "incident_add": "Prijavi",
   "incident_type": "Vrsta prijave",
   "incident_fault": "Kvar / nepravilnost",
@@ -144,7 +135,6 @@
   "incident_status_open": "Otvoreno",
   "incident_status_in_progress": "U obradi",
   "incident_status_closed": "Zatvoreno",
-
   "service_add": "Dodaj servis",
   "service_type": "Vrsta servisa",
   "service_type_regular": "Redovni servis",
@@ -159,7 +149,6 @@
   "service_next_date": "Sledeći servis (datum)",
   "service_next_km": "Sledeći servis (km)",
   "service_workshop": "Servisni centar",
-
   "report_generate": "Generiši izveštaj",
   "report_vehicle": "Izveštaj po vozilu",
   "report_driver": "Izveštaj po vozaču",
@@ -169,22 +158,47 @@
   "report_select_drivers": "Izaberi vozače",
   "report_all": "Svi",
   "report_download_pdf": "Preuzmi PDF",
-
   "profile_title": "Moj profil",
   "profile_role": "Uloga",
   "profile_company": "Firma",
   "role_master_admin": "Master administrator",
   "role_fleet_admin": "Administrator parka",
   "role_driver": "Vozač",
-
   "fuel_petrol": "Benzin",
   "fuel_diesel": "Dizel",
   "fuel_lpg": "LPG",
   "fuel_electric": "Električno",
   "fuel_hybrid": "Hibrid",
-
   "no_data": "Nema podataka",
   "confirm_delete": "Da li ste sigurni da želite da obrišete ovaj zapis?",
   "notification_km_title": "Neslaganje kilometraže",
-  "notification_km_body": "Vozač {{driver}} je uneo različitu kilometražu za vozilo {{vehicle}}."
+  "notification_km_body": "Vozač {{driver}} je uneo različitu kilometražu za vozilo {{vehicle}}.",
+  "tab_companies": "Firme",
+  "access_denied_title": "Pristup odbijen",
+  "access_denied_msg": "Nemate dozvolu za pristup ovoj aplikaciji.",
+  "pending_title": "Čeka odobrenje",
+  "pending_msg": "Vaš nalog čeka odobrenje administratora.",
+  "reg_step1": "Lični podaci",
+  "reg_step2": "Firma",
+  "reg_step3": "Pregled",
+  "reg_submit": "Pošalji zahtev",
+  "company_pib": "PIB",
+  "company_mbr": "Matični broj (MBR)",
+  "company_name": "Naziv firme",
+  "company_owner": "Vlasnik",
+  "company_director": "Direktor",
+  "company_address": "Adresa",
+  "company_phone": "Telefon firme",
+  "company_email": "Email firme",
+  "company_instagram": "Instagram",
+  "company_facebook": "Facebook",
+  "company_admins": "Fleet admini",
+  "company_vehicles_count": "Broj vozila",
+  "approve": "Odobri",
+  "reject": "Odbij",
+  "pending_requests": "Zahtevi na čekanju",
+  "user_home_address": "Adresa stanovanja",
+  "user_work_address": "Adresa radnog mesta",
+  "user_first_name": "Ime",
+  "user_last_name": "Prezime"
 }

@@ -124,3 +124,6 @@ service cloud.firestore {
     }
   }
 }
+
+    // ── ADMIN NOTIFIKACIJE (pending zahtevi) ──────────────────
+    // Napomena: ovo ide VAN companies bloka, na root nivou

@@ -18,7 +18,6 @@
   "error": "Error",
   "success": "Success",
   "required_field": "Required field",
-
   "login_title": "Sign In",
   "login_google": "Sign in with Google",
   "login_or": "or",
@@ -27,7 +26,6 @@
   "login_btn": "Sign In",
   "login_error": "Invalid username or password",
   "logout": "Sign Out",
-
   "tab_dashboard": "Overview",
   "tab_vehicles": "Vehicles",
   "tab_drivers": "Drivers",
@@ -36,10 +34,8 @@
   "tab_report": "Reports",
   "tab_reports": "Reports",
   "tab_profile": "Profile",
-
   "company_select": "Select company",
   "company_all": "All companies",
-
   "dashboard_total_vehicles": "Total vehicles",
   "dashboard_active": "Active",
   "dashboard_in_service": "In service",
@@ -48,7 +44,6 @@
   "dashboard_upcoming_service": "Scheduled services",
   "dashboard_no_upcoming": "Nothing upcoming",
   "dashboard_days_left": "days",
-
   "vehicle_add": "Add vehicle",
   "vehicle_list": "Vehicle list",
   "vehicle_brand": "Make",
@@ -82,7 +77,6 @@
   "vehicle_tab_finance": "Financial data",
   "vehicle_tab_service": "Service history",
   "vehicle_tab_assignments": "Assignments",
-
   "driver_add": "Add driver",
   "driver_list": "Driver list",
   "driver_firstname": "First name",
@@ -98,7 +92,6 @@
   "driver_password_hint": "Leave empty to disable login",
   "driver_active": "Active",
   "driver_inactive": "Inactive",
-
   "assignment_add": "Assign vehicle",
   "assignment_list": "Assignment list",
   "assignment_vehicle": "Vehicle",
@@ -118,7 +111,6 @@
   "assignment_unassign": "Return vehicle",
   "assignment_km_mismatch": "Mileage discrepancy",
   "assignment_km_mismatch_msg": "Driver entered {{driverKm}} km, last recorded was {{systemKm}} km. Please verify.",
-
   "trip_add": "New trip",
   "trip_start_km": "Start km",
   "trip_end_km": "End km",
@@ -131,7 +123,6 @@
   "trip_fuel_receipt": "Receipt number",
   "trip_no_fueling": "No refueling",
   "trip_with_fueling": "With refueling",
-
   "incident_add": "Report",
   "incident_type": "Report type",
   "incident_fault": "Fault / issue",
@@ -144,7 +135,6 @@
   "incident_status_open": "Open",
   "incident_status_in_progress": "In progress",
   "incident_status_closed": "Closed",
-
   "service_add": "Add service",
   "service_type": "Service type",
   "service_type_regular": "Regular service",
@@ -159,7 +149,6 @@
   "service_next_date": "Next service (date)",
   "service_next_km": "Next service (km)",
   "service_workshop": "Service center",
-
   "report_generate": "Generate report",
   "report_vehicle": "Vehicle report",
   "report_driver": "Driver report",
@@ -169,22 +158,43 @@
   "report_select_drivers": "Select drivers",
   "report_all": "All",
   "report_download_pdf": "Download PDF",
-
   "profile_title": "My profile",
   "profile_role": "Role",
   "profile_company": "Company",
   "role_master_admin": "Master administrator",
   "role_fleet_admin": "Fleet administrator",
   "role_driver": "Driver",
-
   "fuel_petrol": "Petrol",
   "fuel_diesel": "Diesel",
   "fuel_lpg": "LPG",
   "fuel_electric": "Electric",
   "fuel_hybrid": "Hybrid",
-
   "no_data": "No data",
   "confirm_delete": "Are you sure you want to delete this record?",
   "notification_km_title": "Mileage discrepancy",
-  "notification_km_body": "Driver {{driver}} entered a different mileage for vehicle {{vehicle}}."
+  "notification_km_body": "Driver {{driver}} entered a different mileage for vehicle {{vehicle}}.",
+  "tab_companies": "Companies",
+  "access_denied_title": "Access Denied",
+  "access_denied_msg": "You do not have permission to access this application.",
+  "pending_title": "Awaiting Approval",
+  "pending_msg": "Your account is awaiting administrator approval.",
+  "company_pib": "Tax ID (PIB)",
+  "company_mbr": "Company Reg. No. (MBR)",
+  "company_name": "Company name",
+  "company_owner": "Owner",
+  "company_director": "Director",
+  "company_address": "Address",
+  "company_phone": "Company phone",
+  "company_email": "Company email",
+  "company_instagram": "Instagram",
+  "company_facebook": "Facebook",
+  "company_admins": "Fleet admins",
+  "company_vehicles_count": "Vehicle count",
+  "approve": "Approve",
+  "reject": "Reject",
+  "pending_requests": "Pending requests",
+  "user_home_address": "Home address",
+  "user_work_address": "Work address",
+  "user_first_name": "First name",
+  "user_last_name": "Last name"
 }

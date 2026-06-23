@@ -3,7 +3,7 @@
 //  Glavni modul: auth state, routing, tab switching
 // ============================================================
 
-import { auth, db, getUserProfile, logout } from "./firebase.js";
+import { auth, getUserProfile, logout } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { loadLanguage, t, applyTranslations } from "./i18n.js";
 import { renderDashboard } from "./dashboard.js";
@@ -15,13 +15,15 @@ import { renderIncidents } from "./incidents.js";
 import { renderReports } from "./reports.js";
 import { renderProfile } from "./profile.js";
 import { renderLogin } from "./login.js";
+import { renderRegister, showPendingScreen } from "./register.js";
+import { renderCompanies } from "./companies.js";
 
 // ── GLOBALNI STATE ────────────────────────────────────────────
 export const S = {
-  user: null,           // Firebase Auth user
-  profile: null,        // Firestore user profil
-  companyId: null,      // Aktivna kompanija (za master admin biraju)
-  companies: [],        // Lista svih kompanija (master admin)
+  user: null,
+  profile: null,
+  companyId: null,
+  companies: [],
   activeTab: "dashboard",
 };
 
@@ -35,18 +37,25 @@ async function init() {
       S.profile = await getUserProfile(firebaseUser.uid);
 
       if (!S.profile) {
-        // Novi Google korisnik bez profila — prikaži "pristup nije odobren"
-        showAccessDenied();
+        // Novi korisnik — prikaži registration formu
+        showRegistration();
+        return;
+      }
+
+      if (S.profile.status === "pending") {
+        showPendingScreen();
+        return;
+      }
+
+      if (S.profile.status === "rejected") {
+        showRejected();
         return;
       }
 
       // Postavi companyId
-      if (S.profile.role === "master_admin") {
-        // Master admin: defaultno prva kompanija ili null (vidi sve)
-        S.companyId = S.profile.lastCompanyId || null;
-      } else {
-        S.companyId = S.profile.companyId;
-      }
+      S.companyId = S.profile.role === "master_admin"
+        ? (S.profile.lastCompanyId || null)
+        : S.profile.companyId;
 
       showApp();
     } else {
@@ -58,40 +67,53 @@ async function init() {
   });
 }
 
-// ── PRIKAZ LOGIN ──────────────────────────────────────────────
+// ── EKRANI ────────────────────────────────────────────────────
 function showLogin() {
-  document.getElementById("app").innerHTML = "";
+  document.getElementById("app").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
   renderLogin();
 }
 
-// ── PRIKAZ APP ────────────────────────────────────────────────
+function showRegistration() {
+  document.getElementById("login-screen").classList.add("hidden");
+  const app = document.getElementById("app");
+  app.classList.remove("hidden");
+  // Sakrij nav i header dugmad za logout tokom registracije
+  app.innerHTML = `<div id="register-container"></div>`;
+  renderRegister(document.getElementById("register-container"));
+}
+
+function showRejected() {
+  document.getElementById("login-screen").classList.add("hidden");
+  const app = document.getElementById("app");
+  app.classList.remove("hidden");
+  app.innerHTML = `
+    <div class="access-denied">
+      <div class="access-denied__icon">❌</div>
+      <h2>Zahtev odbijen</h2>
+      <p>Vaš zahtev za pristup je odbijen. Kontaktirajte administratora.</p>
+      <button class="btn btn--secondary" id="btn-rejected-logout">Odjavi se</button>
+    </div>
+  `;
+  document.getElementById("btn-rejected-logout")?.addEventListener("click", doLogout);
+}
+
 function showApp() {
   document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("app").classList.remove("hidden");
+  // Obnovi originalni HTML ako je bio zamenjen
+  const app = document.getElementById("app");
+  if (!app.querySelector(".app-header")) {
+    location.reload(); // Najbrži način da se vrati originalni layout
+    return;
+  }
+  app.classList.remove("hidden");
   buildNav();
   navigateTo(S.activeTab);
 }
 
-// ── PRISTUP NIJE ODOBREN ──────────────────────────────────────
-function showAccessDenied() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("app").innerHTML = `
-    <div class="access-denied">
-      <div class="access-denied__icon">🚫</div>
-      <h2>${t("access_denied_title")}</h2>
-      <p>${t("access_denied_msg")}</p>
-      <button onclick="import('./app.js').then(m => m.doLogout())" class="btn btn--secondary">
-        ${t("logout")}
-      </button>
-    </div>
-  `;
-  document.getElementById("app").classList.remove("hidden");
-}
-
 // ── NAVIGACIJA ────────────────────────────────────────────────
 const TAB_CONFIG = {
-  master_admin: ["dashboard", "vehicles", "drivers", "assignments", "reports", "profile"],
+  master_admin: ["dashboard", "vehicles", "drivers", "assignments", "companies", "reports", "profile"],
   fleet_admin:  ["dashboard", "vehicles", "drivers", "assignments", "reports", "profile"],
   driver:       ["dashboard", "trips", "incidents", "profile"],
 };
@@ -103,8 +125,21 @@ const TAB_ICONS = {
   assignments: "🔑",
   trips:       "🛣️",
   incidents:   "⚠️",
+  companies:   "🏢",
   reports:     "📄",
   profile:     "⚙️",
+};
+
+const TAB_KEYS = {
+  dashboard:   "tab_dashboard",
+  vehicles:    "tab_vehicles",
+  drivers:     "tab_drivers",
+  assignments: "tab_assignments",
+  trips:       "tab_trips",
+  incidents:   "tab_report",
+  companies:   "tab_companies",
+  reports:     "tab_reports",
+  profile:     "tab_profile",
 };
 
 const TAB_RENDERERS = {
@@ -114,6 +149,7 @@ const TAB_RENDERERS = {
   assignments: renderAssignments,
   trips:       renderTrips,
   incidents:   renderIncidents,
+  companies:   renderCompanies,
   reports:     renderReports,
   profile:     renderProfile,
 };
@@ -124,51 +160,34 @@ export function buildNav() {
   const nav = document.getElementById("main-nav");
   if (!nav) return;
 
-  nav.innerHTML = tabs
-    .map(
-      (tab) => `
-    <button
-      class="nav-btn ${S.activeTab === tab ? "nav-btn--active" : ""}"
-      data-tab="${tab}"
-      title="${t("tab_" + tab)}"
-    >
+  nav.innerHTML = tabs.map(tab => `
+    <button class="nav-btn ${S.activeTab === tab ? "nav-btn--active" : ""}" data-tab="${tab}">
       <span class="nav-btn__icon">${TAB_ICONS[tab]}</span>
-      <span class="nav-btn__label" data-i18n="tab_${tab}">${t("tab_" + tab)}</span>
+      <span class="nav-btn__label">${t(TAB_KEYS[tab]) || tab}</span>
     </button>
-  `
-    )
-    .join("");
+  `).join("");
 
-  nav.querySelectorAll(".nav-btn").forEach((btn) => {
+  nav.querySelectorAll(".nav-btn").forEach(btn => {
     btn.addEventListener("click", () => navigateTo(btn.dataset.tab));
   });
 }
 
 export function navigateTo(tab) {
   S.activeTab = tab;
-
-  // Ažuriraj active klasu
-  document.querySelectorAll(".nav-btn").forEach((btn) => {
+  document.querySelectorAll(".nav-btn").forEach(btn => {
     btn.classList.toggle("nav-btn--active", btn.dataset.tab === tab);
   });
-
-  // Renderuj sadržaj
   const content = document.getElementById("content");
   if (!content) return;
   content.innerHTML = `<div class="loading">${t("loading")}</div>`;
-
   const renderer = TAB_RENDERERS[tab];
-  if (renderer) {
-    renderer(content);
-  } else {
-    content.innerHTML = `<p>${t("no_data")}</p>`;
-  }
+  if (renderer) renderer(content);
+  else content.innerHTML = `<p>${t("no_data")}</p>`;
 }
 
-// ── COMPANY SWITCHER (master admin) ──────────────────────────
+// ── COMPANY SWITCHER ──────────────────────────────────────────
 export function setActiveCompany(companyId) {
   S.companyId = companyId;
-  // Sačuvaj poslednju izabranu kompaniju
   import("./firebase.js").then(({ setUserProfile }) => {
     setUserProfile(S.user.uid, { lastCompanyId: companyId });
   });
@@ -180,45 +199,31 @@ export async function doLogout() {
   await logout();
 }
 
-// ── TOAST NOTIFIKACIJE ────────────────────────────────────────
+// ── TOAST ─────────────────────────────────────────────────────
 export function showToast(message, type = "info", duration = 3500) {
   const existing = document.querySelector(".toast");
   if (existing) existing.remove();
-
   const toast = document.createElement("div");
   toast.className = `toast toast--${type}`;
   toast.textContent = message;
   document.body.appendChild(toast);
-
   requestAnimationFrame(() => toast.classList.add("toast--visible"));
-
   setTimeout(() => {
     toast.classList.remove("toast--visible");
     setTimeout(() => toast.remove(), 300);
   }, duration);
 }
 
-// ── MODAL HELPER ──────────────────────────────────────────────
+// ── MODAL ─────────────────────────────────────────────────────
 export function openModal(title, bodyHTML, onConfirm = null) {
   document.getElementById("modal-title").textContent = title;
   document.getElementById("modal-body").innerHTML = bodyHTML;
-
   const confirmBtn = document.getElementById("modal-confirm");
-  const cancelBtn = document.getElementById("modal-cancel");
-
+  const cancelBtn  = document.getElementById("modal-cancel");
   confirmBtn.style.display = onConfirm ? "inline-flex" : "none";
-
-  const closeModal = () => {
-    document.getElementById("modal-overlay").classList.add("hidden");
-  };
-
-  if (onConfirm) {
-    confirmBtn.onclick = () => {
-      onConfirm();
-      closeModal();
-    };
-  }
-  cancelBtn.onclick = closeModal;
+  const close = () => document.getElementById("modal-overlay").classList.add("hidden");
+  if (onConfirm) confirmBtn.onclick = () => { onConfirm(); close(); };
+  cancelBtn.onclick = close;
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
