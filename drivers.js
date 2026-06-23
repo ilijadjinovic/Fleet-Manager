@@ -287,6 +287,7 @@ function renderInfoTab(d) {
   const rows = [
     [t("driver_firstname"),    d.firstName],
     [t("driver_lastname"),     d.lastName],
+    ["JMBG",                   d.jmbg],
     [t("driver_birth_year"),   d.birthYear],
     [t("driver_license_cat"),  d.licenseCategories],
     [t("driver_position"),     d.position],
@@ -416,9 +417,18 @@ function openDriverForm(driver = null) {
           placeholder="B, C, CE..." value="${d.licenseCategories || ""}" />
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">${t("driver_position")}</label>
-      <input id="df-position" class="form-input" type="text" value="${d.position || ""}" />
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">JMBG</label>
+        <input id="df-jmbg" class="form-input" type="text" maxlength="13"
+          placeholder="1234567890123" value="${d.jmbg || ""}"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
+        <span class="form-hint">13 cifara, jedinstveno po vozaču</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("driver_position")}</label>
+        <input id="df-position" class="form-input" type="text" value="${d.position || ""}" />
+      </div>
     </div>
 
     <div class="form-section-title" style="margin-top:4px">Kontakt</div>
@@ -518,9 +528,31 @@ async function saveDriver(driverId, existingDriver) {
     return;
   }
 
+  const jmbg = document.getElementById("df-jmbg")?.value.trim() || null;
+
+  // Validacija JMBG formata
+  if (jmbg && jmbg.length !== 13) {
+    showFormError("JMBG mora imati tačno 13 cifara");
+    return;
+  }
+
+  // Validacija jedinstvenosti JMBG (samo ako je unet i promenjen)
+  if (jmbg && jmbg !== existingDriver?.jmbg) {
+    const jmbgSnap = await getDocs(query(
+      collection(db, "companies", S.companyId, "drivers"),
+      where("jmbg", "==", jmbg)
+    ));
+    if (!jmbgSnap.empty) {
+      const existing = jmbgSnap.docs[0].data();
+      showFormError(`JMBG je već dodeljen vozaču: ${existing.firstName} ${existing.lastName}`);
+      return;
+    }
+  }
+
   const data = {
     firstName,
     lastName,
+    jmbg:              jmbg,
     birthYear:         numOrNull("df-birthYear"),
     licenseCategories: document.getElementById("df-licenseCategories")?.value.trim() || null,
     position:          document.getElementById("df-position")?.value.trim() || null,
