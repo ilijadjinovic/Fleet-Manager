@@ -54,10 +54,25 @@ export async function loginWithGoogle() {
 
 /**
  * Login sa username + password (lokalni nalog)
- * Username se konvertuje u format: username@fleetapp.internal
+ * Traži localAuthEmail u users kolekciji po username polju.
+ * Fallback na konstruisani email ako nije pronađen.
  */
 export async function loginWithUsername(username, password) {
-  const email = usernameToEmail(username);
+  // Lookup u users kolekciji po username
+  const snap = await getDocs(
+    query(collection(db, "users"), where("username", "==", username))
+  );
+
+  let email;
+  if (!snap.empty) {
+    const userData = snap.docs[0].data();
+    // Koristi sacuvani localAuthEmail ako postoji, inace konstruisi
+    email = userData.localAuthEmail || usernameToEmail(username);
+  } else {
+    // Fallback
+    email = usernameToEmail(username);
+  }
+
   return signInWithEmailAndPassword(auth, email, password);
 }
 

@@ -508,7 +508,7 @@ async function saveDriver(driverId, existingDriver) {
   const password    = document.getElementById("df-password")?.value;
   const googleEmail = document.getElementById("df-googleEmail")?.value.trim().toLowerCase();
 
-  // Validacija: ako je unet username, mora biti i password (pri kreiranju)
+  // Validacija
   if (!driverId && username && !password) {
     showFormError("Unesite lozinku za lokalni nalog");
     return;
@@ -535,72 +535,97 @@ async function saveDriver(driverId, existingDriver) {
   };
 
   try {
-    // ── Kreiranje / update Firebase Auth lokalnog naloga ──────
-    if (username && password) {
-      const fakeEmail = usernameToEmail(username);
-      if (!driverId) {
-        // Novi vozač — kreiraj Firebase Auth nalog
-        const cred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
-        data.localAuthUid = cred.user.uid;
-      } else if (existingDriver?.localAuthUid) {
-        // Edit — samo ako je unet novi password
-        // (Ne možemo menjati password drugog korisnika sa frontenda bez re-auth)
-        // Čuvamo flag da admin treba da resetuje
-        if (password) data.passwordResetPending = true;
-      }
+    const fakeEmail = username ? usernameToEmail(username) : null;
+    const isEdit    = !!driverId;
+    const hasExistingLocalAuth = !!(existingDriver?.localAuthUid);
+    const passwordChanged = isEdit && username && password;
+
+    // ── NOVI VOZAČ — kreiraj Firebase Auth nalog ──────────────
+    if (!isEdit && username && password) {
+      const cred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+      data.localAuthUid = cred.user.uid;
+      data.lastSetPassword = password; // čuvamo radi prikaza adminu
     }
 
-    // ── Snimi u Firestore ─────────────────────────────────────
-    if (driverId) {
+    // ── EDIT + PROMENA PASSWORDA — briši stari, napravi novi ──
+    if (isEdit && username && password && hasExistingLocalAuth) {
+      // Korak 1: obriši stari users dokument
+      try {
+        await deleteDoc(doc(db, "users", existingDriver.localAuthUid));
+      } catch (e) { /* možda već ne postoji */ }
+
+      // Korak 2: kreiraj novi Firebase Auth nalog sa istim username, novim passwordom
+      // Najpre pokušaj da obrišemo stari nalog kroz REST API
+      // (nije moguće sa frontendom — zato radimo workaround)
+      // Workaround: koristimo privremeni novi nalog sa timestamp sufiksom u emailu,
+      // pa ga odmah zamenimo pravim
+      //
+      // Realistično rešenje: kreiramo novi nalog. Stari ostaje u Firebase Auth ali
+      // je siroče (nema users dokument, nema pristupa app-i).
+      // Novi nalog dobija isti username lookup.
+
+      const ts = Date.now();
+      const newEmail = `${username}.${ts}@fleetapp.internal`;
+      const cred = await createUserWithEmailAndPassword(auth, newEmail, password);
+
+      data.localAuthUid    = cred.user.uid;
+      data.localAuthEmail  = newEmail;
+      data.lastSetPassword = password;
+    }
+
+    // ── EDIT + BEZ PROMENE PASSWORDA ─────────────────────────
+    if (isEdit && username && !password && hasExistingLocalAuth) {
+      // Čuva se stari localAuthUid, password se ne menja
+      data.localAuthUid   = existingDriver.localAuthUid;
+      data.localAuthEmail = existingDriver.localAuthEmail;
+      data.lastSetPassword = existingDriver.lastSetPassword;
+    }
+
+    // ── SNIMI U FIRESTORE ─────────────────────────────────────
+    let driverDocId = driverId;
+
+    if (isEdit) {
       await updateDoc(
         doc(db, "companies", S.companyId, "drivers", driverId),
         { ...data, updatedAt: serverTimestamp() }
       );
-
-      // Ako je unet novi password, ažuriraj users dokument
-      if (existingDriver?.localAuthUid && password) {
-        await updateDoc(doc(db, "users", existingDriver.localAuthUid), {
-          passwordResetPending: true,
-          updatedAt: serverTimestamp()
-        });
-      }
     } else {
       const ref = await addDoc(
         collection(db, "companies", S.companyId, "drivers"),
         { ...data, createdAt: serverTimestamp(), createdBy: S.user.uid }
       );
-
-      // Kreiraj users profil za lokalnog korisnika
-      if (data.localAuthUid) {
-        await import("./firebase.js").then(({ db: fdb }) => {
-          return import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js")
-            .then(({ doc: fdoc, setDoc }) =>
-              setDoc(fdoc(fdb, "users", data.localAuthUid), {
-                role:       "driver",
-                status:     "active",
-                companyId:  S.companyId,
-                driverId:   ref.id,
-                firstName,
-                lastName,
-                displayName: `${firstName} ${lastName}`,
-                username,
-                googleEmail: null,
-                createdAt:  serverTimestamp(),
-                createdBy:  S.user.uid,
-              })
-            );
-        });
-      }
-
-      // Kreiraj users profil za Google korisnika (ako ima googleEmail)
-      // Google korisnik će biti kreiran pri prvom loginu — samo čuvamo googleEmail
-      // u drivers dokumentu za lookup
+      driverDocId = ref.id;
     }
 
-    showToast(t("success"), "success");
-    await loadDrivers();
-    const container = document.getElementById("content");
-    if (container) renderDrivers(container);
+    // ── KREIRAJ / AŽURIRAJ users DOKUMENT za lokalnog korisnika
+    if (data.localAuthUid) {
+      const { setDoc: fSetDoc } = await import(
+        "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js"
+      );
+      await fSetDoc(doc(db, "users", data.localAuthUid), {
+        role:        "driver",
+        status:      "active",
+        companyId:   S.companyId,
+        driverId:    driverDocId,
+        firstName,
+        lastName,
+        displayName: `${firstName} ${lastName}`,
+        username,
+        googleEmail: null,
+        createdAt:   serverTimestamp(),
+        createdBy:   S.user.uid,
+      });
+    }
+
+    // ── PRIKAŽI NOVI PASSWORD ADMINU (ako je promenjen) ───────
+    if (data.lastSetPassword && ((!isEdit && username) || passwordChanged)) {
+      showPasswordDialog(firstName, lastName, username, data.lastSetPassword);
+    } else {
+      showToast(t("success"), "success");
+      await loadDrivers();
+      const container = document.getElementById("content");
+      if (container) renderDrivers(container);
+    }
 
   } catch (e) {
     console.error("saveDriver error:", e);
@@ -610,6 +635,51 @@ async function saveDriver(driverId, existingDriver) {
     }
     showFormError(msg);
   }
+}
+
+// ── PRIKAZ PASSWORDA ADMINU ───────────────────────────────────
+function showPasswordDialog(firstName, lastName, username, password) {
+  // Zatvori formu
+  document.getElementById("modal-overlay")?.classList.add("hidden");
+
+  // Otvori novi modal sa kredencijalima
+  setTimeout(() => {
+    const bodyHTML = `
+      <div class="password-reveal">
+        <div class="password-reveal__icon">🔐</div>
+        <p class="password-reveal__msg">
+          Kredencijali za <strong>${firstName} ${lastName}</strong>.<br/>
+          Zabeležite ih i prezentujte vozaču — lozinka se neće ponovo prikazati.
+        </p>
+        <div class="password-reveal__field">
+          <span class="password-reveal__label">Korisničko ime</span>
+          <span class="password-reveal__value" id="pw-username">${username}</span>
+          <button class="btn btn--ghost btn--sm" onclick="navigator.clipboard.writeText('${username}')">📋</button>
+        </div>
+        <div class="password-reveal__field">
+          <span class="password-reveal__label">Lozinka</span>
+          <span class="password-reveal__value" id="pw-password">${password}</span>
+          <button class="btn btn--ghost btn--sm" onclick="navigator.clipboard.writeText('${password}')">📋</button>
+        </div>
+        <div class="password-reveal__warning">
+          ⚠️ Ovo je jedini put kada se lozinka prikazuje u čistom tekstu.
+        </div>
+      </div>
+    `;
+
+    import("./app.js").then(({ openModal }) => {
+      openModal("Kredencijali za vozača", bodyHTML, async () => {
+        await loadDrivers();
+        const container = document.getElementById("content");
+        if (container) renderDrivers(container);
+      });
+      // Sakrij cancel dugme, ostavi samo OK
+      const cancelBtn = document.getElementById("modal-cancel");
+      if (cancelBtn) cancelBtn.style.display = "none";
+      const confirmBtn = document.getElementById("modal-confirm");
+      if (confirmBtn) confirmBtn.textContent = "Razumeo/la, zatvori";
+    });
+  }, 150);
 }
 
 // ── TOGGLE ACTIVE ─────────────────────────────────────────────
