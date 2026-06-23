@@ -1352,3 +1352,122 @@ tbody td {
   padding: 8px 12px;
   width: 100%;
 }
+
+/* ── ASSIGNMENTS ─────────────────────────────────────────── */
+.assignments-list { display: flex; flex-direction: column; gap: 12px; }
+
+.assignment-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  transition: all 0.15s;
+}
+.assignment-card--active { border-left: 3px solid var(--color-success); }
+.assignment-card:hover   { border-color: var(--color-border-light); }
+
+.assignment-card__left { padding-top: 4px; flex-shrink: 0; }
+.dot--active { width: 10px; height: 10px; border-radius: 50%; background: var(--color-success); }
+.dot--closed { width: 10px; height: 10px; border-radius: 50%; background: var(--color-text-faint); }
+
+.assignment-card__body  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.assignment-card__header{ display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.assignment-card__vehicle{ display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.assignment-card__plate { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-muted); }
+.assignment-card__driver{ font-size: 13px; color: var(--color-text-muted); }
+.assignment-card__meta  { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--color-text-muted); }
+.assignment-card__intercity { color: var(--color-info); }
+.assignment-card__reason{ font-size: 13px; font-style: italic; color: var(--color-text-muted); }
+.assignment-card__route { font-size: 12px; color: var(--color-text-muted); }
+.assignment-card__mismatch {
+  font-size: 12px; color: var(--color-warning);
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+.assignment-card__actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+
+/* Vehicle/Driver search dropdown */
+.vehicle-select-wrap { position: relative; }
+.select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.select-dropdown__item {
+  padding: 10px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid var(--color-border);
+}
+.select-dropdown__item:last-child { border-bottom: none; }
+.select-dropdown__item:hover { background: var(--color-surface-3); }
+
+/* Vehicle info box */
+.vehicle-info-box {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vehicle-info-box__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.vehicle-info-box__label { color: var(--color-text-muted); }
+
+/* Radio group */
+.radio-group { display: flex; gap: 20px; flex-wrap: wrap; }
+.radio-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; cursor: pointer;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: all 0.15s;
+}
+.radio-label:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-glow);
+  color: var(--color-primary);
+}
+.radio-label input[type="radio"] { accent-color: var(--color-primary); }
+
+/* Conflict dialog */
+.conflict-dialog { display: flex; flex-direction: column; gap: 12px; }
+.conflict-dialog__icon { font-size: 36px; text-align: center; }
+.conflict-info {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+/* Unassign info */
+.unassign-info {
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
