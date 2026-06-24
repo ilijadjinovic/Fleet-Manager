@@ -506,6 +506,7 @@ function openDriverForm(driver = null) {
 
 // ── SNIMI VOZAČA ──────────────────────────────────────────────
 async function saveDriver(driverId, existingDriver) {
+  console.log("[saveDriver] POKRENUT", { driverId });
   const firstName = document.getElementById("df-firstName")?.value.trim();
   const lastName  = document.getElementById("df-lastName")?.value.trim();
 
@@ -573,13 +574,21 @@ async function saveDriver(driverId, existingDriver) {
     const passwordChanged = isEdit && username && password;
 
     // ── NOVI VOZAČ — kreiraj Firebase Auth nalog ──────────────
+    console.log("[saveDriver] pre Auth bloka", { isEdit, username, hasPassword: !!password, fakeEmail, companyId: S.companyId, userUid: S.user?.uid });
     // Koristimo sekundarnu instancu da ne odjavimo admina!
     if (!isEdit && username && password) {
-      const secondaryAuth = getSecondaryAuth();
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, fakeEmail, password);
-      data.localAuthUid = cred.user.uid;
-      data.lastSetPassword = password; // čuvamo radi prikaza adminu
-      await secondaryAuth.signOut(); // odmah odjavi iz sekundarne instance
+      console.log("[saveDriver] kreiram Auth nalog za:", fakeEmail);
+      try {
+        const secondaryAuth = getSecondaryAuth();
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, fakeEmail, password);
+        data.localAuthUid = cred.user.uid;
+        data.lastSetPassword = password;
+        await secondaryAuth.signOut();
+        console.log("[saveDriver] Auth nalog kreiran OK:", cred.user.uid);
+      } catch (authErr) {
+        console.error("[saveDriver] Auth greška:", authErr.code, authErr.message);
+        throw authErr;
+      }
     }
 
     // ── EDIT + PROMENA PASSWORDA — briši stari, napravi novi ──
@@ -627,11 +636,13 @@ async function saveDriver(driverId, existingDriver) {
         { ...data, updatedAt: serverTimestamp() }
       );
     } else {
+      console.log("[saveDriver] addDoc - snimam vozača u Firestore...", { companyId: S.companyId, data });
       const ref = await addDoc(
         collection(db, "companies", S.companyId, "drivers"),
         { ...data, createdAt: serverTimestamp(), createdBy: S.user.uid }
       );
       driverDocId = ref.id;
+      console.log("[saveDriver] vozač snimljen, id:", driverDocId);
     }
 
     // ── KREIRAJ / AŽURIRAJ users DOKUMENT za lokalnog korisnika
@@ -667,7 +678,7 @@ async function saveDriver(driverId, existingDriver) {
     }
 
   } catch (e) {
-    console.error("saveDriver error:", e);
+    console.error("[saveDriver] GREŠKA:", e.code, e.message, e);
     let msg = `${t("error")}: ${e.message}`;
     if (e.code === "auth/email-already-in-use") {
       msg = `Korisničko ime "${username}" je već zauzeto`;
