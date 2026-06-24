@@ -649,14 +649,16 @@ async function saveDriver(driverId, existingDriver) {
       });
     }
 
+    // ── REFRESH LISTE — uvek, odmah nakon snimanja ───────────
+    await loadDrivers();
+    const container = document.getElementById("content");
+    if (container) renderDrivers(container);
+
     // ── PRIKAŽI NOVI PASSWORD ADMINU (ako je promenjen) ───────
     if (data.lastSetPassword && ((!isEdit && username) || passwordChanged)) {
       showPasswordDialog(firstName, lastName, username, data.lastSetPassword);
     } else {
       showToast(t("success"), "success");
-      await loadDrivers();
-      const container = document.getElementById("content");
-      if (container) renderDrivers(container);
     }
 
   } catch (e) {
@@ -700,11 +702,7 @@ function showPasswordDialog(firstName, lastName, username, password) {
     `;
 
     import("./app.js").then(({ openModal }) => {
-      openModal("Kredencijali za vozača", bodyHTML, async () => {
-        await loadDrivers();
-        const container = document.getElementById("content");
-        if (container) renderDrivers(container);
-      });
+      openModal("Kredencijali za vozača", bodyHTML, () => {});
       // Sakrij cancel dugme, ostavi samo OK
       const cancelBtn = document.getElementById("modal-cancel");
       if (cancelBtn) cancelBtn.style.display = "none";
