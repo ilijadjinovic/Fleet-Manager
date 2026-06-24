@@ -500,7 +500,7 @@ function openDriverForm(driver = null) {
   openModal(
     isEdit ? `${t("edit")}: ${d.firstName} ${d.lastName}` : t("driver_add"),
     bodyHTML,
-    () => saveDriver(driver?.id || null, driver)
+    async () => saveDriver(driver?.id || null, driver)
   );
 }
 
