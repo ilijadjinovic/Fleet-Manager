@@ -509,6 +509,7 @@ async function saveDriver(driverId, existingDriver) {
   console.log("[saveDriver] POKRENUT", { driverId });
   const firstName = document.getElementById("df-firstName")?.value.trim();
   const lastName  = document.getElementById("df-lastName")?.value.trim();
+  console.log("[saveDriver] ime:", firstName, lastName);
 
   if (!firstName || !lastName) {
     showFormError("Ime i prezime su obavezni");
@@ -518,21 +519,26 @@ async function saveDriver(driverId, existingDriver) {
   const username    = document.getElementById("df-username")?.value.trim();
   const password    = document.getElementById("df-password")?.value;
   const googleEmail = document.getElementById("df-googleEmail")?.value.trim().toLowerCase();
+  console.log("[saveDriver] username:", username, "password len:", password?.length, "googleEmail:", googleEmail);
 
   // Validacija
   if (!driverId && username && !password) {
+    console.log("[saveDriver] STOP: nema passworda");
     showFormError("Unesite lozinku za lokalni nalog");
     return;
   }
   if (username && password && password.length < 6) {
+    console.log("[saveDriver] STOP: password kratak");
     showFormError("Lozinka mora imati najmanje 6 karaktera");
     return;
   }
 
   const jmbg = document.getElementById("df-jmbg")?.value.trim() || null;
+  console.log("[saveDriver] jmbg:", jmbg);
 
   // Validacija JMBG formata
   if (jmbg && jmbg.length !== 13) {
+    console.log("[saveDriver] STOP: jmbg nije 13 cifara");
     showFormError("JMBG mora imati tačno 13 cifara");
     return;
   }
