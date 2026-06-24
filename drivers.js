@@ -513,7 +513,7 @@ async function saveDriver(driverId, existingDriver) {
 
   if (!firstName || !lastName) {
     showFormError("Ime i prezime su obavezni");
-    return;
+    throw new Error("validation");
   }
 
   const username    = document.getElementById("df-username")?.value.trim();
@@ -525,12 +525,12 @@ async function saveDriver(driverId, existingDriver) {
   if (!driverId && username && !password) {
     console.log("[saveDriver] STOP: nema passworda");
     showFormError("Unesite lozinku za lokalni nalog");
-    return;
+    throw new Error("validation");
   }
   if (username && password && password.length < 6) {
     console.log("[saveDriver] STOP: password kratak");
-    showFormError("Lozinka mora imati najmanje 6 karaktera");
-    return;
+    showFormError("Lozinka mora imati najmanje 6 karaktera (trenutno: " + password.length + ")");
+    throw new Error("validation");
   }
 
   const jmbg = document.getElementById("df-jmbg")?.value.trim() || null;
@@ -540,7 +540,7 @@ async function saveDriver(driverId, existingDriver) {
   if (jmbg && jmbg.length !== 13) {
     console.log("[saveDriver] STOP: jmbg nije 13 cifara");
     showFormError("JMBG mora imati tačno 13 cifara");
-    return;
+    throw new Error("validation");
   }
 
   // Validacija jedinstvenosti JMBG (samo ako je unet i promenjen)
@@ -684,12 +684,14 @@ async function saveDriver(driverId, existingDriver) {
     }
 
   } catch (e) {
+    if (e.message === "validation") return; // poruka je već prikazana
     console.error("[saveDriver] GREŠKA:", e.code, e.message, e);
     let msg = `${t("error")}: ${e.message}`;
     if (e.code === "auth/email-already-in-use") {
       msg = `Korisničko ime "${username}" je već zauzeto`;
     }
     showFormError(msg);
+    throw e; // modal ostaje otvoren
   }
 }
 
