@@ -185,6 +185,12 @@ export function navigateTo(tab) {
   else content.innerHTML = `<p>${t("no_data")}</p>`;
 }
 
+/** Re-renderuje trenutni aktivni tab — koristi se posle promene jezika */
+export function rerenderCurrentTab() {
+  buildNav();
+  navigateTo(S.activeTab);
+}
+
 // ── COMPANY SWITCHER ──────────────────────────────────────────
 export function setActiveCompany(companyId) {
   S.companyId = companyId;

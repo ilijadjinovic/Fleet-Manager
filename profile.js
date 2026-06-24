@@ -8,7 +8,7 @@ import {
   doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, query, where
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, loadLanguage, getCurrentLang, SUPPORTED_LANGS } from "./i18n.js";
-import { S, showToast, openModal, buildNav } from "./app.js";
+import { S, showToast, openModal, buildNav, rerenderCurrentTab } from "./app.js";
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderProfile(container) {
@@ -406,8 +406,6 @@ function bindSettingsTab({ profile }) {
   // Promena jezika
   document.querySelectorAll("input[name='lang']").forEach(radio => {
     radio.addEventListener("change", async () => {
-      document.querySelectorAll(".lang-option").forEach(o =>
-        o.classList.toggle("lang-option--active", o.querySelector("input")?.checked));
       await loadLanguage(radio.value);
       // Sačuvaj preferencu u Firestore
       try {
@@ -415,8 +413,8 @@ function bindSettingsTab({ profile }) {
           preferredLang: radio.value, updatedAt: serverTimestamp()
         });
       } catch (e) { /* ignoriši */ }
-      // Rebuild nav sa novim prevodima
-      buildNav();
+      // Re-renderuj celu app sa novim prevodima (uključujući aktivni tab)
+      rerenderCurrentTab();
       showToast(radio.value === "sr" ? "Jezik promenjen na srpski" : "Language changed to English", "success");
     });
   });

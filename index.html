@@ -22,15 +22,8 @@
     <!-- HEADER -->
     <header class="app-header">
       <div class="app-header__left">
-        <span class="app-header__logo">🚛</span>
+        <img class="app-header__logo-img" src="./assets/icon-192.png" alt="Fleet Manager" />
         <span class="app-header__name">Fleet Manager</span>
-      </div>
-      <div class="app-header__right">
-        <div id="lang-switcher" class="lang-switcher">
-          <button class="lang-btn" data-lang="sr">SR</button>
-          <button class="lang-btn" data-lang="en">EN</button>
-        </div>
-        <button id="btn-logout" class="btn btn--ghost btn--sm" data-i18n="logout">Odjavi se</button>
       </div>
     </header>
 
@@ -62,12 +55,7 @@
   </div>
 
   <script type="module">
-    import { loadLanguage } from "./i18n.js";
-    import { doLogout } from "./app.js";
     import "./app.js"; // pokreće init()
-
-    // Logout dugme
-    document.getElementById("btn-logout")?.addEventListener("click", doLogout);
 
     // Modal close
     document.getElementById("modal-close")?.addEventListener("click", () => {
@@ -77,13 +65,6 @@
       if (e.target === e.currentTarget) {
         e.currentTarget.classList.add("hidden");
       }
-    });
-
-    // Language switcher
-    document.querySelectorAll(".lang-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        loadLanguage(btn.dataset.lang);
-      });
     });
   </script>
 </body>
