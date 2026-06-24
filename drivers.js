@@ -511,6 +511,8 @@ async function saveDriver(driverId, existingDriver) {
   const lastName  = document.getElementById("df-lastName")?.value.trim();
   console.log("[saveDriver] ime:", firstName, lastName);
 
+  try {
+
   if (!firstName || !lastName) {
     showFormError("Ime i prezime su obavezni");
     throw new Error("validation");
@@ -560,7 +562,6 @@ async function saveDriver(driverId, existingDriver) {
     notes:             document.getElementById("df-notes")?.value.trim() || null,
   };
 
-  try {
     const fakeEmail = username ? usernameToEmail(username) : null;
     const isEdit    = !!driverId;
     const hasExistingLocalAuth = !!(existingDriver?.localAuthUid);
