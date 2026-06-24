@@ -219,7 +219,7 @@ async function openDriverDetail(driverId) {
           <h2>${driver.firstName} ${driver.lastName}</h2>
           ${driver.position ? `<div class="driver-detail-position">${driver.position}</div>` : ""}
         </div>
-        <span class="badge badge--${driver.active !== false ? "active" : "inactive'}"}">
+        <span class="badge badge--${driver.active !== false ? "active" : "inactive"}">
           ${driver.active !== false ? t("driver_active") : t("driver_inactive")}
         </span>
       </div>
