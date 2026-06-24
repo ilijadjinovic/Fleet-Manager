@@ -4,6 +4,7 @@
 // ============================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+import { initializeApp as initializeSecondaryApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -44,6 +45,16 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Sekundarna app instanca — za kreiranje novih Auth naloga bez odjave admina
+let _secondaryApp = null;
+function getSecondaryAuth() {
+  if (!_secondaryApp) {
+    _secondaryApp = initializeSecondaryApp(firebaseConfig, "secondary");
+  }
+  return getAuth(_secondaryApp);
+}
+export { getSecondaryAuth };
 
 // ── AUTH HELPERI ──────────────────────────────────────────────
 

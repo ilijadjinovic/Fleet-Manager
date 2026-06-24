@@ -231,12 +231,14 @@ export function openModal(title, bodyHTML, onConfirm = null) {
   const close = () => document.getElementById("modal-overlay").classList.add("hidden");
   if (onConfirm) confirmBtn.onclick = async () => {
     confirmBtn.disabled = true;
+    let success = false;
     try {
       await onConfirm();
+      success = true;
     } finally {
       confirmBtn.disabled = false;
     }
-    close();
+    if (success) close();
   };
   cancelBtn.onclick = close;
   document.getElementById("modal-overlay").classList.remove("hidden");

@@ -16,7 +16,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { t } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
-import { usernameToEmail } from "./firebase.js";
+import { usernameToEmail, getSecondaryAuth } from "./firebase.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allDrivers = [];
@@ -573,10 +573,13 @@ async function saveDriver(driverId, existingDriver) {
     const passwordChanged = isEdit && username && password;
 
     // ── NOVI VOZAČ — kreiraj Firebase Auth nalog ──────────────
+    // Koristimo sekundarnu instancu da ne odjavimo admina!
     if (!isEdit && username && password) {
-      const cred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+      const secondaryAuth = getSecondaryAuth();
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, fakeEmail, password);
       data.localAuthUid = cred.user.uid;
       data.lastSetPassword = password; // čuvamo radi prikaza adminu
+      await secondaryAuth.signOut(); // odmah odjavi iz sekundarne instance
     }
 
     // ── EDIT + PROMENA PASSWORDA — briši stari, napravi novi ──
@@ -598,7 +601,9 @@ async function saveDriver(driverId, existingDriver) {
 
       const ts = Date.now();
       const newEmail = `${username}.${ts}@fleetapp.internal`;
-      const cred = await createUserWithEmailAndPassword(auth, newEmail, password);
+      const secondaryAuth = getSecondaryAuth();
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, newEmail, password);
+      await secondaryAuth.signOut();
 
       data.localAuthUid    = cred.user.uid;
       data.localAuthEmail  = newEmail;
