@@ -227,8 +227,17 @@ export function openModal(title, bodyHTML, onConfirm = null) {
   const confirmBtn = document.getElementById("modal-confirm");
   const cancelBtn  = document.getElementById("modal-cancel");
   confirmBtn.style.display = onConfirm ? "inline-flex" : "none";
+  confirmBtn.disabled = false;
   const close = () => document.getElementById("modal-overlay").classList.add("hidden");
-  if (onConfirm) confirmBtn.onclick = () => { onConfirm(); close(); };
+  if (onConfirm) confirmBtn.onclick = async () => {
+    confirmBtn.disabled = true;
+    try {
+      await onConfirm();
+    } finally {
+      confirmBtn.disabled = false;
+    }
+    close();
+  };
   cancelBtn.onclick = close;
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
