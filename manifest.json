@@ -2,7 +2,7 @@
   "name": "Fleet Manager",
   "short_name": "Fleet",
   "description": "Evidencija i upravljanje voznim parkom",
-  "start_url": "/fleet-manager/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#0f1923",
   "theme_color": "#1a2744",
