@@ -543,19 +543,6 @@ async function saveDriver(driverId, existingDriver) {
     throw new Error("validation");
   }
 
-  // Validacija jedinstvenosti JMBG (samo ako je unet i promenjen)
-  if (jmbg && jmbg !== existingDriver?.jmbg) {
-    const jmbgSnap = await getDocs(query(
-      collection(db, "companies", S.companyId, "drivers"),
-      where("jmbg", "==", jmbg)
-    ));
-    if (!jmbgSnap.empty) {
-      const existing = jmbgSnap.docs[0].data();
-      showFormError(`JMBG je već dodeljen vozaču: ${existing.firstName} ${existing.lastName}`);
-      return;
-    }
-  }
-
   const data = {
     firstName,
     lastName,
@@ -631,6 +618,19 @@ async function saveDriver(driverId, existingDriver) {
       data.localAuthUid   = existingDriver.localAuthUid;
       data.localAuthEmail = existingDriver.localAuthEmail;
       data.lastSetPassword = existingDriver.lastSetPassword;
+    }
+
+    // ── VALIDACIJA JEDINSTVENOSTI JMBG ──────────────────────
+    if (data.jmbg && data.jmbg !== existingDriver?.jmbg) {
+      const jmbgSnap = await getDocs(query(
+        collection(db, "companies", S.companyId, "drivers"),
+        where("jmbg", "==", data.jmbg)
+      ));
+      if (!jmbgSnap.empty) {
+        const ex = jmbgSnap.docs[0].data();
+        showFormError(`JMBG je već dodeljen vozaču: ${ex.firstName} ${ex.lastName}`);
+        throw new Error("validation");
+      }
     }
 
     // ── SNIMI U FIRESTORE ─────────────────────────────────────
