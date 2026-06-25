@@ -566,6 +566,19 @@ async function saveDriver(driverId, existingDriver) {
     const hasExistingLocalAuth = !!(existingDriver?.localAuthUid);
     const passwordChanged = isEdit && username && password;
 
+    // ── VALIDACIJA JEDINSTVENOSTI JMBG (pre kreiranja Auth naloga!) ──
+    if (data.jmbg && data.jmbg !== existingDriver?.jmbg) {
+      const jmbgSnap = await getDocs(query(
+        collection(db, "companies", S.companyId, "drivers"),
+        where("jmbg", "==", data.jmbg)
+      ));
+      if (!jmbgSnap.empty) {
+        const ex = jmbgSnap.docs[0].data();
+        showFormError(`JMBG je već dodeljen vozaču: ${ex.firstName} ${ex.lastName}`);
+        throw new Error("validation");
+      }
+    }
+
     // ── NOVI VOZAČ — kreiraj Firebase Auth nalog ──────────────
     console.log("[saveDriver] pre Auth bloka", { isEdit, username, hasPassword: !!password, fakeEmail, companyId: S.companyId, userUid: S.user?.uid });
     // Koristimo sekundarnu instancu da ne odjavimo admina!
@@ -620,19 +633,6 @@ async function saveDriver(driverId, existingDriver) {
       data.lastSetPassword = existingDriver.lastSetPassword;
     }
 
-    // ── VALIDACIJA JEDINSTVENOSTI JMBG ──────────────────────
-    if (data.jmbg && data.jmbg !== existingDriver?.jmbg) {
-      const jmbgSnap = await getDocs(query(
-        collection(db, "companies", S.companyId, "drivers"),
-        where("jmbg", "==", data.jmbg)
-      ));
-      if (!jmbgSnap.empty) {
-        const ex = jmbgSnap.docs[0].data();
-        showFormError(`JMBG je već dodeljen vozaču: ${ex.firstName} ${ex.lastName}`);
-        throw new Error("validation");
-      }
-    }
-
     // ── SNIMI U FIRESTORE ─────────────────────────────────────
     let driverDocId = driverId;
 
@@ -684,11 +684,11 @@ async function saveDriver(driverId, existingDriver) {
     }
 
   } catch (e) {
-    if (e.message === "validation") throw e; // poruka je već prikazana, ali throw da modal ostane
+    if (e.message === "validation") return; // poruka je već prikazana
     console.error("[saveDriver] GREŠKA:", e.code, e.message, e);
     let msg = `${t("error")}: ${e.message}`;
     if (e.code === "auth/email-already-in-use") {
-      msg = `Korisničko ime je već zauzeto. Izaberite drugi username.`;
+      msg = `Korisničko ime "${username}" je već zauzeto`;
     }
     showFormError(msg);
     throw e; // modal ostaje otvoren
