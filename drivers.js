@@ -504,44 +504,59 @@ function openDriverForm(driver = null) {
   );
 }
 
+// ── FIELD ERROR HELPER ───────────────────────────────────────
+function fieldError(inputId, msg) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.classList.add("input--error");
+  // Ukloni stari hint ako postoji
+  el.parentElement.querySelectorAll(".field-error-msg").forEach(e => e.remove());
+  const hint = document.createElement("span");
+  hint.className = "field-error-msg";
+  hint.textContent = msg;
+  el.parentElement.appendChild(hint);
+  el.addEventListener("input", () => {
+    el.classList.remove("input--error");
+    hint.remove();
+  }, { once: true });
+}
+
+function clearFieldErrors() {
+  document.querySelectorAll(".input--error").forEach(el => el.classList.remove("input--error"));
+  document.querySelectorAll(".field-error-msg").forEach(el => el.remove());
+}
+
 // ── SNIMI VOZAČA ──────────────────────────────────────────────
 async function saveDriver(driverId, existingDriver) {
-  console.log("[saveDriver] POKRENUT", { driverId });
+  clearFieldErrors();
+
   const firstName = document.getElementById("df-firstName")?.value.trim();
   const lastName  = document.getElementById("df-lastName")?.value.trim();
-  console.log("[saveDriver] ime:", firstName, lastName);
-
-  if (!firstName || !lastName) {
-    showFormError("Ime i prezime su obavezni");
-    throw new Error("validation");
-  }
-
-  const username    = document.getElementById("df-username")?.value.trim();
-  const password    = document.getElementById("df-password")?.value;
+  const username  = document.getElementById("df-username")?.value.trim();
+  const password  = document.getElementById("df-password")?.value;
   const googleEmail = document.getElementById("df-googleEmail")?.value.trim().toLowerCase();
-  console.log("[saveDriver] username:", username, "password len:", password?.length, "googleEmail:", googleEmail);
+  const jmbg = document.getElementById("df-jmbg")?.value.trim() || null;
 
-  // Validacija
+  // ── VALIDACIJA ────────────────────────────────────────────────
+  let valid = true;
+
+  if (!firstName) { fieldError("df-firstName", "Ime je obavezno"); valid = false; }
+  if (!lastName)  { fieldError("df-lastName",  "Prezime je obavezno"); valid = false; }
+
   if (!driverId && username && !password) {
-    console.log("[saveDriver] STOP: nema passworda");
-    showFormError("Unesite lozinku za lokalni nalog");
-    throw new Error("validation");
+    fieldError("df-password", "Lozinka je obavezna uz korisničko ime");
+    valid = false;
   }
   if (username && password && password.length < 6) {
-    console.log("[saveDriver] STOP: password kratak");
-    showFormError("Lozinka mora imati najmanje 6 karaktera (trenutno: " + password.length + ")");
-    throw new Error("validation");
+    fieldError("df-password", `Minimum 6 karaktera (trenutno: ${password.length})`);
+    valid = false;
   }
-
-  const jmbg = document.getElementById("df-jmbg")?.value.trim() || null;
-  console.log("[saveDriver] jmbg:", jmbg);
-
-  // Validacija JMBG formata
   if (jmbg && jmbg.length !== 13) {
-    console.log("[saveDriver] STOP: jmbg nije 13 cifara");
-    showFormError("JMBG mora imati tačno 13 cifara");
-    throw new Error("validation");
+    fieldError("df-jmbg", "JMBG mora imati tačno 13 cifara");
+    valid = false;
   }
+
+  if (!valid) throw new Error("validation");
 
   const data = {
     firstName,
@@ -574,7 +589,7 @@ async function saveDriver(driverId, existingDriver) {
       ));
       if (!jmbgSnap.empty) {
         const ex = jmbgSnap.docs[0].data();
-        showFormError(`JMBG je već dodeljen vozaču: ${ex.firstName} ${ex.lastName}`);
+        fieldError("df-jmbg", `Već dodeljen: ${ex.firstName} ${ex.lastName}`);
         throw new Error("validation");
       }
     }
@@ -684,13 +699,13 @@ async function saveDriver(driverId, existingDriver) {
     }
 
   } catch (e) {
-    if (e.message === "validation") return; // poruka je već prikazana
+    if (e.message === "validation") throw e; // poruka je već prikazana kao field error
     console.error("[saveDriver] GREŠKA:", e.code, e.message, e);
-    let msg = `${t("error")}: ${e.message}`;
     if (e.code === "auth/email-already-in-use") {
-      msg = `Korisničko ime "${username}" je već zauzeto`;
+      fieldError("df-username", "Korisničko ime je već zauzeto");
+    } else {
+      showFormError(`${t("error")}: ${e.message}`);
     }
-    showFormError(msg);
     throw e; // modal ostaje otvoren
   }
 }
