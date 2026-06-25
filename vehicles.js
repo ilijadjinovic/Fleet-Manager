@@ -445,63 +445,116 @@ function openVehicleForm(vehicle = null) {
   openModal(
     isEdit ? `${t("edit")}: ${v.brand} ${v.model}` : t("vehicle_add"),
     bodyHTML,
-    () => saveVehicle(vehicle?.id || null)
+    async () => saveVehicle(vehicle?.id || null)
   );
+}
+
+// ── FIELD ERROR HELPER ───────────────────────────────────────
+function fieldError(inputId, msg) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.classList.add("input--error");
+  el.parentElement.querySelectorAll(".field-error-msg").forEach(e => e.remove());
+  const hint = document.createElement("span");
+  hint.className = "field-error-msg";
+  hint.textContent = msg;
+  el.parentElement.appendChild(hint);
+  el.addEventListener("input", () => {
+    el.classList.remove("input--error");
+    hint.remove();
+  }, { once: true });
+}
+
+function clearFieldErrors() {
+  document.querySelectorAll(".input--error").forEach(el => el.classList.remove("input--error"));
+  document.querySelectorAll(".field-error-msg").forEach(el => el.remove());
 }
 
 // ── SNIMI VOZILO ──────────────────────────────────────────────
 async function saveVehicle(vehicleId) {
+  clearFieldErrors();
+
   const brand = document.getElementById("f-brand")?.value.trim();
   const model = document.getElementById("f-model")?.value.trim();
   const plate = document.getElementById("f-plate")?.value.trim().toUpperCase();
+  const vin   = document.getElementById("f-vin")?.value.trim().toUpperCase() || null;
 
-  if (!brand || !model || !plate) {
-    const err = document.getElementById("vehicle-form-error");
-    if (err) { err.textContent = t("required_field"); err.classList.remove("hidden"); }
-    return false; // sprečava zatvaranje modala
-  }
-
-  const data = {
-    brand, model, plate,
-    vehicleType:      document.getElementById("f-vehicleType")?.value.trim() || null,
-    vin:              document.getElementById("f-vin")?.value.trim().toUpperCase() || null,
-    year:             numOrNull("f-year"),
-    firstRegDate:     dateOrNull("f-firstRegDate"),
-    engineCc:         numOrNull("f-engineCc"),
-    powerKw:          numOrNull("f-powerKw"),
-    seats:            numOrNull("f-seats"),
-    payload:          numOrNull("f-payload"),
-    fuelType:         document.getElementById("f-fuelType")?.value || null,
-    color:            document.getElementById("f-color")?.value.trim() || null,
-    status:           document.getElementById("f-status")?.value || "active",
-    currentKm:        numOrNull("f-currentKm"),
-    regExpiry:        dateOrNull("f-regExpiry"),
-    insuranceExpiry:  dateOrNull("f-insuranceExpiry"),
-    insuranceCompany: document.getElementById("f-insuranceCompany")?.value.trim() || null,
-    insurancePolicy:  document.getElementById("f-insurancePolicy")?.value.trim() || null,
-    purchaseDate:     dateOrNull("f-purchaseDate"),
-    purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
-    purchaseValue:    numOrNull("f-purchaseValue"),
-    notes:            document.getElementById("f-notes")?.value.trim() || null,
-  };
+  // ── OSNOVNA VALIDACIJA ────────────────────────────────────────
+  let valid = true;
+  if (!brand) { fieldError("f-brand", "Marka je obavezna"); valid = false; }
+  if (!model) { fieldError("f-model", "Model je obavezan"); valid = false; }
+  if (!plate) { fieldError("f-plate", "Tablice su obavezne"); valid = false; }
+  if (!valid) throw new Error("validation");
 
   try {
+    // ── JEDINSTVENOST TABLICE ─────────────────────────────────
+    const plateSnap = await getDocs(query(
+      collection(db, "companies", S.companyId, "vehicles"),
+      where("plate", "==", plate)
+    ));
+    const plateConflict = plateSnap.docs.find(d => d.id !== vehicleId);
+    if (plateConflict) {
+      const v = plateConflict.data();
+      fieldError("f-plate", `Tablice već postoje: ${v.brand} ${v.model}`);
+      throw new Error("validation");
+    }
+
+    // ── JEDINSTVENOST VIN ─────────────────────────────────────
+    if (vin) {
+      const vinSnap = await getDocs(query(
+        collection(db, "companies", S.companyId, "vehicles"),
+        where("vin", "==", vin)
+      ));
+      const vinConflict = vinSnap.docs.find(d => d.id !== vehicleId);
+      if (vinConflict) {
+        const v = vinConflict.data();
+        fieldError("f-vin", `VIN već postoji: ${v.brand} ${v.model} (${v.plate})`);
+        throw new Error("validation");
+      }
+    }
+
+    const data = {
+      brand, model, plate, vin,
+      vehicleType:      document.getElementById("f-vehicleType")?.value.trim() || null,
+      year:             numOrNull("f-year"),
+      firstRegDate:     dateOrNull("f-firstRegDate"),
+      engineCc:         numOrNull("f-engineCc"),
+      powerKw:          numOrNull("f-powerKw"),
+      seats:            numOrNull("f-seats"),
+      payload:          numOrNull("f-payload"),
+      fuelType:         document.getElementById("f-fuelType")?.value || null,
+      color:            document.getElementById("f-color")?.value.trim() || null,
+      status:           document.getElementById("f-status")?.value || "active",
+      currentKm:        numOrNull("f-currentKm"),
+      regExpiry:        dateOrNull("f-regExpiry"),
+      insuranceExpiry:  dateOrNull("f-insuranceExpiry"),
+      insuranceCompany: document.getElementById("f-insuranceCompany")?.value.trim() || null,
+      insurancePolicy:  document.getElementById("f-insurancePolicy")?.value.trim() || null,
+      purchaseDate:     dateOrNull("f-purchaseDate"),
+      purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
+      purchaseValue:    numOrNull("f-purchaseValue"),
+      notes:            document.getElementById("f-notes")?.value.trim() || null,
+    };
+
     if (vehicleId) {
       await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
         ...data, updatedAt: serverTimestamp()
       });
-      showToast(t("success"), "success");
     } else {
       await addDoc(collection(db, "companies", S.companyId, "vehicles"), {
         ...data, createdAt: serverTimestamp()
       });
-      showToast(t("success"), "success");
     }
+
+    showToast(t("success"), "success");
     await loadVehicles();
     const container = document.getElementById("content");
     if (container) renderVehicles(container);
+
   } catch (e) {
+    if (e.message === "validation") throw e;
     showToast(`${t("error")}: ${e.message}`, "error");
+    throw e;
   }
 }
 
