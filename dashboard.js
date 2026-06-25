@@ -282,7 +282,20 @@ function attachDashboardEvents() {
   document.querySelectorAll(".stat-card[data-nav]").forEach(card => {
     card.style.cursor = "pointer";
     card.addEventListener("click", () => {
-      navigateTo(card.dataset.nav);
+      const filter = card.dataset.filter || null;
+      if (filter) {
+        // Navigiraj na tab i primeni filter
+        import("./vehicles.js").then(({ renderVehicles }) => {
+          S.activeTab = "vehicles";
+          document.querySelectorAll(".nav-btn").forEach(btn => {
+            btn.classList.toggle("nav-btn--active", btn.dataset.tab === "vehicles");
+          });
+          const content = document.getElementById("content");
+          if (content) renderVehicles(content, filter);
+        });
+      } else {
+        navigateTo(card.dataset.nav);
+      }
     });
   });
 }

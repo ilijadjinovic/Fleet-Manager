@@ -19,11 +19,13 @@ let searchTerm = "";
 let currentVehicleId = null; // za detail pogled
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
-export async function renderVehicles(container) {
+export async function renderVehicles(container, initialFilter = null) {
   if (!S.companyId) {
     container.innerHTML = `<div class="empty-state"><div class="empty-state__icon">🏢</div><p>${t("company_select")}</p></div>`;
     return;
   }
+
+  if (initialFilter) currentFilter = initialFilter;
 
   const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
 
@@ -40,11 +42,11 @@ export async function renderVehicles(container) {
           placeholder="${t("search")}..." />
       </div>
       <div class="filter-chips" id="filter-chips">
-        <button class="chip chip--active" data-filter="all">${t("company_all")}</button>
-        <button class="chip" data-filter="active">${t("vehicle_status_active")}</button>
-        <button class="chip" data-filter="service">${t("vehicle_status_service")}</button>
-        <button class="chip" data-filter="broken">${t("vehicle_status_broken")}</button>
-        <button class="chip" data-filter="unregistered">${t("vehicle_status_unregistered")}</button>
+        <button class="chip ${currentFilter === 'all' ? 'chip--active' : ''}" data-filter="all">${t("company_all")}</button>
+        <button class="chip ${currentFilter === 'active' ? 'chip--active' : ''}" data-filter="active">${t("vehicle_status_active")}</button>
+        <button class="chip ${currentFilter === 'service' ? 'chip--active' : ''}" data-filter="service">${t("vehicle_status_service")}</button>
+        <button class="chip ${currentFilter === 'broken' ? 'chip--active' : ''}" data-filter="broken">${t("vehicle_status_broken")}</button>
+        <button class="chip ${currentFilter === 'unregistered' ? 'chip--active' : ''}" data-filter="unregistered">${t("vehicle_status_unregistered")}</button>
       </div>
     </div>
 
