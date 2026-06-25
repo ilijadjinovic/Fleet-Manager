@@ -715,8 +715,8 @@ function showPasswordDialog(firstName, lastName, username, password) {
   // Zatvori formu
   document.getElementById("modal-overlay")?.classList.add("hidden");
 
-  // Otvori novi modal sa kredencijalima
-  setTimeout(() => {
+  // Otvori novi modal sa kredencijalima — bez setTimeout, direktno
+  {
     const bodyHTML = `
       <div class="password-reveal">
         <div class="password-reveal__icon">🔐</div>
@@ -747,7 +747,7 @@ function showPasswordDialog(firstName, lastName, username, password) {
       const cancelBtn = document.getElementById("modal-cancel");
       if (cancelBtn) cancelBtn.textContent = "Razumeo/la, zatvori";
     });
-  }, 150);
+  }
 }
 
 // ── TOGGLE ACTIVE ─────────────────────────────────────────────
