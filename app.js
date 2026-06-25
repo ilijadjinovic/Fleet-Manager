@@ -228,6 +228,8 @@ export function openModal(title, bodyHTML, onConfirm = null) {
   const cancelBtn  = document.getElementById("modal-cancel");
   confirmBtn.style.display = onConfirm ? "inline-flex" : "none";
   confirmBtn.disabled = false;
+  confirmBtn.textContent = "Potvrdi";
+  cancelBtn.textContent = "Otkaži";
   const close = () => document.getElementById("modal-overlay").classList.add("hidden");
   if (onConfirm) confirmBtn.onclick = async () => {
     confirmBtn.disabled = true;

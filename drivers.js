@@ -741,12 +741,11 @@ function showPasswordDialog(firstName, lastName, username, password) {
     `;
 
     import("./app.js").then(({ openModal }) => {
-      openModal("Kredencijali za vozača", bodyHTML, () => {});
-      // Sakrij cancel dugme, ostavi samo OK
+      // Koristimo openModal bez onConfirm — confirm dugme ce biti skriveno
+      // Cancel dugme postaje jedino dugme i menjamo mu tekst
+      openModal("Kredencijali za vozača", bodyHTML, null);
       const cancelBtn = document.getElementById("modal-cancel");
-      if (cancelBtn) cancelBtn.style.display = "none";
-      const confirmBtn = document.getElementById("modal-confirm");
-      if (confirmBtn) confirmBtn.textContent = "Razumeo/la, zatvori";
+      if (cancelBtn) cancelBtn.textContent = "Razumeo/la, zatvori";
     });
   }, 150);
 }
