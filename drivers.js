@@ -511,8 +511,6 @@ async function saveDriver(driverId, existingDriver) {
   const lastName  = document.getElementById("df-lastName")?.value.trim();
   console.log("[saveDriver] ime:", firstName, lastName);
 
-  try {
-
   if (!firstName || !lastName) {
     showFormError("Ime i prezime su obavezni");
     throw new Error("validation");
@@ -562,6 +560,7 @@ async function saveDriver(driverId, existingDriver) {
     notes:             document.getElementById("df-notes")?.value.trim() || null,
   };
 
+  try {
     const fakeEmail = username ? usernameToEmail(username) : null;
     const isEdit    = !!driverId;
     const hasExistingLocalAuth = !!(existingDriver?.localAuthUid);
@@ -685,11 +684,11 @@ async function saveDriver(driverId, existingDriver) {
     }
 
   } catch (e) {
-    if (e.message === "validation") return; // poruka je već prikazana
+    if (e.message === "validation") throw e; // poruka je već prikazana, ali throw da modal ostane
     console.error("[saveDriver] GREŠKA:", e.code, e.message, e);
     let msg = `${t("error")}: ${e.message}`;
     if (e.code === "auth/email-already-in-use") {
-      msg = `Korisničko ime "${username}" je već zauzeto`;
+      msg = `Korisničko ime je već zauzeto. Izaberite drugi username.`;
     }
     showFormError(msg);
     throw e; // modal ostaje otvoren
