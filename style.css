@@ -440,7 +440,8 @@ body {
 .stat-card--active::before { background: var(--color-success); }
 .stat-card--service::before{ background: var(--color-warning); }
 .stat-card--unreg::before  { background: var(--color-danger); }
-.stat-card--broken::before { background: #f97316; }
+.stat-card--broken::before  { background: #f97316; }
+.stat-card--assigned::before{ background: #8b5cf6; }
 
 .stat-card__value {
   font-size: 32px;
@@ -1864,20 +1865,4 @@ tbody td {
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--color-text-muted);
-}
-
-/* ── FIELD VALIDATION ────────────────────────────────────── */
-.form-input.input--error,
-.form-select.input--error,
-.form-textarea.input--error {
-  border-color: var(--color-danger) !important;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-}
-
-.field-error-msg {
-  display: block;
-  color: var(--color-danger);
-  font-size: 12px;
-  margin-top: 2px;
-  padding-left: 2px;
 }

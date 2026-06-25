@@ -107,11 +107,14 @@ async function loadDashboardData() {
         return da - db2;
       });
 
+    // Danas — početak dana u lokalnom vremenu (ponoć)
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
     // Nadolazeći servisi
     const servicesSnap = await getDocs(
       query(
         collection(db, "companies", cid, "services"),
-        where("nextDate", ">=", today),
+        where("nextDate", ">=", todayStart),
         orderBy("nextDate", "asc")
       )
     ).catch(() => ({ docs: [] }));
@@ -122,7 +125,7 @@ async function loadDashboardData() {
         return d <= in30;
       });
 
-    // Aktivna zaduženja (za vozača: samo njegova)
+    // Aktivna zaduženja
     let assignmentsSnap;
     if (role === "driver") {
       assignmentsSnap = await getDocs(
@@ -132,13 +135,21 @@ async function loadDashboardData() {
           where("status", "==", "active")
         )
       ).catch(() => ({ docs: [] }));
+    } else {
+      assignmentsSnap = await getDocs(
+        query(
+          collection(db, "companies", cid, "assignments"),
+          where("status", "==", "active")
+        )
+      ).catch(() => ({ docs: [] }));
     }
+    const assignedCount = assignmentsSnap?.docs?.length || 0;
 
     const isDriver = role === "driver";
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles
+        total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount
       })}
     `;
 
@@ -153,8 +164,9 @@ async function loadDashboardData() {
   }
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount }) {
   const today = new Date();
+  today.setHours(0, 0, 0, 0); // lokalna ponoć
 
   return `
     <div class="stats-grid">
@@ -180,6 +192,10 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
         <div class="stat-card__label">${t("vehicle_status_broken")}</div>
       </div>
       ` : ""}
+      <div class="stat-card stat-card--assigned" data-nav="assignments">
+        <div class="stat-card__value">${assignedCount}</div>
+        <div class="stat-card__label">Na zaduženju</div>
+      </div>
     </div>
 
     <div class="dashboard-grid">
