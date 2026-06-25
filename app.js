@@ -17,6 +17,7 @@ import { renderProfile } from "./profile.js";
 import { renderLogin } from "./login.js";
 import { renderRegister, showPendingScreen } from "./register.js";
 import { renderCompanies } from "./companies.js";
+import { renderServicers } from "./servicers.js";
 
 // ── GLOBALNI STATE ────────────────────────────────────────────
 export const S = {
@@ -113,8 +114,8 @@ function showApp() {
 
 // ── NAVIGACIJA ────────────────────────────────────────────────
 const TAB_CONFIG = {
-  master_admin: ["dashboard", "vehicles", "drivers", "assignments", "companies", "reports", "profile"],
-  fleet_admin:  ["dashboard", "vehicles", "drivers", "assignments", "reports", "profile"],
+  master_admin: ["dashboard", "vehicles", "drivers", "assignments", "companies", "servicers", "reports", "profile"],
+  fleet_admin:  ["dashboard", "vehicles", "drivers", "assignments", "servicers", "reports", "profile"],
   driver:       ["dashboard", "trips", "incidents", "profile"],
 };
 
@@ -128,6 +129,7 @@ const TAB_ICONS = {
   companies:   "🏢",
   reports:     "📄",
   profile:     "⚙️",
+  servicers:   "🔧",
 };
 
 const TAB_KEYS = {
@@ -140,6 +142,7 @@ const TAB_KEYS = {
   companies:   "tab_companies",
   reports:     "tab_reports",
   profile:     "tab_profile",
+  servicers:   "tab_servicers",
 };
 
 const TAB_RENDERERS = {
@@ -152,6 +155,7 @@ const TAB_RENDERERS = {
   companies:   renderCompanies,
   reports:     renderReports,
   profile:     renderProfile,
+  servicers:   renderServicers,
 };
 
 export function buildNav() {

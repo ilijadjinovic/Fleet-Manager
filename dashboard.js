@@ -10,6 +10,7 @@ import {
 import { t } from "./i18n.js";
 import { S, setActiveCompany, navigateTo } from "./app.js";
 import { getCompanies } from "./firebase.js";
+import { getScheduledServices } from "./schedule.js";
 
 export async function renderDashboard(container) {
   const isMasterAdmin = S.profile?.role === "master_admin";
@@ -145,11 +146,18 @@ async function loadDashboardData() {
     }
     const assignedCount = assignmentsSnap?.docs?.length || 0;
 
+    // Zakazani servisi (narednih 30 dana)
+    const scheduledServices = await getScheduledServices(cid).catch(() => []);
+    const upcomingScheduled = scheduledServices.filter(s => {
+      const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
+      return d >= todayStart && d <= in30;
+    });
+
     const isDriver = role === "driver";
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount
+        total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount, upcomingScheduled
       })}
     `;
 
@@ -164,7 +172,7 @@ async function loadDashboardData() {
   }
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount, upcomingScheduled }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // lokalna ponoć
 
@@ -242,6 +250,31 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
                   </div>
                   <div class="upcoming-item__right">
                     <span class="upcoming-item__date">${formatDate(d)}</span>
+                    <span class="upcoming-item__days">${daysLeft} ${t("dashboard_days_left")}</span>
+                  </div>
+                </div>
+              `;
+            }).join("")
+        }
+      </div>
+      <div class="dashboard-panel">
+        <h3 class="panel-title">📅 Zakazani servisi</h3>
+        ${!upcomingScheduled || upcomingScheduled.length === 0
+          ? `<p class="empty-text">Nema zakazanih servisa u narednih 30 dana.</p>`
+          : upcomingScheduled.map(s => {
+              const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
+              const daysLeft = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+              const urgency = daysLeft <= 2 ? "urgent" : daysLeft <= 7 ? "warning" : "ok";
+              const dateStr = d.toLocaleDateString("sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+              return `
+                <div class="upcoming-item upcoming-item--${urgency}">
+                  <div class="upcoming-item__main">
+                    <span class="upcoming-item__name">${s.vehicleBrand} ${s.vehicleModel}</span>
+                    <span class="upcoming-item__plate">${s.vehiclePlate}</span>
+                    ${s.serviceProviderName ? `<span class="upcoming-item__plate">🔧 ${s.serviceProviderName}</span>` : ""}
+                  </div>
+                  <div class="upcoming-item__right">
+                    <span class="upcoming-item__date">${dateStr}</span>
                     <span class="upcoming-item__days">${daysLeft} ${t("dashboard_days_left")}</span>
                   </div>
                 </div>
