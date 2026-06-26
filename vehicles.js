@@ -671,34 +671,39 @@ async function loadScheduledTab(content, vehicle) {
   try {
     const scheduled = await getScheduledServices(S.companyId, { vehicleId: vehicle.id });
 
-    content.innerHTML = `
-      ${canEdit ? `<div style="margin-bottom:12px">
-        <button class="btn btn--primary btn--sm" id="btn-schedule-new">📅 Zakaži servis</button>
-      </div>` : ""}
-      ${scheduled.length === 0
-        ? \`<p class="empty-text">Nema zakazanih servisa za ovo vozilo.</p>\`
-        : \`<div class="service-list">
-            \${scheduled.map(s => {
-              const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
-              const dateStr = d.toLocaleDateString("sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
-              return \`
-                <div class="service-item">
-                  <div class="service-item__header">
-                    <span class="service-item__type">📅 \${t("service_type_" + s.serviceType) || s.serviceType}</span>
-                    <span class="service-item__date">\${dateStr}</span>
-                  </div>
-                  \${s.serviceProviderName ? \`<div class="service-item__workshop">🔧 \${s.serviceProviderName}</div>\` : ""}
-                  \${s.serviceProviderAddress ? \`<div class="service-item__workshop">📍 \${s.serviceProviderAddress}</div>\` : ""}
-                  \${s.serviceProviderPhone ? \`<div class="service-item__workshop">📞 \${s.serviceProviderPhone}</div>\` : ""}
-                  \${s.notes ? \`<div class="service-item__desc">\${s.notes}</div>\` : ""}
-                  \${canEdit ? \`<button class="btn btn--danger btn--sm btn-cancel-scheduled" data-id="\${s.id}" style="margin-top:8px">Otkaži</button>\` : ""}
-                </div>\`;
-            }).join("")}
-          </div>\`
-      }
-    `;
+    let html = "";
 
-    document.getElementById("btn-schedule-new")?.addEventListener("click", async () => {
+    if (canEdit) {
+      html += `<div style="margin-bottom:12px">
+        <button class="btn btn--primary btn--sm" id="btn-schedule-new">📅 Zakaži servis</button>
+      </div>`;
+    }
+
+    if (scheduled.length === 0) {
+      html += `<p class="empty-text">Nema zakazanih servisa za ovo vozilo.</p>`;
+    } else {
+      html += `<div class="service-list">`;
+      for (const s of scheduled) {
+        const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
+        const dateStr = d.toLocaleDateString("sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+        html += `<div class="service-item" data-id="${s.id}">
+          <div class="service-item__header">
+            <span class="service-item__type">📅 ${t("service_type_" + s.serviceType) || s.serviceType}</span>
+            <span class="service-item__date">${dateStr}</span>
+          </div>`;
+        if (s.serviceProviderName)    html += `<div class="service-item__workshop">🔧 ${s.serviceProviderName}</div>`;
+        if (s.serviceProviderAddress) html += `<div class="service-item__workshop">📍 ${s.serviceProviderAddress}</div>`;
+        if (s.serviceProviderPhone)   html += `<div class="service-item__workshop">📞 ${s.serviceProviderPhone}</div>`;
+        if (s.notes)                  html += `<div class="service-item__desc">${s.notes}</div>`;
+        if (canEdit) html += `<button class="btn btn--danger btn--sm btn-cancel-scheduled" data-id="${s.id}" style="margin-top:8px">Otkaži</button>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    content.innerHTML = html;
+
+    document.getElementById("btn-schedule-new")?.addEventListener("click", () => {
       openScheduleForm(vehicle);
     });
 
@@ -711,7 +716,7 @@ async function loadScheduledTab(content, vehicle) {
     });
 
   } catch (e) {
-    content.innerHTML = \`<div class="error-state">\${t("error")}: \${e.message}</div>\`;
+    content.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
 }
 
