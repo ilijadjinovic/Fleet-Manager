@@ -35,7 +35,7 @@
   "tab_reports": "Reports",
   "tab_profile": "Profile",
   "company_select": "Select company",
-  "company_all": "Show all",
+  "company_all": "Shoow All",
   "dashboard_total_vehicles": "Total vehicles",
   "dashboard_active": "Active",
   "dashboard_in_service": "In service",
@@ -196,5 +196,10 @@
   "user_home_address": "Home address",
   "user_work_address": "Work address",
   "user_first_name": "First name",
-  "user_last_name": "Last name"
+  "user_last_name": "Last name",
+  "tab_servicers": "Service Centers",
+  "service_type_oil": "Oil change",
+  "service_type_brakes": "Brake service",
+  "service_type_ac": "AC service",
+  "service_type_registration": "Registration"
 }

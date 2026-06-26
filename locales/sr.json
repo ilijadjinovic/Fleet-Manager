@@ -200,5 +200,10 @@
   "user_home_address": "Adresa stanovanja",
   "user_work_address": "Adresa radnog mesta",
   "user_first_name": "Ime",
-  "user_last_name": "Prezime"
+  "user_last_name": "Prezime",
+  "tab_servicers": "Serviseri",
+  "service_type_oil": "Zamena ulja",
+  "service_type_brakes": "Kočioni sistem",
+  "service_type_ac": "Klima servis",
+  "service_type_registration": "Registracija"
 }
