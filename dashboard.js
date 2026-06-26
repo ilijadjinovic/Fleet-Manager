@@ -111,21 +111,6 @@ async function loadDashboardData() {
     // Danas — početak dana u lokalnom vremenu (ponoć)
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    // Nadolazeći servisi
-    const servicesSnap = await getDocs(
-      query(
-        collection(db, "companies", cid, "services"),
-        where("nextDate", ">=", todayStart),
-        orderBy("nextDate", "asc")
-      )
-    ).catch(() => ({ docs: [] }));
-    const upcomingServices = servicesSnap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(s => {
-        const d = s.nextDate.toDate ? s.nextDate.toDate() : new Date(s.nextDate);
-        return d <= in30;
-      });
-
     // Aktivna zaduženja
     let assignmentsSnap;
     if (role === "driver") {
@@ -157,7 +142,7 @@ async function loadDashboardData() {
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount, upcomingScheduled
+        total, active, inService, unregistered, broken, upcomingReg, vehicles, assignedCount, upcomingScheduled
       })}
     `;
 
@@ -172,7 +157,7 @@ async function loadDashboardData() {
   }
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, upcomingServices, vehicles, assignedCount, upcomingScheduled }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, vehicles, assignedCount, upcomingScheduled }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // lokalna ponoć
 
@@ -231,32 +216,6 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
         }
       </div>
 
-      <div class="dashboard-panel">
-        <h3 class="panel-title" data-i18n="dashboard_upcoming_service">${t("dashboard_upcoming_service")}</h3>
-        ${upcomingServices.length === 0
-          ? `<p class="empty-text" data-i18n="dashboard_no_upcoming">${t("dashboard_no_upcoming")}</p>`
-          : upcomingServices.map(s => {
-              const vehicleData = vehicles.find(v => v.id === s.vehicleId);
-              const d = s.nextDate.toDate ? s.nextDate.toDate() : new Date(s.nextDate);
-              const daysLeft = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
-              const urgency = daysLeft <= 7 ? "urgent" : daysLeft <= 14 ? "warning" : "ok";
-              return `
-                <div class="upcoming-item upcoming-item--${urgency}">
-                  <div class="upcoming-item__main">
-                    <span class="upcoming-item__name">
-                      ${vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : s.vehicleId}
-                    </span>
-                    <span class="upcoming-item__plate">${t(`service_type_${s.serviceType}`) || s.serviceType}</span>
-                  </div>
-                  <div class="upcoming-item__right">
-                    <span class="upcoming-item__date">${formatDate(d)}</span>
-                    <span class="upcoming-item__days">${daysLeft} ${t("dashboard_days_left")}</span>
-                  </div>
-                </div>
-              `;
-            }).join("")
-        }
-      </div>
       <div class="dashboard-panel">
         <h3 class="panel-title">📅 Zakazani servisi</h3>
         ${!upcomingScheduled || upcomingScheduled.length === 0
