@@ -7,7 +7,7 @@ import { db } from "./firebase.js";
 import {
   collection, query, where, getDocs, orderBy
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo } from "./app.js";
 import { getCompanies } from "./firebase.js";
 import { getScheduledServices } from "./schedule.js";
@@ -187,7 +187,7 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
       ` : ""}
       <div class="stat-card stat-card--assigned" data-nav="assignments">
         <div class="stat-card__value">${assignedCount}</div>
-        <div class="stat-card__label">Na zaduženju</div>
+        <div class="stat-card__label" data-i18n="dashboard_assigned">${t("dashboard_assigned")}</div>
       </div>
     </div>
 
@@ -217,14 +217,14 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
       </div>
 
       <div class="dashboard-panel">
-        <h3 class="panel-title">📅 Zakazani servisi</h3>
+        <h3 class="panel-title" data-i18n="schedule_panel_title">📅 ${t("schedule_panel_title")}</h3>
         ${!upcomingScheduled || upcomingScheduled.length === 0
-          ? `<p class="empty-text">Nema zakazanih servisa u narednih 30 dana.</p>`
+          ? `<p class="empty-text">${t("schedule_no_data")}</p>`
           : upcomingScheduled.map(s => {
               const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
               const daysLeft = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
               const urgency = daysLeft <= 2 ? "urgent" : daysLeft <= 7 ? "warning" : "ok";
-              const dateStr = d.toLocaleDateString("sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+              const dateStr = d.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
               return `
                 <div class="upcoming-item upcoming-item--${urgency}">
                   <div class="upcoming-item__main">
@@ -311,5 +311,6 @@ function attachDashboardEvents() {
 function formatDate(date) {
   if (!date) return "—";
   const d = date instanceof Date ? date : new Date(date);
-  return d.toLocaleDateString("sr-RS");
+  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
+  return d.toLocaleDateString(locale);
 }

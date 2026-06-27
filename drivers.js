@@ -14,7 +14,7 @@ import {
   updatePassword,
   getAuth
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { usernameToEmail, getSecondaryAuth } from "./firebase.js";
 
@@ -175,7 +175,7 @@ function driverCard(d, canEdit) {
         <div class="driver-card__login">
           ${d.googleEmail ? `<span class="login-chip login-chip--google">G</span>` : ""}
           ${d.username ? `<span class="login-chip login-chip--local">UN</span>` : ""}
-          ${!hasLogin ? `<span class="login-chip login-chip--none">Bez pristupa</span>` : ""}
+          ${!hasLogin ? `<span class="login-chip login-chip--none">${t("driver_no_access")}</span>` : ""}
         </div>
       </div>
       ${canEdit ? `
@@ -212,7 +212,7 @@ async function openDriverDetail(driverId) {
 
   container.innerHTML = `
     <div class="detail-header">
-      <button class="btn btn--ghost btn--sm" id="btn-back">← Nazad</button>
+      <button class="btn btn--ghost btn--sm" id="btn-back">${t("vehicle_back")}</button>
       <div class="detail-header__title">
         <div class="driver-avatar-lg">${(driver.firstName[0] + driver.lastName[0]).toUpperCase()}</div>
         <div>
@@ -232,10 +232,10 @@ async function openDriverDetail(driverId) {
     </div>
 
     <div class="tab-strip" id="driver-tabs">
-      <button class="tab-strip__btn tab-strip__btn--active" data-dtab="info">Podaci</button>
-      <button class="tab-strip__btn" data-dtab="assignments">Zaduženja</button>
-      <button class="tab-strip__btn" data-dtab="trips">Vožnje</button>
-      <button class="tab-strip__btn" data-dtab="incidents">Prijave</button>
+      <button class="tab-strip__btn tab-strip__btn--active" data-dtab="info">${t("driver_tab_info")}</button>
+      <button class="tab-strip__btn" data-dtab="assignments">${t("driver_tab_assignments")}</button>
+      <button class="tab-strip__btn" data-dtab="trips">${t("driver_tab_trips")}</button>
+      <button class="tab-strip__btn" data-dtab="incidents">${t("driver_tab_incidents")}</button>
     </div>
 
     ${activeAssignment ? `
@@ -293,21 +293,21 @@ function renderInfoTab(d) {
     [t("driver_position"),     d.position],
     [t("driver_phone"),        d.phone],
     [t("driver_email"),        d.email],
-    ["Adresa stanovanja",      d.homeAddress],
-    ["Adresa radnog mesta",    d.workAddress],
+    [t("driver_home_address"),  d.homeAddress],
+    [t("driver_work_address"), d.workAddress],
   ];
 
   const loginRows = [
     [t("driver_google_email"), d.googleEmail],
     [t("driver_username"),     d.username],
-    ["Lozinka",                d.username ? "••••••••" : null],
+    [t("driver_password_label"), d.username ? "••••••••" : null],
   ];
 
   return `
     ${detailTable(rows)}
-    <div class="form-section-title" style="margin:16px 0 12px">Pristup aplikaciji</div>
+    <div class="form-section-title" style="margin:16px 0 12px">${t("driver_app_access")}</div>
     ${!hasLogin
-      ? `<div class="no-login-notice">⚠️ Vozač nema podešen pristup aplikaciji</div>`
+      ? `<div class="no-login-notice">⚠️ ${t("driver_no_access_msg")}</div>`
       : detailTable(loginRows)
     }
   `;
@@ -347,19 +347,19 @@ async function loadDriverTrips(container, driver) {
       <div class="trips-summary">
         <div class="trip-stat">
           <span class="trip-stat__value">${items.length}</span>
-          <span class="trip-stat__label">Vožnji</span>
+          <span class="trip-stat__label">${t("driver_trips_count")}</span>
         </div>
         <div class="trip-stat">
           <span class="trip-stat__value">${items.reduce((s, i) => s + ((i.endKm || 0) - (i.startKm || 0)), 0).toLocaleString()}</span>
-          <span class="trip-stat__label">Ukupno km</span>
+          <span class="trip-stat__label">${t("driver_trips_km")}</span>
         </div>
         <div class="trip-stat">
           <span class="trip-stat__value">${items.reduce((s, i) => s + (i.fuelAmount || 0), 0).toFixed(1)}</span>
-          <span class="trip-stat__label">Goriva (L)</span>
+          <span class="trip-stat__label">${t("driver_trips_fuel_l")}</span>
         </div>
         <div class="trip-stat">
           <span class="trip-stat__value">${items.reduce((s, i) => s + (i.fuelCost || 0), 0).toLocaleString()}</span>
-          <span class="trip-stat__label">Gorivo (RSD)</span>
+          <span class="trip-stat__label">${t("driver_trips_fuel_rsd")}</span>
         </div>
       </div>
       <div class="trips-list">
@@ -394,7 +394,7 @@ function openDriverForm(driver = null) {
   const d = driver || {};
 
   const bodyHTML = `
-    <div class="form-section-title">Lični podaci</div>
+    <div class="form-section-title">${t("driver_personal_section")}</div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("driver_firstname")} *</label>
@@ -419,11 +419,11 @@ function openDriverForm(driver = null) {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">JMBG</label>
+        <label class="form-label">${t("driver_jmbg_label")}</label>
         <input id="df-jmbg" class="form-input" type="text" maxlength="13"
           placeholder="1234567890123" value="${d.jmbg || ""}"
           oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
-        <span class="form-hint">13 cifara, jedinstveno po vozaču</span>
+        <span class="form-hint">${t("driver_jmbg_hint")}</span>
       </div>
       <div class="form-group">
         <label class="form-label">${t("driver_position")}</label>
@@ -431,7 +431,7 @@ function openDriverForm(driver = null) {
       </div>
     </div>
 
-    <div class="form-section-title" style="margin-top:4px">Kontakt</div>
+    <div class="form-section-title" style="margin-top:4px">${t("driver_contact_section")}</div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("driver_phone")}</label>
@@ -443,15 +443,15 @@ function openDriverForm(driver = null) {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Adresa stanovanja</label>
+      <label class="form-label">${t("driver_home_address")}</label>
       <input id="df-homeAddress" class="form-input" type="text" value="${d.homeAddress || ""}" />
     </div>
     <div class="form-group">
-      <label class="form-label">Adresa radnog mesta</label>
+      <label class="form-label">${t("driver_work_address")}</label>
       <input id="df-workAddress" class="form-input" type="text" value="${d.workAddress || ""}" />
     </div>
 
-    <div class="form-section-title" style="margin-top:4px">Pristup aplikaciji</div>
+    <div class="form-section-title" style="margin-top:4px">${t("driver_access_section")}</div>
     <div class="form-group">
       <label class="form-label">${t("driver_google_email")}</label>
       <input id="df-googleEmail" class="form-input" type="email"
@@ -482,7 +482,7 @@ function openDriverForm(driver = null) {
     </div>
 
     <div class="form-group" style="margin-top:4px">
-      <label class="form-label">Status</label>
+      <label class="form-label">${t("driver_status_label")}</label>
       <select id="df-active" class="form-select">
         <option value="true"  ${d.active !== false ? "selected" : ""}>${t("driver_active")}</option>
         <option value="false" ${d.active === false  ? "selected" : ""}>${t("driver_inactive")}</option>
@@ -540,19 +540,19 @@ async function saveDriver(driverId, existingDriver) {
   // ── VALIDACIJA ────────────────────────────────────────────────
   let valid = true;
 
-  if (!firstName) { fieldError("df-firstName", "Ime je obavezno"); valid = false; }
-  if (!lastName)  { fieldError("df-lastName",  "Prezime je obavezno"); valid = false; }
+  if (!firstName) { fieldError("df-firstName", t("driver_first_name_required")); valid = false; }
+  if (!lastName)  { fieldError("df-lastName",  t("driver_last_name_required")); valid = false; }
 
   if (!driverId && username && !password) {
-    fieldError("df-password", "Lozinka je obavezna uz korisničko ime");
+    fieldError("df-password", t("driver_password_required"));
     valid = false;
   }
   if (username && password && password.length < 6) {
-    fieldError("df-password", `Minimum 6 karaktera (trenutno: ${password.length})`);
+    fieldError("df-password", t("driver_password_min").replace("{0}", password.length));
     valid = false;
   }
   if (jmbg && jmbg.length !== 13) {
-    fieldError("df-jmbg", "JMBG mora imati tačno 13 cifara");
+    fieldError("df-jmbg", t("driver_jmbg_error"));
     valid = false;
   }
 
@@ -589,7 +589,7 @@ async function saveDriver(driverId, existingDriver) {
       ));
       if (!jmbgSnap.empty) {
         const ex = jmbgSnap.docs[0].data();
-        fieldError("df-jmbg", `Već dodeljen: ${ex.firstName} ${ex.lastName}`);
+        fieldError("df-jmbg", t("driver_jmbg_taken").replace("{0}", ex.firstName).replace("{1}", ex.lastName));
         throw new Error("validation");
       }
     }
@@ -702,7 +702,7 @@ async function saveDriver(driverId, existingDriver) {
     if (e.message === "validation") throw e; // poruka je već prikazana kao field error
     console.error("[saveDriver] GREŠKA:", e.code, e.message, e);
     if (e.code === "auth/email-already-in-use") {
-      fieldError("df-username", "Korisničko ime je već zauzeto");
+      fieldError("df-username", t("driver_username_taken"));
     } else {
       showFormError(`${t("error")}: ${e.message}`);
     }
@@ -721,8 +721,7 @@ function showPasswordDialog(firstName, lastName, username, password) {
       <div class="password-reveal">
         <div class="password-reveal__icon">🔐</div>
         <p class="password-reveal__msg">
-          Kredencijali za <strong>${firstName} ${lastName}</strong>.<br/>
-          Zabeležite ih i prezentujte vozaču — lozinka se neće ponovo prikazati.
+          ${t("driver_credentials_msg").replace("{0}", firstName).replace("{1}", lastName)}
         </p>
         <div class="password-reveal__field">
           <span class="password-reveal__label">Korisničko ime</span>
@@ -735,7 +734,7 @@ function showPasswordDialog(firstName, lastName, username, password) {
           <button class="btn btn--ghost btn--sm" onclick="navigator.clipboard.writeText('${password}')">📋</button>
         </div>
         <div class="password-reveal__warning">
-          ⚠️ Ovo je jedini put kada se lozinka prikazuje u čistom tekstu.
+          ⚠️ ${t("driver_credentials_warning")}
         </div>
       </div>
     `;
@@ -743,9 +742,9 @@ function showPasswordDialog(firstName, lastName, username, password) {
     import("./app.js").then(({ openModal }) => {
       // Koristimo openModal bez onConfirm — confirm dugme ce biti skriveno
       // Cancel dugme postaje jedino dugme i menjamo mu tekst
-      openModal("Kredencijali za vozača", bodyHTML, null);
+      openModal(t("driver_credentials_title"), bodyHTML, null);
       const cancelBtn = document.getElementById("modal-cancel");
-      if (cancelBtn) cancelBtn.textContent = "Razumeo/la, zatvori";
+      if (cancelBtn) cancelBtn.textContent = t("driver_credentials_close");
     });
   }
 }
@@ -856,7 +855,8 @@ function incidentItem(inc) {
 function formatDate(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : new Date(val);
-  return isNaN(d) ? "—" : d.toLocaleDateString("sr-RS");
+  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
+  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
 }
 
 function numOrNull(id) {

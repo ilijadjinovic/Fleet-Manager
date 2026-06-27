@@ -63,9 +63,9 @@ export async function renderProfile(container) {
 
     <!-- TABOVI -->
     <div class="tab-strip" id="profile-tabs">
-      <button class="tab-strip__btn tab-strip__btn--active" data-ptab="info">Moji podaci</button>
-      ${company ? `<button class="tab-strip__btn" data-ptab="company">Firma</button>` : ""}
-      <button class="tab-strip__btn" data-ptab="settings">Podešavanja</button>
+      <button class="tab-strip__btn tab-strip__btn--active" data-ptab="info">${t("profile_my_data")}</button>
+      ${company ? `<button class="tab-strip__btn" data-ptab="company">${t("profile_company_tab")}</button>` : ""}
+      <button class="tab-strip__btn" data-ptab="settings">${t("profile_settings_tab")}</button>
     </div>
 
     <div id="profile-tab-content"></div>
@@ -102,46 +102,46 @@ function renderInfoTab({ profile, user, driverDoc, role }) {
   return `
     <div class="profile-section">
       <div class="profile-section__header">
-        <h3 class="profile-section__title">Lični podaci</h3>
+        <h3 class="profile-section__title">${t("profile_personal_section")}</h3>
         <button class="btn btn--secondary btn--sm" id="btn-edit-profile">✏️ Izmeni</button>
       </div>
       <div class="detail-table">
-        ${row("Ime", p.firstName)}
-        ${row("Prezime", p.lastName)}
+        ${row(t("profile_first_name"), p.firstName)}
+        ${row(t("profile_last_name"), p.lastName)}
         ${p.jmbg ? row("JMBG", p.jmbg) : ""}
         ${p.birthYear ? row(t("driver_birth_year"), p.birthYear) : ""}
         ${p.licenseCategories ? row(t("driver_license_cat"), p.licenseCategories) : ""}
         ${p.position ? row(t("driver_position"), p.position) : ""}
         ${p.phone ? row(t("driver_phone"), p.phone) : ""}
         ${p.email ? row(t("driver_email"), p.email) : ""}
-        ${p.homeAddress ? row("Adresa stanovanja", p.homeAddress) : ""}
-        ${p.workAddress ? row("Adresa radnog mesta", p.workAddress) : ""}
+        ${p.homeAddress ? row(t("driver_home_address"), p.homeAddress) : ""}
+        ${p.workAddress ? row(t("driver_work_address"), p.workAddress) : ""}
       </div>
     </div>
 
     <div class="profile-section">
       <div class="profile-section__header">
-        <h3 class="profile-section__title">Način prijave</h3>
+        <h3 class="profile-section__title">${t("profile_login_section")}</h3>
       </div>
       <div class="login-methods">
         <div class="login-method ${isGoogleLogin ? "login-method--active" : "login-method--inactive"}">
           <span class="login-method__icon">G</span>
           <div class="login-method__info">
-            <span class="login-method__label">Google nalog</span>
-            <span class="login-method__value">${isGoogleLogin ? user.email : "Nije povezan"}</span>
+            <span class="login-method__label">${t("profile_google_login")}</span>
+            <span class="login-method__value">${isGoogleLogin ? user.email : t("profile_not_connected")}</span>
           </div>
           <span class="badge badge--${isGoogleLogin ? "active" : "inactive"}">
-            ${isGoogleLogin ? "Aktivan" : "—"}
+            ${isGoogleLogin ? t("profile_active_badge") : "—"}
           </span>
         </div>
         <div class="login-method ${isLocalLogin ? "login-method--active" : "login-method--inactive"}">
           <span class="login-method__icon">UN</span>
           <div class="login-method__info">
-            <span class="login-method__label">Lokalni nalog</span>
-            <span class="login-method__value">${isLocalLogin ? profile.username : "Nije podešen"}</span>
+            <span class="login-method__label">${t("profile_local_login")}</span>
+            <span class="login-method__value">${isLocalLogin ? profile.username : t("profile_not_set")}</span>
           </div>
           <span class="badge badge--${isLocalLogin ? "active" : "inactive"}">
-            ${isLocalLogin ? "Aktivan" : "—"}
+            ${isLocalLogin ? t("profile_active_badge") : "—"}
           </span>
         </div>
       </div>
@@ -192,17 +192,17 @@ function openEditProfileModal(profile, driverDoc) {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Adresa stanovanja</label>
+      <label class="form-label">${t("driver_home_address")}</label>
       <input id="ep-homeAddress" class="form-input" type="text" value="${p.homeAddress || ""}" />
     </div>
     <div class="form-group">
-      <label class="form-label">Adresa radnog mesta</label>
+      <label class="form-label">${t("driver_work_address")}</label>
       <input id="ep-workAddress" class="form-input" type="text" value="${p.workAddress || ""}" />
     </div>
-    ${isDriver ? `<span class="form-hint">Ime i prezime može menjati samo fleet administrator.</span>` : ""}
+    ${isDriver ? `<span class="form-hint">${t("profile_driver_note")}</span>` : ""}
   `;
 
-  openModal("Izmeni profil", bodyHTML, async () => {
+  openModal(t("profile_edit_title"), bodyHTML, async () => {
     const updates = {
       phone:       document.getElementById("ep-phone")?.value.trim() || null,
       email:       document.getElementById("ep-email")?.value.trim() || null,
@@ -254,15 +254,15 @@ function renderCompanyTab({ company, role }) {
         ${canEdit ? `<button class="btn btn--secondary btn--sm" id="btn-edit-company">✏️ Izmeni</button>` : ""}
       </div>
       <div class="detail-table">
-        ${company.pib      ? row("PIB", company.pib) : ""}
-        ${company.mbr      ? row("MBR", company.mbr) : ""}
-        ${company.owner    ? row("Vlasnik", company.owner) : ""}
-        ${company.director ? row("Direktor", company.director) : ""}
-        ${company.address  ? row("Adresa", company.address) : ""}
-        ${company.phone    ? row("Telefon", company.phone) : ""}
-        ${company.email    ? row("Email", company.email) : ""}
-        ${company.instagram? row("Instagram", company.instagram) : ""}
-        ${company.facebook ? row("Facebook", company.facebook) : ""}
+        ${company.pib      ? row(t("company_pib"), company.pib) : ""}
+        ${company.mbr      ? row(t("company_mbr"), company.mbr) : ""}
+        ${company.owner    ? row(t("company_owner"), company.owner) : ""}
+        ${company.director ? row(t("company_director"), company.director) : ""}
+        ${company.address  ? row(t("company_address"), company.address) : ""}
+        ${company.phone    ? row(t("company_phone"), company.phone) : ""}
+        ${company.email    ? row(t("company_email"), company.email) : ""}
+        ${company.instagram? row(t("company_instagram"), company.instagram) : ""}
+        ${company.facebook ? row(t("company_facebook"), company.facebook) : ""}
       </div>
     </div>
   `;
@@ -298,11 +298,11 @@ function openEditCompanyModal(company) {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Direktor</label>
+      <label class="form-label">${t("company_director")}</label>
       <input id="ec-director" class="form-input" type="text" value="${company.director || ""}" />
     </div>
     <div class="form-group">
-      <label class="form-label">Adresa</label>
+      <label class="form-label">${t("company_address")}</label>
       <input id="ec-address" class="form-input" type="text" value="${company.address || ""}" />
     </div>
     <div class="form-row">
@@ -360,7 +360,7 @@ function renderSettingsTab({ profile }) {
   return `
     <div class="profile-section">
       <div class="profile-section__header">
-        <h3 class="profile-section__title">Jezik / Language</h3>
+        <h3 class="profile-section__title">${t("profile_lang_section")}</h3>
       </div>
       <div class="lang-options">
         <label class="lang-option ${currentLang === "sr" ? "lang-option--active" : ""}">
@@ -378,20 +378,20 @@ function renderSettingsTab({ profile }) {
 
     <div class="profile-section">
       <div class="profile-section__header">
-        <h3 class="profile-section__title">Nalog</h3>
+        <h3 class="profile-section__title">${t("profile_account_section")}</h3>
       </div>
       <div class="settings-info">
         <div class="settings-info__row">
-          <span>UID</span>
+          <span>${t("profile_uid_label")}</span>
           <span class="mono" style="font-size:11px">${S.user?.uid || "—"}</span>
         </div>
         <div class="settings-info__row">
-          <span>Uloga</span>
+          <span>${t("profile_role_label")}</span>
           <span>${t("role_" + profile.role)}</span>
         </div>
         <div class="settings-info__row">
-          <span>Status</span>
-          <span class="badge badge--active">Aktivan</span>
+          <span>${t("profile_status_label")}</span>
+          <span class="badge badge--active">${t("profile_active_badge")}</span>
         </div>
       </div>
     </div>
@@ -415,7 +415,7 @@ function bindSettingsTab({ profile }) {
       } catch (e) { /* ignoriši */ }
       // Re-renderuj celu app sa novim prevodima (uključujući aktivni tab)
       rerenderCurrentTab();
-      showToast(radio.value === "sr" ? "Jezik promenjen na srpski" : "Language changed to English", "success");
+      showToast(radio.value === "sr" ? t("profile_lang_changed_sr") : t("profile_lang_changed_en"), "success");
     });
   });
 

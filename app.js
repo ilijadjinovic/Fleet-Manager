@@ -91,9 +91,9 @@ function showRejected() {
   app.innerHTML = `
     <div class="access-denied">
       <div class="access-denied__icon">❌</div>
-      <h2>Zahtev odbijen</h2>
-      <p>Vaš zahtev za pristup je odbijen. Kontaktirajte administratora.</p>
-      <button class="btn btn--secondary" id="btn-rejected-logout">Odjavi se</button>
+      <h2>${t("app_rejected_title")}</h2>
+      <p>${t("app_rejected_msg")}</p>
+      <button class="btn btn--secondary" id="btn-rejected-logout">${t("app_rejected_logout")}</button>
     </div>
   `;
   document.getElementById("btn-rejected-logout")?.addEventListener("click", doLogout);
@@ -232,8 +232,8 @@ export function openModal(title, bodyHTML, onConfirm = null) {
   const cancelBtn  = document.getElementById("modal-cancel");
   confirmBtn.style.display = onConfirm ? "inline-flex" : "none";
   confirmBtn.disabled = false;
-  confirmBtn.textContent = "Potvrdi";
-  cancelBtn.textContent = "Otkaži";
+  confirmBtn.textContent = t("confirm");
+  cancelBtn.textContent = t("cancel");
   const close = () => document.getElementById("modal-overlay").classList.add("hidden");
   if (onConfirm) confirmBtn.onclick = async () => {
     confirmBtn.disabled = true;

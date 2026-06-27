@@ -9,7 +9,7 @@ import {
   collection, query, orderBy, getDocs, doc,
   addDoc, updateDoc, serverTimestamp, where, getDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
@@ -34,8 +34,8 @@ export async function renderTrips(container) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state__icon">🚗</div>
-        <h3>Nemate aktivno zaduženje</h3>
-        <p>Kada vam fleet administrator dodeli vozilo, ovde ćete moći da unosite podatke o vožnji.</p>
+        <h3>${t("trip_no_assignment")}</h3>
+        <p>${t("trip_no_assignment_sub")}</p>
       </div>
     `;
     return;
@@ -116,26 +116,26 @@ function renderDriverView(container) {
             <div class="trip-vehicle-card__plate">${a.vehiclePlate}</div>
           </div>
         </div>
-        <span class="badge badge--active">Aktivno</span>
+        <span class="badge badge--active">${t("trip_active_badge")}</span>
       </div>
       <div class="trip-vehicle-card__details">
         <div class="trip-vehicle-detail">
-          <span class="trip-vehicle-detail__label">Zaduženo</span>
+          <span class="trip-vehicle-detail__label">${t("trip_assigned_label")}</span>
           <span>${formatDate(a.startDate)}</span>
         </div>
         <div class="trip-vehicle-detail">
-          <span class="trip-vehicle-detail__label">Početna km</span>
+          <span class="trip-vehicle-detail__label">${t("trip_start_km_label")}</span>
           <span><strong>${a.startKm?.toLocaleString() || "—"} km</strong></span>
         </div>
         ${a.tripType === "intercity" ? `
         <div class="trip-vehicle-detail">
-          <span class="trip-vehicle-detail__label">Destinacija</span>
+          <span class="trip-vehicle-detail__label">${t("trip_destination_label")}</span>
           <span>📍 ${a.destination || "—"}</span>
         </div>
         ` : ""}
         ${a.reason ? `
         <div class="trip-vehicle-detail">
-          <span class="trip-vehicle-detail__label">Razlog</span>
+          <span class="trip-vehicle-detail__label">${t("trip_reason_label")}</span>
           <span>${a.reason}</span>
         </div>
         ` : ""}
@@ -143,22 +143,22 @@ function renderDriverView(container) {
 
       <!-- KM POTVRDA -->
       <div class="km-confirm-box" id="km-confirm-box">
-        <div class="km-confirm-box__label">Trenutna km na vozilu</div>
+        <div class="km-confirm-box__label">${t("trip_km_system")}</div>
         <div class="km-confirm-box__value">${v?.currentKm?.toLocaleString() || a.startKm?.toLocaleString() || "—"} km</div>
         <div class="km-confirm-box__hint">Da li se ovo slaže sa stanjem na brzinomeru?</div>
         <div class="km-confirm-box__actions">
-          <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ Potvrđujem</button>
-          <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ Unesite tačnu vrednost</button>
+          <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ ${t("trip_km_confirm")}</button>
+          <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ ${t("trip_km_enter_actual")}</button>
         </div>
         <div id="km-correct-form" class="hidden" style="margin-top:10px">
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Tačna km na brzinomeru</label>
+              <label class="form-label">${t("trip_km_actual_ph")}</label>
               <input id="input-actual-km" class="form-input" type="number"
                 placeholder="${v?.currentKm || a.startKm || ""}" />
             </div>
             <div style="display:flex;align-items:flex-end">
-              <button class="btn btn--primary btn--sm" id="btn-submit-km">Potvrdi</button>
+              <button class="btn btn--primary btn--sm" id="btn-submit-km">${t("trip_km_confirm")}</button>
             </div>
           </div>
         </div>
@@ -169,37 +169,37 @@ function renderDriverView(container) {
     <div class="trip-stats">
       <div class="trip-stat-box">
         <div class="trip-stat-box__value">${totalFuel.toFixed(1)} L</div>
-        <div class="trip-stat-box__label">Gorivo</div>
+        <div class="trip-stat-box__label">${t("trip_stats_fuel")}</div>
       </div>
       <div class="trip-stat-box">
         <div class="trip-stat-box__value">${(totalFuelCost + totalTolls + totalOther).toLocaleString()} RSD</div>
-        <div class="trip-stat-box__label">Ukupni troškovi</div>
+        <div class="trip-stat-box__label">${t("trip_stats_cost")}</div>
       </div>
       <div class="trip-stat-box ${incidents.length > 0 ? "trip-stat-box--warn" : ""}">
         <div class="trip-stat-box__value">${incidents.length}</div>
-        <div class="trip-stat-box__label">Prijave</div>
+        <div class="trip-stat-box__label">${t("trip_stats_incidents")}</div>
       </div>
       <div class="trip-stat-box">
         <div class="trip-stat-box__value">${tripEntries.length}</div>
-        <div class="trip-stat-box__label">Unosa</div>
+        <div class="trip-stat-box__label">${t("trip_stats_entries")}</div>
       </div>
     </div>
 
     <!-- AKCIJE -->
     <div class="trip-actions">
-      <button class="btn btn--primary" id="btn-add-fuel">⛽ Točenje goriva</button>
-      <button class="btn btn--secondary" id="btn-add-toll">🛣️ Putarina / trošak</button>
-      <button class="btn btn--warning" id="btn-add-incident">⚠️ Prijava</button>
-      <button class="btn btn--danger" id="btn-unassign">🔓 Razduženje</button>
+      <button class="btn btn--primary" id="btn-add-fuel">⛽ ${t("trip_fuel_btn")}</button>
+      <button class="btn btn--secondary" id="btn-add-toll">🛣️ ${t("trip_cost_btn")}</button>
+      <button class="btn btn--warning" id="btn-add-incident">⚠️ ${t("trip_incident_btn")}</button>
+      <button class="btn btn--danger" id="btn-unassign">🔓 ${t("trip_unassign_btn")}</button>
     </div>
 
     <!-- LISTA UNOSA -->
     <div class="trip-entries-header">
-      <h3>Evidencija</h3>
+      <h3>${t("trip_entries_header")}</h3>
     </div>
     <div id="trip-entries-list">
       ${tripEntries.length === 0
-        ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>Nema unosa</p></div>`
+        ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>${t("trip_no_entries")}</p></div>`
         : tripEntries.map(e => tripEntryCard(e)).join("")
       }
     </div>
@@ -253,7 +253,7 @@ function bindKmConfirm() {
         updatedAt:     serverTimestamp(),
       });
 
-      showToast("Neslaganje prijavljeno fleet administratoru", "warning");
+      showToast(t("trip_km_mismatch_reported"), "warning");
     }
 
     // Ažuriraj prikaz
@@ -269,7 +269,7 @@ function bindKmConfirm() {
 // ── FORMA ZA TOČENJE GORIVA ───────────────────────────────────
 function openFuelForm() {
   const bodyHTML = `
-    <div class="form-section-title">Točenje goriva</div>
+    <div class="form-section-title">${t("trip_fuel_header")}</div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_type")} *</label>
@@ -291,9 +291,9 @@ function openFuelForm() {
         <input id="tf-fuelCost" class="form-input" type="number" min="0" />
       </div>
       <div class="form-group">
-        <label class="form-label">Cena po litru (RSD)</label>
+        <label class="form-label">${t("trip_fuel_price_per_l")}</label>
         <input id="tf-pricePerL" class="form-input" type="number" step="0.01" min="0"
-          placeholder="Automatski ako unesete količinu i iznos" readonly />
+          placeholder="${t("trip_fuel_price_per_l_ph")}" readonly />
       </div>
     </div>
     <div class="form-row">
@@ -307,10 +307,10 @@ function openFuelForm() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Trenutna km</label>
+      <label class="form-label">${t("trip_current_km")}</label>
       <input id="tf-currentKm" class="form-input" type="number"
         value="${activeVehicle?.currentKm || ""}"
-        placeholder="Km na brzinomeru pri točenju" />
+        placeholder="${t('trip_current_km')}" />
     </div>
     <div class="form-group">
       <label class="form-label">${t("notes")}</label>
@@ -341,7 +341,7 @@ async function saveFuelEntry() {
   const fuelStation = document.getElementById("tf-fuelStation")?.value.trim();
 
   if (!fuelAmount || !fuelCost || !fuelStation) {
-    showEntryError("fuel-form-error", "Količina, iznos i naziv pumpe su obavezni");
+    showEntryError("fuel-form-error", t("required_field"));
     return;
   }
 
@@ -385,29 +385,29 @@ async function saveFuelEntry() {
 // ── FORMA ZA PUTARINU / TROŠAK ────────────────────────────────
 function openCostForm() {
   const bodyHTML = `
-    <div class="form-section-title">Trošak</div>
+    <div class="form-section-title">${t("trip_cost_header")}</div>
     <div class="form-group">
-      <label class="form-label">Vrsta troška *</label>
+      <label class="form-label">${t("trip_cost_type")}</label>
       <select id="tc-type" class="form-select">
-        <option value="toll">🛣️ Putarina</option>
-        <option value="parking">🅿️ Parking</option>
-        <option value="washing">🚿 Pranje vozila</option>
-        <option value="other_cost">📋 Ostalo</option>
+        <option value="toll">🛣️ ${t("trip_cost_toll")}</option>
+        <option value="parking">🅿️ ${t("trip_cost_parking")}</option>
+        <option value="washing">🚿 ${t("trip_cost_washing")}</option>
+        <option value="other_cost">📋 ${t("trip_cost_other")}</option>
       </select>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Iznos (RSD) *</label>
+        <label class="form-label">${t("trip_cost_amount")}</label>
         <input id="tc-amount" class="form-input" type="number" min="0" />
       </div>
       <div class="form-group">
-        <label class="form-label">Broj računa / priznanice</label>
+        <label class="form-label">${t("trip_cost_receipt")}</label>
         <input id="tc-receiptNo" class="form-input" type="text" />
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Lokacija / opis</label>
-      <input id="tc-location" class="form-input" type="text" placeholder="npr. Naplatna rampa Batajnica" />
+      <label class="form-label">${t("trip_cost_location")}</label>
+      <input id="tc-location" class="form-input" type="text" placeholder="${t("trip_cost_location_ph")}" />
     </div>
     <div class="form-group">
       <label class="form-label">${t("notes")}</label>
@@ -416,13 +416,13 @@ function openCostForm() {
     <p id="cost-form-error" class="login-error hidden"></p>
   `;
 
-  openModal("Dodaj trošak", bodyHTML, () => saveCostEntry());
+  openModal(t("trip_cost_add"), bodyHTML, () => saveCostEntry());
 }
 
 async function saveCostEntry() {
   const amount = parseFloat(document.getElementById("tc-amount")?.value);
   if (!amount || amount <= 0) {
-    showEntryError("cost-form-error", "Unesite iznos troška");
+    showEntryError("cost-form-error", t("required_field"));
     return;
   }
 
@@ -483,7 +483,7 @@ function openIncidentForm() {
       <input id="ti-location" class="form-input" type="text" placeholder="Gde se dogodilo?" />
     </div>
     <div class="form-group">
-      <label class="form-label">Trenutna km</label>
+      <label class="form-label">${t("trip_current_km")}</label>
       <input id="ti-currentKm" class="form-input" type="number"
         value="${activeVehicle?.currentKm || ""}" />
     </div>
@@ -535,7 +535,7 @@ async function saveIncidentEntry() {
       createdAt:    serverTimestamp(),
     });
 
-    showToast("Prijava je poslata fleet administratoru", "warning");
+    showToast(t("trip_incident_reported"), "warning");
     await refreshEntries();
   } catch (e) {
     showEntryError("incident-form-error", `${t("error")}: ${e.message}`);
@@ -552,26 +552,26 @@ function openDriverUnassignForm() {
       ${activeAssignment.startKm ? `<div>🛣️ Početna km: ${activeAssignment.startKm.toLocaleString()}</div>` : ""}
     </div>
 
-    <div class="form-section-title" style="margin-top:12px">Razduženje</div>
+    <div class="form-section-title" style="margin-top:12px">${t("assignment_unassign_title")}</div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Datum razduženja *</label>
         <input id="du-endDate" class="form-input" type="date" value="${today}" />
       </div>
       <div class="form-group">
-        <label class="form-label">Krajnja kilometraža *</label>
+        <label class="form-label">${t("assignment_end_km")}</label>
         <input id="du-endKm" class="form-input" type="number"
           value="${activeVehicle?.currentKm || ""}" />
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Napomena</label>
+      <label class="form-label">${t("notes")}</label>
       <textarea id="du-notes" class="form-textarea" rows="2"></textarea>
     </div>
     <p id="unassign-form-error" class="login-error hidden"></p>
   `;
 
-  openModal("Razduženje vozila", bodyHTML, () => processDriverUnassign());
+  openModal(t("assignment_unassign") + " " + t("assignment_vehicle").toLowerCase(), bodyHTML, () => processDriverUnassign());
 }
 
 async function processDriverUnassign() {
@@ -580,17 +580,17 @@ async function processDriverUnassign() {
   const notes   = document.getElementById("du-notes")?.value.trim();
 
   if (!endDate) {
-    showEntryError("unassign-form-error", "Unesite datum razduženja");
+    showEntryError("unassign-form-error", t("assignment_unassign_date_required"));
     return;
   }
   if (!endKm || endKm <= 0) {
-    showEntryError("unassign-form-error", "Unesite krajnju kilometražu");
+    showEntryError("unassign-form-error", t("assignment_unassign_endkm_required"));
     return;
   }
 
   const startKm = activeAssignment.startKm || 0;
   if (endKm < startKm) {
-    showEntryError("unassign-form-error", `Krajnja km (${endKm.toLocaleString()}) ne može biti manja od početne (${startKm.toLocaleString()})`);
+    showEntryError("unassign-form-error", `${t("assignment_end_km")}: ${endKm.toLocaleString()} < ${startKm.toLocaleString()}`);
     return;
   }
 
@@ -616,7 +616,7 @@ async function processDriverUnassign() {
       }
     );
 
-    showToast("Vozilo je razduže. Hvala!", "success");
+    showToast(t("unassign_success"), "success");
     activeAssignment = null;
     activeVehicle    = null;
     tripEntries      = [];
@@ -631,11 +631,11 @@ async function processDriverUnassign() {
 // ── ENTRY CARD ────────────────────────────────────────────────
 function tripEntryCard(entry) {
   const typeConfig = {
-    fuel:       { icon: "⛽", label: "Točenje goriva",  color: "info" },
-    toll:       { icon: "🛣️", label: "Putarina",        color: "inactive" },
-    parking:    { icon: "🅿️", label: "Parking",         color: "inactive" },
-    washing:    { icon: "🚿", label: "Pranje",           color: "inactive" },
-    other_cost: { icon: "📋", label: "Trošak",           color: "inactive" },
+    fuel:       { icon: "⛽", label: t("trip_entry_fuel"),   color: "info" },
+    toll:       { icon: "🛣️", label: t("trip_entry_toll"),   color: "inactive" },
+    parking:    { icon: "🅿️", label: t("trip_entry_parking"), color: "inactive" },
+    washing:    { icon: "🚿", label: t("trip_entry_washing"), color: "inactive" },
+    other_cost: { icon: "📋", label: t("trip_entry_cost"),   color: "inactive" },
     fault:      { icon: "🔧", label: t("incident_fault"),   color: "service" },
     damage:     { icon: "💥", label: t("incident_damage"),  color: "broken" },
     accident:   { icon: "🚨", label: t("incident_accident"),color: "broken" },
@@ -689,19 +689,19 @@ async function renderAdminView(container) {
 
   container.innerHTML = `
     <div class="page-header">
-      <h2 class="page-title">Evidencija vožnji</h2>
+      <h2 class="page-title">${t("trip_admin_title")}</h2>
     </div>
     <div class="filter-bar">
       <div class="search-bar">
         <span class="search-bar__icon">🔍</span>
         <input id="admin-trips-search" type="text" class="search-bar__input form-input"
-          placeholder="Pretraži po tablici, vozaču..." />
+          placeholder="${t('search')}..." />
       </div>
       <div class="filter-chips">
         <button class="chip chip--active" data-afilter="all">${t("company_all")}</button>
-        <button class="chip" data-afilter="fuel">⛽ Gorivo</button>
-        <button class="chip" data-afilter="toll">🛣️ Putarine</button>
-        <button class="chip" data-afilter="incident">⚠️ Prijave</button>
+        <button class="chip" data-afilter="fuel">⛽ ${t("trip_filter_fuel")}</button>
+        <button class="chip" data-afilter="toll">🛣️ ${t("trip_filter_tolls")}</button>
+        <button class="chip" data-afilter="incident">⚠️ ${t("trip_filter_incidents")}</button>
       </div>
     </div>
     <div id="admin-trips-list"><div class="loading">${t("loading")}</div></div>
@@ -781,7 +781,7 @@ async function refreshEntries() {
   const listEl = document.getElementById("trip-entries-list");
   if (listEl) {
     listEl.innerHTML = tripEntries.length === 0
-      ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>Nema unosa</p></div>`
+      ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>${t("trip_no_entries")}</p></div>`
       : tripEntries.map(e => tripEntryCard(e)).join("");
   }
 
@@ -795,9 +795,9 @@ async function refreshEntries() {
     div.className = "trip-stats";
     div.innerHTML = `
       <div class="trip-stat-box"><div class="trip-stat-box__value">${totalFuel.toFixed(1)} L</div><div class="trip-stat-box__label">Gorivo</div></div>
-      <div class="trip-stat-box"><div class="trip-stat-box__value">${totalCost.toLocaleString()} RSD</div><div class="trip-stat-box__label">Ukupni troškovi</div></div>
-      <div class="trip-stat-box ${incidentCount > 0 ? "trip-stat-box--warn" : ""}"><div class="trip-stat-box__value">${incidentCount}</div><div class="trip-stat-box__label">Prijave</div></div>
-      <div class="trip-stat-box"><div class="trip-stat-box__value">${tripEntries.length}</div><div class="trip-stat-box__label">Unosa</div></div>
+      <div class="trip-stat-box"><div class="trip-stat-box__value">${totalCost.toLocaleString()} RSD</div><div class="trip-stat-box__label">${t("trip_stats_cost")}</div></div>
+      <div class="trip-stat-box ${incidentCount > 0 ? "trip-stat-box--warn" : ""}"><div class="trip-stat-box__value">${incidentCount}</div><div class="trip-stat-box__label">${t("trip_stats_incidents")}</div></div>
+      <div class="trip-stat-box"><div class="trip-stat-box__value">${tripEntries.length}</div><div class="trip-stat-box__label">${t("trip_stats_entries")}</div></div>
     `;
     return div;
   })());
@@ -807,7 +807,8 @@ async function refreshEntries() {
 function formatDate(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : new Date(val);
-  return isNaN(d) ? "—" : d.toLocaleDateString("sr-RS");
+  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
+  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
 }
 
 function showEntryError(id, msg) {

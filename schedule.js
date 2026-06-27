@@ -8,7 +8,7 @@ import {
   collection, getDocs, addDoc, deleteDoc, doc,
   query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
 
@@ -29,59 +29,59 @@ export async function openScheduleForm(vehicle) {
   const bodyHTML = `
     <div class="form-grid">
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Tip servisa *</label>
+        <label class="form-label">${t("schedule_service_type")}</label>
         <select id="sch-type" class="form-input form-select">
           ${typeOptions}
         </select>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Datum *</label>
+        <label class="form-label">${t("schedule_date")}</label>
         <input id="sch-date" class="form-input" type="date" />
       </div>
       <div class="form-group">
-        <label class="form-label">Vreme</label>
+        <label class="form-label">${t("schedule_time")}</label>
         <input id="sch-time" class="form-input" type="time" value="08:00" />
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Serviser</label>
+        <label class="form-label">${t("schedule_provider")}</label>
         <select id="sch-provider" class="form-input form-select">
-          <option value="">-- Ručni unos --</option>
+          <option value="">${t("schedule_provider_manual")}</option>
           ${providerOptions}
         </select>
       </div>
 
       <div id="sch-manual-fields" style="grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:12px">
         <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Naziv servisa</label>
+          <label class="form-label">${t("schedule_provider_name")}</label>
           <input id="sch-name" class="form-input" type="text" placeholder="Naziv servisa..." />
         </div>
         <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Adresa</label>
-          <input id="sch-address" class="form-input" type="text" placeholder="Adresa servisa..." />
+          <label class="form-label">${t("schedule_provider_address")}</label>
+          <input id="sch-address" class="form-input" type="text" placeholder="${t("schedule_provider_address_ph")}" />
         </div>
         <div class="form-group">
-          <label class="form-label">Telefon</label>
+          <label class="form-label">${t("servicer_phone")}</label>
           <input id="sch-phone" class="form-input" type="tel" placeholder="+381..." />
         </div>
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Napomena</label>
-        <textarea id="sch-notes" class="form-input form-textarea" rows="2" placeholder="Napomena za vozača..."></textarea>
+        <label class="form-label">${t("schedule_notes")}</label>
+        <textarea id="sch-notes" class="form-input form-textarea" rows="2" placeholder="${t("schedule_notes_ph")}"></textarea>
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="sch-push" checked />
-          <span>Pošalji push notifikaciju vozačima</span>
+          <span>${t("schedule_push")}</span>
         </label>
       </div>
       <div class="form-group" style="grid-column:1/-1">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="sch-ics" checked />
-          <span>Preuzmi .ics fajl (za Google/Outlook/Apple Calendar)</span>
+          <span>${t("schedule_ics")}</span>
         </label>
       </div>
     </div>
@@ -89,7 +89,7 @@ export async function openScheduleForm(vehicle) {
   `;
 
   openModal(
-    `📅 Zakaži servis — ${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
+    `📅 ${t("schedule_title_prefix")} — ${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
     bodyHTML,
     async () => {
       const dateVal = document.getElementById("sch-date")?.value;
@@ -98,7 +98,7 @@ export async function openScheduleForm(vehicle) {
 
       if (!dateVal) {
         const err = document.getElementById("sch-error");
-        err.textContent = "Datum je obavezan";
+        err.textContent = t("schedule_date_required");
         err.classList.remove("hidden");
         throw new Error("validation");
       }
@@ -143,7 +143,7 @@ export async function openScheduleForm(vehicle) {
         status:     "scheduled",
       });
 
-      showToast("Servis zakazan!", "success");
+      showToast(t("schedule_success"), "success");
 
       // Push notifikacija
       if (sendPush) {
@@ -226,12 +226,12 @@ async function sendPushToDrivers(vehicle, serviceType, date, providerName) {
 
   if (permission !== "granted") return;
 
-  const dateStr = date.toLocaleDateString("sr-RS", {
+  const dateStr = date.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit"
   });
 
-  const title = `🔧 Zakazan servis — ${vehicle.brand} ${vehicle.model}`;
+  const title = `🔧 ${t("schedule_title_prefix")} — ${vehicle.brand} ${vehicle.model}`;
   const body  = [
     `Tablice: ${vehicle.plate}`,
     `Tip: ${t("service_type_" + serviceType) || serviceType}`,

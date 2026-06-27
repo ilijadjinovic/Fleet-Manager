@@ -8,7 +8,7 @@ import {
   collection, query, orderBy, getDocs, doc,
   addDoc, updateDoc, serverTimestamp, where, Timestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
@@ -187,8 +187,7 @@ function assignmentCard(a, canEdit) {
 
         ${a.kmMismatch ? `
           <div class="assignment-card__mismatch">
-            ⚠️ Neslaganje km: vozač uneo ${a.driverStartKm?.toLocaleString()} km
-            (evidentirano ${a.startKm?.toLocaleString()} km)
+            ⚠️ ${t("assignment_km_mismatch_detail").replace("{0}", a.driverStartKm?.toLocaleString() || "?").replace("{1}", a.startKm?.toLocaleString() || "?")}
           </div>
         ` : ""}
       </div>
@@ -231,7 +230,7 @@ async function openAssignmentForm(existing = null) {
       <label class="form-label">${t("assignment_vehicle")} *</label>
       <div class="vehicle-select-wrap">
         <input id="af-vehicle-search" class="form-input" type="text"
-          placeholder="Pretraži po tablici ili modelu..."
+          placeholder="${t('search')}..."
           value="${isEdit ? a.vehiclePlate + " — " + a.vehicleBrand + " " + a.vehicleModel : ""}" />
         <div id="af-vehicle-dropdown" class="select-dropdown hidden"></div>
         <input type="hidden" id="af-vehicleId" value="${a.vehicleId || ""}" />
@@ -246,7 +245,7 @@ async function openAssignmentForm(existing = null) {
       <label class="form-label">${t("assignment_driver")} *</label>
       <div class="vehicle-select-wrap">
         <input id="af-driver-search" class="form-input" type="text"
-          placeholder="Pretraži po imenu..."
+          placeholder="${t('search')}..."
           value="${isEdit ? a.driverName : ""}" />
         <div id="af-driver-dropdown" class="select-dropdown hidden"></div>
         <input type="hidden" id="af-driverId" value="${a.driverId || ""}" />
@@ -296,12 +295,12 @@ async function openAssignmentForm(existing = null) {
       <div class="form-group">
         <label class="form-label">${t("assignment_destination")}</label>
         <input id="af-destination" class="form-input" type="text"
-          value="${a.destination || ""}" placeholder="Grad / adresa odredišta" />
+          value="${a.destination || ""}" placeholder="${t('assignment_destination')}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("assignment_route")}</label>
         <input id="af-route" class="form-input" type="text"
-          value="${a.route || ""}" placeholder="npr. Beograd → Novi Sad → Subotica" />
+          value="${a.route || ""}" placeholder="${t('assignment_route')}" />
       </div>
     </div>
 
@@ -372,7 +371,7 @@ function vehicleInfoBox(vehicle) {
   return `
     <div class="vehicle-info-box">
       <div class="vehicle-info-box__row">
-        <span class="vehicle-info-box__label">Status</span>
+        <span class="vehicle-info-box__label">${t("assignment_vehicle_status")}</span>
         <span class="badge badge--${statusColors[vehicle.status] || "inactive"}">
           ${t("vehicle_status_" + (vehicle.status || "active"))}
         </span>
@@ -382,11 +381,11 @@ function vehicleInfoBox(vehicle) {
         <span class="mono">${vehicle.vin || "—"}</span>
       </div>
       <div class="vehicle-info-box__row">
-        <span class="vehicle-info-box__label">Poslednja km</span>
+        <span class="vehicle-info-box__label">${t("assignment_vehicle_last_km")}</span>
         <span><strong>${vehicle.currentKm ? vehicle.currentKm.toLocaleString() + " km" : "—"}</strong></span>
       </div>
       <div class="vehicle-info-box__row">
-        <span class="vehicle-info-box__label">Registracija ističe</span>
+        <span class="vehicle-info-box__label">${t("assignment_vehicle_reg")}</span>
         <span>${formatDate(vehicle.regExpiry)}</span>
       </div>
     </div>
@@ -454,11 +453,11 @@ async function saveAssignment(assignmentId, existing) {
   const reason    = document.getElementById("af-reason")?.value.trim();
 
   // Validacija
-  if (!vehicleId) { showAssignError("Izaberite vozilo"); return; }
-  if (!driverId)  { showAssignError("Izaberite vozača"); return; }
-  if (!startDate) { showAssignError("Unesite datum početka"); return; }
+  if (!vehicleId) { showAssignError(t("assignment_no_vehicle")); return; }
+  if (!driverId)  { showAssignError(t("assignment_no_driver")); return; }
+  if (!startDate) { showAssignError(t("assignment_no_date")); return; }
   if (tripType === "intercity" && !destination) {
-    showAssignError("Unesite destinaciju za međugradsku vožnju");
+    showAssignError(t("assignment_no_destination"));
     return;
   }
 
@@ -469,7 +468,7 @@ async function saveAssignment(assignmentId, existing) {
   const endDateObj   = endDate ? new Date(endDate) : null;
 
   if (endDateObj && endDateObj <= startDateObj) {
-    showAssignError("Datum završetka mora biti posle datuma početka");
+    showAssignError(t("required_field"));
     return;
   }
 
@@ -517,9 +516,9 @@ async function saveAssignment(assignmentId, existing) {
 
       if (newStart < overlapEnd && newEnd > overlapStart) {
         showAssignError(
-          `Vozilo je već zaduženo vozaču ${ea.driverName} ` +
-          `od ${formatDate(ea.startDate)} do ${formatDate(ea.endDate)}. ` +
-          `Periodi se preklapaju.`
+          `${t("assignment_vehicle")} ${t("assignment_status_active").toLowerCase()}: ${ea.driverName} ` +
+          `${formatDate(ea.startDate)} → ${formatDate(ea.endDate)}. ` +
+          `${t("assignment_km_mismatch").split(".")[0]}.`
         );
         return;
       }
@@ -583,7 +582,7 @@ function showConflictDialog(existingAssignment, newDriver, suggestedCloseDate) {
     document.getElementById("modal-overlay")?.classList.add("hidden");
 
     setTimeout(() => {
-      const dateStr = suggestedCloseDate.toLocaleDateString("sr-RS");
+      const dateStr = suggestedCloseDate.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS");
       const bodyHTML = `
         <div class="conflict-dialog">
           <div class="conflict-dialog__icon">⚠️</div>
@@ -598,16 +597,16 @@ function showConflictDialog(existingAssignment, newDriver, suggestedCloseDate) {
             prethodno zaduženje će biti automatski zatvoreno.
           </p>
           <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Datum zatvaranja prethodnog zaduženja</label>
+            <label class="form-label">${t("assignment_conflict_close_date")}</label>
             <input id="conflict-close-date" class="form-input" type="date"
               value="${suggestedCloseDate.toISOString().split("T")[0]}" />
-            <span class="form-hint">Podrazumevano: datum početka novog zaduženja</span>
+            <span class="form-hint">${t("assignment_conflict_close_hint")}</span>
           </div>
         </div>
       `;
 
       import("./app.js").then(({ openModal }) => {
-        openModal("Postojeće zaduženje", bodyHTML, () => {
+        openModal(t("assignment_conflict_title"), bodyHTML, () => {
           // Ažuriraj datum zatvaranja iz inputa
           const dateInput = document.getElementById("conflict-close-date");
           if (dateInput?.value) {
@@ -621,7 +620,7 @@ function showConflictDialog(existingAssignment, newDriver, suggestedCloseDate) {
           document.getElementById("modal-overlay").classList.add("hidden");
           resolve(false);
         };
-        document.getElementById("modal-confirm").textContent = "Zatvori staro i nastavi";
+        document.getElementById("modal-confirm").textContent = t("assignment_conflict_close_btn");
       });
     }, 150);
   });
@@ -651,7 +650,7 @@ function openUnassignForm(assignment) {
         <label class="form-label">${t("assignment_end_km")}</label>
         <input id="ua-endKm" class="form-input" type="number"
           value="${vehicle?.currentKm || ""}"
-          placeholder="Krajnja kilometraža" />
+          placeholder="${t('assignment_end_km')}" />
       </div>
     </div>
 
@@ -677,7 +676,7 @@ async function processUnassign(assignment) {
 
   if (!endDate) {
     const err = document.getElementById("unassign-error");
-    if (err) { err.textContent = "Unesite datum razduženja"; err.classList.remove("hidden"); }
+    if (err) { err.textContent = t("assignment_unassign_date_required"); err.classList.remove("hidden"); }
     return;
   }
 
@@ -688,7 +687,7 @@ async function processUnassign(assignment) {
 
   if (endDateObj < startDate) {
     const err = document.getElementById("unassign-error");
-    if (err) { err.textContent = "Datum razduženja ne može biti pre datuma zaduženja"; err.classList.remove("hidden"); }
+    if (err) { err.textContent = t("assignment_unassign_date_error"); err.classList.remove("hidden"); }
     return;
   }
 
@@ -728,7 +727,8 @@ async function processUnassign(assignment) {
 function formatDate(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : new Date(val);
-  return isNaN(d) ? "—" : d.toLocaleDateString("sr-RS");
+  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
+  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
 }
 
 function toDateInput(val) {

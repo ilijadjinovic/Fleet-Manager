@@ -24,8 +24,8 @@ export async function renderServicers(container) {
 
   container.innerHTML = `
     <div class="page-header">
-      <h2 class="page-title">🔧 Serviseri</h2>
-      ${canEdit ? `<button id="btn-add-servicer" class="btn btn--primary btn--sm">+ Dodaj servisera</button>` : ""}
+      <h2 class="page-title">🔧 ${t("tab_servicers")}</h2>
+      ${canEdit ? `<button id="btn-add-servicer" class="btn btn--primary btn--sm">+ ${t("servicer_add")}</button>` : ""}
     </div>
     <div id="servicers-list"><div class="loading">${t("loading")}</div></div>
   `;
@@ -60,7 +60,7 @@ function renderList() {
     list.innerHTML = `
       <div class="empty-state">
         <div class="empty-state__icon">🔧</div>
-        <p>Nema unetih servisera. Dodajte prvog servisera.</p>
+        <p>${t("servicer_no_data")}</p>
       </div>`;
     return;
   }
@@ -74,7 +74,7 @@ function renderList() {
             ${canEdit ? `
               <div class="servicer-card__actions">
                 <button class="btn btn--icon btn-edit-servicer" data-id="${s.id}" title="Izmeni">✏️</button>
-                <button class="btn btn--icon btn-delete-servicer" data-id="${s.id}" title="Obriši">🗑️</button>
+                <button class="btn btn--icon btn-delete-servicer" data-id="${s.id}" title="${t('delete')}">🗑️</button>
               </div>` : ""}
           </div>
           <div class="servicer-card__details">
@@ -109,23 +109,23 @@ function openServicerForm(servicer = null) {
   const bodyHTML = `
     <div class="form-grid">
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Naziv *</label>
-        <input id="sf-name" class="form-input" type="text" value="${s.name || ""}" placeholder="Naziv servisa" />
+        <label class="form-label">${t("servicer_name")}</label>
+        <input id="sf-name" class="form-input" type="text" value="${s.name || ""}" placeholder="${t("servicer_name")}" />
       </div>
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Adresa</label>
+        <label class="form-label">${t("servicer_address")}</label>
         <input id="sf-address" class="form-input" type="text" value="${s.address || ""}" placeholder="Ulica i broj, grad" />
       </div>
       <div class="form-group">
-        <label class="form-label">Telefon</label>
+        <label class="form-label">${t("servicer_phone")}</label>
         <input id="sf-phone" class="form-input" type="tel" value="${s.phone || ""}" placeholder="+381..." />
       </div>
       <div class="form-group">
-        <label class="form-label">Email</label>
+        <label class="form-label">${t("servicer_email")}</label>
         <input id="sf-email" class="form-input" type="email" value="${s.email || ""}" placeholder="servis@example.com" />
       </div>
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Napomena</label>
+        <label class="form-label">${t("notes")}</label>
         <textarea id="sf-notes" class="form-input form-textarea" rows="2">${s.notes || ""}</textarea>
       </div>
     </div>
@@ -133,12 +133,12 @@ function openServicerForm(servicer = null) {
   `;
 
   openModal(
-    isEdit ? `Izmeni: ${s.name}` : "Dodaj servisera",
+    isEdit ? `${t("edit")}: ${s.name}` : t("servicer_add"),
     bodyHTML,
     async () => {
       const name = document.getElementById("sf-name")?.value.trim();
       if (!name) {
-        document.getElementById("servicer-form-error").textContent = "Naziv je obavezan";
+        document.getElementById("servicer-form-error").textContent = t("servicer_name_required");
         document.getElementById("servicer-form-error").classList.remove("hidden");
         throw new Error("validation");
       }
@@ -172,10 +172,10 @@ async function deleteServicer(id) {
   const s = allServicers.find(x => x.id === id);
   if (!s) return;
 
-  const bodyHTML = `<p>Da li ste sigurni da želite da obrišete servisera <strong>${s.name}</strong>?</p>`;
-  openModal("Obriši servisera", bodyHTML, async () => {
+  const bodyHTML = `<p>${t("servicer_delete_confirm")} <strong>${s.name}</strong>?</p>`;
+  openModal(t("delete") + " " + t("tab_servicers").toLowerCase(), bodyHTML, async () => {
     await deleteDoc(doc(db, "companies", S.companyId, "serviceProviders", id));
-    showToast("Serviser obrisan", "success");
+    showToast(t("servicer_deleted"), "success");
     await loadServicers();
   });
 }

@@ -18,25 +18,25 @@ export function renderRegister(container) {
       <div class="register-card">
         <div class="register-card__header">
           <span class="register-card__icon">🚛</span>
-          <h2 class="register-card__title">Dobrodošli u Fleet Manager</h2>
-          <p class="register-card__sub">Popunite podatke da biste nastavili</p>
+          <h2 class="register-card__title">${t("reg_welcome_title")}</h2>
+          <p class="register-card__sub">${t("reg_welcome_sub")}</p>
         </div>
 
         <!-- STEPPER -->
         <div class="stepper" id="stepper">
           <div class="stepper__step stepper__step--active" data-step="1">
             <div class="stepper__dot">1</div>
-            <span>Lični podaci</span>
+            <span>${t("reg_step1_label")}</span>
           </div>
           <div class="stepper__line"></div>
           <div class="stepper__step" data-step="2">
             <div class="stepper__dot">2</div>
-            <span>Firma</span>
+            <span>${t("reg_step2_label")}</span>
           </div>
           <div class="stepper__line"></div>
           <div class="stepper__step" data-step="3">
             <div class="stepper__dot">3</div>
-            <span>Pregled</span>
+            <span>${t("reg_step3_label")}</span>
           </div>
         </div>
 
@@ -81,38 +81,38 @@ function step1HTML() {
   const p = R.personal;
   return `
     <div class="register-step">
-      <h3 class="register-step__title">Vaši podaci</h3>
+      <h3 class="register-step__title">${t("reg_step1_title")}</h3>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Ime *</label>
+          <label class="form-label">${t("profile_first_name")} *</label>
           <input id="r-firstName" class="form-input" type="text" value="${p.firstName || ""}" />
         </div>
         <div class="form-group">
-          <label class="form-label">Prezime *</label>
+          <label class="form-label">${t("profile_last_name")} *</label>
           <input id="r-lastName" class="form-input" type="text" value="${p.lastName || ""}" />
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Telefon</label>
+          <label class="form-label">${t("driver_phone")}</label>
           <input id="r-phone" class="form-input" type="tel" value="${p.phone || ""}" />
         </div>
         <div class="form-group">
-          <label class="form-label">Email</label>
+          <label class="form-label">${t("driver_email")}</label>
           <input id="r-email" class="form-input" type="email" value="${p.email || S.user?.email || ""}" />
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Adresa stanovanja</label>
+        <label class="form-label">${t("driver_home_address")}</label>
         <input id="r-homeAddress" class="form-input" type="text" value="${p.homeAddress || ""}" />
       </div>
       <div class="form-group">
-        <label class="form-label">Adresa radnog mesta</label>
+        <label class="form-label">${t("driver_work_address")}</label>
         <input id="r-workAddress" class="form-input" type="text" value="${p.workAddress || ""}" />
       </div>
       <p id="step1-error" class="login-error hidden"></p>
       <div class="register-step__actions">
-        <button id="btn-step1-next" class="btn btn--primary">Dalje →</button>
+        <button id="btn-step1-next" class="btn btn--primary">${t("reg_next")}</button>
       </div>
     </div>
   `;
@@ -143,15 +143,15 @@ function step2HTML() {
   const c = R.companyData;
   return `
     <div class="register-step">
-      <h3 class="register-step__title">Podaci o firmi</h3>
+      <h3 class="register-step__title">${t("reg_step2_title")}</h3>
 
       <div class="pib-lookup">
         <div class="form-group">
-          <label class="form-label">PIB * <span class="form-hint">(Proveravamo da li firma već postoji)</span></label>
+          <label class="form-label">${t("reg_pib_label")}</label>
           <div class="pib-lookup__row">
             <input id="r-pib" class="form-input" type="text" maxlength="9"
               placeholder="123456789" value="${c.pib || ""}" />
-            <button id="btn-check-pib" class="btn btn--secondary">Proveri</button>
+            <button id="btn-check-pib" class="btn btn--secondary">${t("reg_pib_check")}</button>
           </div>
         </div>
         <div id="pib-result"></div>
@@ -160,11 +160,11 @@ function step2HTML() {
       <div id="company-form" class="${R.joinExisting ? 'hidden' : ''}">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Naziv firme *</label>
+            <label class="form-label">${t("company_name")} *</label>
             <input id="r-companyName" class="form-input" type="text" value="${c.name || ""}" />
           </div>
           <div class="form-group">
-            <label class="form-label">Matični broj (MBR)</label>
+            <label class="form-label">${t("company_mbr")}</label>
             <input id="r-mbr" class="form-input" type="text" maxlength="8" value="${c.mbr || ""}" />
           </div>
         </div>
@@ -174,7 +174,7 @@ function step2HTML() {
             <input id="r-owner" class="form-input" type="text" value="${c.owner || ""}" />
           </div>
           <div class="form-group">
-            <label class="form-label">Direktor</label>
+            <label class="form-label">${t("company_director")}</label>
             <input id="r-director" class="form-input" type="text" value="${c.director || ""}" />
           </div>
         </div>
@@ -194,11 +194,11 @@ function step2HTML() {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Instagram</label>
+            <label class="form-label">${t("company_instagram")}</label>
             <input id="r-instagram" class="form-input" type="text" placeholder="@naziv" value="${c.instagram || ""}" />
           </div>
           <div class="form-group">
-            <label class="form-label">Facebook</label>
+            <label class="form-label">${t("company_facebook")}</label>
             <input id="r-facebook" class="form-input" type="text" value="${c.facebook || ""}" />
           </div>
         </div>
@@ -206,8 +206,8 @@ function step2HTML() {
 
       <p id="step2-error" class="login-error hidden"></p>
       <div class="register-step__actions">
-        <button id="btn-step2-back" class="btn btn--ghost">← Nazad</button>
-        <button id="btn-step2-next" class="btn btn--primary">Dalje →</button>
+        <button id="btn-step2-back" class="btn btn--ghost">${t("reg_back")}</button>
+        <button id="btn-step2-next" class="btn btn--primary">${t("reg_next")}</button>
       </div>
     </div>
   `;
@@ -224,7 +224,7 @@ async function checkPib() {
   const pib = document.getElementById("r-pib")?.value.trim();
   const result = document.getElementById("pib-result");
   if (!pib || pib.length < 8) {
-    result.innerHTML = `<p class="login-error">Unesite ispravan PIB (8-9 cifara)</p>`;
+    result.innerHTML = `<p class="login-error">${t('reg_pib_error')}</p>`;
     return;
   }
 
@@ -271,13 +271,13 @@ async function checkPib() {
     result.innerHTML = `<p class="login-error">${t("error")}: ${e.message}</p>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = "Proveri";
+    btn.textContent = t("reg_pib_check");
   }
 }
 
 function proceedStep2() {
   const pib = document.getElementById("r-pib")?.value.trim();
-  if (!pib) { showStepError("step2-error", "Unesite PIB i pritisnite Proveri"); return; }
+  if (!pib) { showStepError("step2-error", t("reg_pib_required")); return; }
 
   if (R.joinExisting) {
     // Pridružuje se postojećoj firmi — samo pređi na korak 3
@@ -287,7 +287,7 @@ function proceedStep2() {
 
   // Nova firma — validacija
   const name = document.getElementById("r-companyName")?.value.trim();
-  if (!name) { showStepError("step2-error", t("required_field") + ": Naziv firme"); return; }
+  if (!name) { showStepError("step2-error", t("required_field") + ": " + t("company_name")); return; }
 
   R.companyData = {
     pib,
@@ -312,25 +312,25 @@ function step3HTML() {
 
   return `
     <div class="register-step">
-      <h3 class="register-step__title">Pregled i potvrda</h3>
+      <h3 class="register-step__title">${t("reg_step3_title")}</h3>
 
       <div class="review-section">
-        <div class="review-section__title">👤 Vaši podaci</div>
+        <div class="review-section__title">${t("reg_your_data_title")}</div>
         <div class="review-grid">
-          <span class="review-label">Ime i prezime</span><span>${p.firstName} ${p.lastName}</span>
-          ${p.phone ? `<span class="review-label">Telefon</span><span>${p.phone}</span>` : ""}
-          ${p.email ? `<span class="review-label">Email</span><span>${p.email}</span>` : ""}
-          ${p.homeAddress ? `<span class="review-label">Adresa stanovanja</span><span>${p.homeAddress}</span>` : ""}
-          ${p.workAddress ? `<span class="review-label">Adresa rada</span><span>${p.workAddress}</span>` : ""}
+          <span class="review-label">${t("reg_full_name")}</span><span>${p.firstName} ${p.lastName}</span>
+          ${p.phone ? `<span class="review-label">${t("driver_phone")}</span><span>${p.phone}</span>` : ""}
+          ${p.email ? `<span class="review-label">${t("driver_email")}</span><span>${p.email}</span>` : ""}
+          ${p.homeAddress ? `<span class="review-label">${t("driver_home_address")}</span><span>${p.homeAddress}</span>` : ""}
+          ${p.workAddress ? `<span class="review-label">${t("driver_work_address")}</span><span>${p.workAddress}</span>` : ""}
         </div>
       </div>
 
       <div class="review-section">
-        <div class="review-section__title">🏢 Firma</div>
+        <div class="review-section__title">${t("reg_company_title")}</div>
         ${R.joinExisting
           ? `<div class="pib-found pib-found--compact">
                <strong>${c.name}</strong> — PIB: ${c.pib}
-               <span class="badge badge--info" style="margin-left:8px">Pridruživanje</span>
+               <span class="badge badge--info" style="margin-left:8px">${t("reg_join_badge")}</span>
              </div>`
           : `<div class="review-grid">
                <span class="review-label">Naziv</span><span>${c.name}</span>
@@ -342,14 +342,13 @@ function step3HTML() {
       </div>
 
       <div class="review-notice">
-        ℹ️ Vaš nalog će biti pregledan od strane master administratora. 
-        Bićete obavešteni kada dobijete pristup.
+        ${t("reg_notice")}
       </div>
 
       <p id="step3-error" class="login-error hidden"></p>
       <div class="register-step__actions">
-        <button id="btn-step3-back" class="btn btn--ghost">← Nazad</button>
-        <button id="btn-submit-reg" class="btn btn--primary">Pošalji zahtev ✓</button>
+        <button id="btn-step3-back" class="btn btn--ghost">${t("reg_back")}</button>
+        <button id="btn-submit-reg" class="btn btn--primary">${t("reg_submit")} ✓</button>
       </div>
     </div>
   `;
@@ -417,7 +416,7 @@ async function submitRegistration() {
   } catch (e) {
     showStepError("step3-error", `${t("error")}: ${e.message}`);
     btn.disabled = false;
-    btn.textContent = "Pošalji zahtev ✓";
+    btn.textContent = t("reg_submit") + " ✓";
   }
 }
 
@@ -430,10 +429,10 @@ export function showPendingScreen() {
     <div class="pending-screen">
       <div class="pending-screen__card">
         <div class="pending-screen__icon">⏳</div>
-        <h2>Zahtev je poslat</h2>
-        <p>Vaš nalog čeka odobrenje master administratora.</p>
-        <p class="pending-screen__sub">Prijavite se ponovo kada dobijete potvrdu.</p>
-        <button class="btn btn--ghost btn--sm" id="btn-pending-logout">Odjavi se</button>
+        <h2>${t("pending_sent")}</h2>
+        <p>${t("pending_wait_msg")}</p>
+        <p class="pending-screen__sub">${t("pending_wait_sub")}</p>
+        <button class="btn btn--ghost btn--sm" id="btn-pending-logout">${t("pending_logout")}</button>
       </div>
     </div>
   `;

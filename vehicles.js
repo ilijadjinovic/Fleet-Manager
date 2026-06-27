@@ -9,7 +9,7 @@ import {
   addDoc, updateDoc, deleteDoc, serverTimestamp,
   where
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { openScheduleForm, getScheduledServices, cancelScheduledService } from "./schedule.js";
 
@@ -146,7 +146,7 @@ function vehicleCard(v) {
         <div class="vehicle-card__detail ${regWarning ? "vehicle-card__detail--warn" : ""}">
           <span class="vehicle-card__detail-label">${t("vehicle_reg_expiry")}</span>
           <span class="vehicle-card__detail-value">
-            ${regDate ? regDate.toLocaleDateString("sr-RS") : "—"}
+            ${regDate ? regDate.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS") : "—"}
             ${regWarning ? ` <span class="reg-warn">(${daysToReg}d)</span>` : ""}
           </span>
         </div>
@@ -175,7 +175,7 @@ async function openVehicleDetail(vehicleId) {
 
   container.innerHTML = `
     <div class="detail-header">
-      <button class="btn btn--ghost btn--sm" id="btn-back">← Nazad</button>
+      <button class="btn btn--ghost btn--sm" id="btn-back">${t("vehicle_back")}</button>
       <div class="detail-header__title">
         <h2>${vehicle.brand} ${vehicle.model}</h2>
         <span class="badge badge--${vehicle.status || 'active'}">${t("vehicle_status_" + (vehicle.status || "active"))}</span>
@@ -432,7 +432,7 @@ function openVehicleForm(vehicle = null) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_purchase_type")}</label>
-        <input id="f-purchaseType" class="form-input" type="text" value="${v.purchaseType || ""}" placeholder="kupovina, lizing..." />
+        <input id="f-purchaseType" class="form-input" type="text" value="${v.purchaseType || ""}" placeholder="${t("vehicle_purchase_type_ph")}" />
       </div>
     </div>
     <div class="form-group">
@@ -485,9 +485,9 @@ async function saveVehicle(vehicleId) {
 
   // ── OSNOVNA VALIDACIJA ────────────────────────────────────────
   let valid = true;
-  if (!brand) { fieldError("f-brand", "Marka je obavezna"); valid = false; }
-  if (!model) { fieldError("f-model", "Model je obavezan"); valid = false; }
-  if (!plate) { fieldError("f-plate", "Tablice su obavezne"); valid = false; }
+  if (!brand) { fieldError("f-brand", t("vehicle_brand_required")); valid = false; }
+  if (!model) { fieldError("f-model", t("vehicle_model_required")); valid = false; }
+  if (!plate) { fieldError("f-plate", t("vehicle_plate_required")); valid = false; }
   if (!valid) throw new Error("validation");
 
   try {
@@ -499,7 +499,7 @@ async function saveVehicle(vehicleId) {
     const plateConflict = plateSnap.docs.find(d => d.id !== vehicleId);
     if (plateConflict) {
       const v = plateConflict.data();
-      fieldError("f-plate", `Tablice već postoje: ${v.brand} ${v.model}`);
+      fieldError("f-plate", `${t("vehicle_plate_exists").replace("{0}", v.brand).replace("{1}", v.model)}`);
       throw new Error("validation");
     }
 
@@ -512,7 +512,7 @@ async function saveVehicle(vehicleId) {
       const vinConflict = vinSnap.docs.find(d => d.id !== vehicleId);
       if (vinConflict) {
         const v = vinConflict.data();
-        fieldError("f-vin", `VIN već postoji: ${v.brand} ${v.model} (${v.plate})`);
+        fieldError("f-vin", `${t("vehicle_vin_exists").replace("{0}", v.brand).replace("{1}", v.model).replace("{2}", v.plate)}`);
         throw new Error("validation");
       }
     }
@@ -675,17 +675,17 @@ async function loadScheduledTab(content, vehicle) {
 
     if (canEdit) {
       html += `<div style="margin-bottom:12px">
-        <button class="btn btn--primary btn--sm" id="btn-schedule-new">📅 Zakaži servis</button>
+        <button class="btn btn--primary btn--sm" id="btn-schedule-new">📅 ${t("vehicle_scheduled_new")}</button>
       </div>`;
     }
 
     if (scheduled.length === 0) {
-      html += `<p class="empty-text">Nema zakazanih servisa za ovo vozilo.</p>`;
+      html += `<p class="empty-text">${t("vehicle_scheduled_no_data")}</p>`;
     } else {
       html += `<div class="service-list">`;
       for (const s of scheduled) {
         const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
-        const dateStr = d.toLocaleDateString("sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+        const dateStr = d.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
         html += `<div class="service-item" data-id="${s.id}">
           <div class="service-item__header">
             <span class="service-item__type">📅 ${t("service_type_" + s.serviceType) || s.serviceType}</span>
@@ -695,7 +695,7 @@ async function loadScheduledTab(content, vehicle) {
         if (s.serviceProviderAddress) html += `<div class="service-item__workshop">📍 ${s.serviceProviderAddress}</div>`;
         if (s.serviceProviderPhone)   html += `<div class="service-item__workshop">📞 ${s.serviceProviderPhone}</div>`;
         if (s.notes)                  html += `<div class="service-item__desc">${s.notes}</div>`;
-        if (canEdit) html += `<button class="btn btn--danger btn--sm btn-cancel-scheduled" data-id="${s.id}" style="margin-top:8px">Otkaži</button>`;
+        if (canEdit) html += `<button class="btn btn--danger btn--sm btn-cancel-scheduled" data-id="${s.id}" style="margin-top:8px">${t("schedule_cancel")}</button>`;
         html += `</div>`;
       }
       html += `</div>`;
@@ -710,7 +710,7 @@ async function loadScheduledTab(content, vehicle) {
     content.querySelectorAll(".btn-cancel-scheduled").forEach(btn => {
       btn.addEventListener("click", async () => {
         await cancelScheduledService(btn.dataset.id);
-        showToast("Servis otkazan", "success");
+        showToast(t("schedule_canceled"), "success");
         loadScheduledTab(content, vehicle);
       });
     });
@@ -733,7 +733,7 @@ function serviceItem(s) {
         ${s.cost ? `<span>💰 ${s.cost.toLocaleString()} RSD</span>` : ""}
         ${s.workshop ? `<span>🔧 ${s.workshop}</span>` : ""}
       </div>
-      ${s.nextDate ? `<div class="service-item__next">Sledeći: ${formatDate(s.nextDate)}${s.nextKm ? " / " + s.nextKm.toLocaleString() + " km" : ""}</div>` : ""}
+      ${s.nextDate ? `<div class="service-item__next">${t("vehicle_service_next")}: ${formatDate(s.nextDate)}${s.nextKm ? " / " + s.nextKm.toLocaleString() + " km" : ""}</div>` : ""}
     </div>
   `;
 }
@@ -763,7 +763,8 @@ function assignmentItem(a) {
 function formatDate(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : new Date(val);
-  return isNaN(d) ? "—" : d.toLocaleDateString("sr-RS");
+  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
+  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
 }
 
 function toDateInput(val) {

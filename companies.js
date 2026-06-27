@@ -13,13 +13,13 @@ import { S, showToast, openModal } from "./app.js";
 
 export async function renderCompanies(container) {
   if (S.profile?.role !== "master_admin") {
-    container.innerHTML = `<div class="empty-state"><p>Pristup zabranjen</p></div>`;
+    container.innerHTML = `<div class="empty-state"><p>${t("company_access_denied")}</p></div>`;
     return;
   }
 
   container.innerHTML = `
     <div class="page-header">
-      <h2 class="page-title">Firme</h2>
+      <h2 class="page-title">${t("tab_companies")}</h2>
     </div>
 
     <!-- PENDING ZAHTEVI -->
@@ -50,7 +50,7 @@ async function loadPendingRequests() {
     section.innerHTML = `
       <div class="pending-banner">
         <div class="pending-banner__title">
-          🔔 Zahtevi za odobrenje (${pending.length})
+          🔔 ${t("company_pending_title")} (${pending.length})
         </div>
         <div class="pending-list" id="pending-list">
           ${pending.map(p => pendingItem(p)).join("")}
@@ -80,18 +80,18 @@ function pendingItem(p) {
         <span class="pending-item__company">
           🏢 ${p.companyName}
           ${p.joinExisting
-            ? `<span class="badge badge--info" style="margin-left:6px">Pridruživanje</span>`
-            : `<span class="badge badge--active" style="margin-left:6px">Nova firma</span>`}
+            ? `<span class="badge badge--info" style="margin-left:6px">${t("company_join_badge")}</span>`
+            : `<span class="badge badge--active" style="margin-left:6px">${t("company_new_badge")}</span>`}
         </span>
       </div>
       <div class="pending-item__actions">
         <button class="btn btn--primary btn--sm btn-approve"
           data-uid="${p.userUid}" data-notif-id="${p.id}">
-          ✓ Odobri
+          ${t("approve")}
         </button>
         <button class="btn btn--danger btn--sm btn-reject"
           data-uid="${p.userUid}" data-notif-id="${p.id}">
-          ✕ Odbij
+          ${t("reject")}
         </button>
       </div>
     </div>
@@ -105,7 +105,7 @@ async function approveUser(uid, notifId) {
     });
     await updateDoc(doc(db, "adminNotifications", notifId), { status: "resolved" });
     document.getElementById(`pending-${notifId}`)?.remove();
-    showToast("Korisnik odobren", "success");
+    showToast(t("company_approved_msg"), "success");
     loadCompanies();
   } catch (e) {
     showToast(`${t("error")}: ${e.message}`, "error");
@@ -113,12 +113,12 @@ async function approveUser(uid, notifId) {
 }
 
 async function rejectUser(uid, notifId) {
-  if (!confirm("Da li ste sigurni da želite da odbijete ovaj zahtev?")) return;
+  if (!confirm(t("confirm_delete"))) return;
   try {
     await updateDoc(doc(db, "users", uid), { status: "rejected" });
     await updateDoc(doc(db, "adminNotifications", notifId), { status: "resolved" });
     document.getElementById(`pending-${notifId}`)?.remove();
-    showToast("Zahtev odbijen", "warning");
+    showToast(t("company_rejected_msg"), "warning");
   } catch (e) {
     showToast(`${t("error")}: ${e.message}`, "error");
   }
@@ -199,30 +199,30 @@ function companyCard(c) {
         ${c.email ? `<div class="company-detail"><span>✉️</span> ${c.email}</div>` : ""}
         ${c.instagram ? `<div class="company-detail"><span>📷</span> ${c.instagram}</div>` : ""}
         ${c.facebook ? `<div class="company-detail"><span>👥</span> ${c.facebook}</div>` : ""}
-        ${c.owner ? `<div class="company-detail"><span>👤</span> Vlasnik: ${c.owner}</div>` : ""}
+        ${c.owner ? `<div class="company-detail"><span>👤</span> ${t("company_owner")}: ${c.owner}</div>` : ""}
         ${c.director ? `<div class="company-detail"><span>💼</span> Direktor: ${c.director}</div>` : ""}
       </div>
 
       <div class="company-card__stats">
         <div class="company-stat">
           <span class="company-stat__value">${c.vehicleCount}</span>
-          <span class="company-stat__label">Vozila</span>
+          <span class="company-stat__label">${t("company_vehicles_label")}</span>
         </div>
         <div class="company-stat">
           <span class="company-stat__value">${activeAdmins.length}</span>
-          <span class="company-stat__label">Fleet admini</span>
+          <span class="company-stat__label">${t("company_fleet_admins_label")}</span>
         </div>
         ${pendingAdmins.length > 0 ? `
           <div class="company-stat">
             <span class="company-stat__value" style="color:var(--color-warning)">${pendingAdmins.length}</span>
-            <span class="company-stat__label">Na čekanju</span>
+            <span class="company-stat__label">${t("company_pending_label")}</span>
           </div>
         ` : ""}
       </div>
 
       ${activeAdmins.length > 0 ? `
         <div class="company-card__admins">
-          <div class="company-admins__title">Fleet admini:</div>
+          <div class="company-admins__title">${t("company_fleet_admins_title")}</div>
           ${activeAdmins.map(a => `
             <div class="company-admin-item">
               <span>👤 ${a.displayName || a.firstName + " " + a.lastName}</span>
@@ -261,11 +261,11 @@ function openEditCompanyModal(company) {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Direktor</label>
+      <label class="form-label">${t("company_director")}</label>
       <input id="ec-director" class="form-input" type="text" value="${c.director || ""}" />
     </div>
     <div class="form-group">
-      <label class="form-label">Adresa</label>
+      <label class="form-label">${t("company_address")}</label>
       <input id="ec-address" class="form-input" type="text" value="${c.address || ""}" />
     </div>
     <div class="form-row">
@@ -317,7 +317,7 @@ function openEditCompanyModal(company) {
 
 // ── BRISANJE FIRME ────────────────────────────────────────────
 async function confirmDeleteCompany(id, name) {
-  if (!confirm(`${t("confirm_delete")}\n\nFirma: ${name}`)) return;
+  if (!confirm(`${t("company_delete_confirm")} "${name}"?`)) return;
   try {
     await deleteDoc(doc(db, "companies", id));
     showToast(t("success"), "success");

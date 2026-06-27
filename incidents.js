@@ -10,7 +10,7 @@ import {
   collection, query, orderBy, getDocs, doc,
   addDoc, updateDoc, serverTimestamp, where
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
@@ -209,14 +209,14 @@ function incidentCard(inc, canEdit) {
 
       ${inc.adminNote ? `
         <div class="incident-card__note">
-          <span class="incident-card__note-label">📝 Napomena admina:</span>
+          <span class="incident-card__note-label">📝 ${t("incident_admin_note_label")}</span>
           ${inc.adminNote}
         </div>
       ` : ""}
 
       ${inc.resolution ? `
         <div class="incident-card__resolution">
-          <span class="incident-card__note-label">✅ Rešenje:</span>
+          <span class="incident-card__note-label">✅ ${t("incident_resolution_prefix")}</span>
           ${inc.resolution}
         </div>
       ` : ""}
@@ -224,10 +224,10 @@ function incidentCard(inc, canEdit) {
       ${canEdit ? `
         <div class="incident-card__actions">
           <button class="btn btn--secondary btn--sm btn-incident-status" data-id="${inc.id}">
-            ⚙️ Promeni status
+            ⚙️ ${t("incident_change_status")}
           </button>
           <button class="btn btn--ghost btn--sm btn-incident-note" data-id="${inc.id}">
-            📝 Dodaj napomenu
+            📝 ${t("incident_add_note")}
           </button>
         </div>
       ` : ""}
@@ -238,7 +238,7 @@ function incidentCard(inc, canEdit) {
 // ── FORMA ZA NOVU PRIJAVU ─────────────────────────────────────
 function openIncidentForm(prefillType = null) {
   const bodyHTML = `
-    <div class="form-section-title">Vrsta prijave</div>
+    <div class="form-section-title">${t("incident_type")}</div>
     <div class="incident-type-grid">
       <label class="incident-type-btn ${prefillType === 'fault' ? 'incident-type-btn--active' : ''}">
         <input type="radio" name="inc-type" value="fault"
@@ -269,14 +269,14 @@ function openIncidentForm(prefillType = null) {
     <div class="form-group">
       <label class="form-label">${t("incident_description")} *</label>
       <textarea id="inc-description" class="form-textarea" rows="4"
-        placeholder="Opišite što detaljnije šta se desilo..."></textarea>
+        placeholder="${t('incident_description_ph')}"></textarea>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("incident_location")}</label>
         <input id="inc-location" class="form-input" type="text"
-          placeholder="Gde se dogodilo?" />
+          placeholder="${t('incident_location_ph')}" />
       </div>
       <div class="form-group">
         <label class="form-label">Km pri prijavi</label>
@@ -285,17 +285,17 @@ function openIncidentForm(prefillType = null) {
     </div>
 
     <div id="accident-fields" class="hidden">
-      <div class="form-section-title" style="margin-top:4px">Detalji nezgode</div>
+      <div class="form-section-title" style="margin-top:4px">${t("incident_accident_section")}</div>
       <div class="form-group">
-        <label class="form-label">Treća strana (ime, tablica...)</label>
+        <label class="form-label">${t("incident_third_party")}</label>
         <input id="inc-thirdParty" class="form-input" type="text" />
       </div>
       <div class="form-group">
-        <label class="form-label">Broj policijskog zapisnika</label>
+        <label class="form-label">${t("incident_police_report")}</label>
         <input id="inc-policeReport" class="form-input" type="text" />
       </div>
       <div class="form-group">
-        <label class="form-label">Kontakt osiguravača</label>
+        <label class="form-label">${t("incident_insurance")}</label>
         <input id="inc-insurance" class="form-input" type="text" />
       </div>
     </div>
@@ -395,7 +395,7 @@ async function saveIncident() {
       createdAt:    serverTimestamp(),
     });
 
-    showToast("Prijava je uspešno poslata", "success");
+    showToast(t("incident_sent"), "success");
     await loadIncidents();
   } catch (e) {
     const err = document.getElementById("incident-form-error");
@@ -415,7 +415,7 @@ function openStatusModal(incident) {
       </div>
     </div>
 
-    <div class="form-section-title" style="margin-top:12px">Novi status</div>
+    <div class="form-section-title" style="margin-top:12px">${t("incident_status_new")}</div>
     <div class="status-option-group">
       <label class="status-option ${incident.status === 'open' ? 'status-option--active' : ''}">
         <input type="radio" name="new-status" value="open"
@@ -436,13 +436,13 @@ function openStatusModal(incident) {
 
     <div class="form-group" style="margin-top:12px" id="resolution-group"
       class="${incident.status !== 'closed' ? '' : ''}">
-      <label class="form-label">Opis rešenja</label>
+      <label class="form-label">${t("incident_resolution_label")}</label>
       <textarea id="inc-resolution" class="form-textarea" rows="3"
-        placeholder="Kako je prijava rešena?">${incident.resolution || ""}</textarea>
+        placeholder="${t('incident_resolution_ph')}">${incident.resolution || ""}</textarea>
     </div>
   `;
 
-  openModal("Promeni status prijave", bodyHTML, () => updateIncidentStatus(incident));
+  openModal(t("incident_status_title"), bodyHTML, () => updateIncidentStatus(incident));
 
   setTimeout(() => {
     document.querySelectorAll("input[name='new-status']").forEach(r => {
@@ -482,13 +482,13 @@ function openNoteModal(incident) {
       <div class="incident-summary__desc">${incident.description}</div>
     </div>
     <div class="form-group" style="margin-top:12px">
-      <label class="form-label">Napomena admina</label>
+      <label class="form-label">${t("incident_note_label")}</label>
       <textarea id="inc-admin-note" class="form-textarea" rows="4"
-        placeholder="Unesite internu napomenu...">${incident.adminNote || ""}</textarea>
+        placeholder="${t('incident_note_ph')}">${incident.adminNote || ""}</textarea>
     </div>
   `;
 
-  openModal("Dodaj napomenu", bodyHTML, () => saveAdminNote(incident));
+  openModal(t("incident_note_title"), bodyHTML, () => saveAdminNote(incident));
 }
 
 async function saveAdminNote(incident) {
@@ -514,5 +514,6 @@ function typeIcon(type) {
 function formatDate(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : new Date(val);
-  return isNaN(d) ? "—" : d.toLocaleDateString("sr-RS");
+  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
+  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
 }
