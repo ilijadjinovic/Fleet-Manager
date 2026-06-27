@@ -69,22 +69,39 @@ export async function loginWithGoogle() {
  * Fallback na konstruisani email ako nije pronađen.
  */
 export async function loginWithUsername(username, password) {
-  // Lookup u users kolekciji po username
-  const snap = await getDocs(
-    query(collection(db, "users"), where("username", "==", username))
-  );
+  // Korak 1: pokušaj direktno sa konstruisanim emailom (bez Firestore lookupa)
+  // Firestore nije dostupan nelogovanom korisniku zbog Rules
+  const simpleEmail = usernameToEmail(username);
 
-  let email;
-  if (!snap.empty) {
-    const userData = snap.docs[0].data();
-    // Koristi sacuvani localAuthEmail ako postoji, inace konstruisi
-    email = userData.localAuthEmail || usernameToEmail(username);
-  } else {
-    // Fallback
-    email = usernameToEmail(username);
+  try {
+    return await signInWithEmailAndPassword(auth, simpleEmail, password);
+  } catch (firstErr) {
+    // Korak 2: ako nije uspjelo, možda vozač ima localAuthEmail sa timestampom
+    // (novi format: username.timestamp@fleetapp.internal)
+    // Pokušaj login sa tim emailom — ali Firestore sada može biti dostupan
+    // ako korisnik ima public read na svoj dokument, ili koristimo Auth lookup
+    if (firstErr.code === "auth/user-not-found" ||
+        firstErr.code === "auth/invalid-credential" ||
+        firstErr.code === "auth/wrong-password") {
+      // Pokušaj pronaći email kroz Firestore — ali tek ako imamo pristup
+      // (ovo će raditi ako Rules dozvoljavaju čitanje uz username filter)
+      try {
+        const snap = await getDocs(
+          query(collection(db, "users"), where("username", "==", username))
+        );
+        if (!snap.empty) {
+          const userData = snap.docs[0].data();
+          if (userData.localAuthEmail && userData.localAuthEmail !== simpleEmail) {
+            return await signInWithEmailAndPassword(auth, userData.localAuthEmail, password);
+          }
+        }
+      } catch (lookupErr) {
+        // Firestore lookup nije uspio — baci originalnu grešku
+        console.warn("Firestore username lookup failed:", lookupErr.code);
+      }
+    }
+    throw firstErr;
   }
-
-  return signInWithEmailAndPassword(auth, email, password);
 }
 
 /** Logout */
