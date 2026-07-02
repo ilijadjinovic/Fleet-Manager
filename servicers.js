@@ -81,6 +81,9 @@ function renderList() {
             ${s.address ? `<div class="servicer-detail"><span>📍</span> ${s.address}</div>` : ""}
             ${s.phone ? `<div class="servicer-detail"><span>📞</span> <a href="tel:${s.phone}">${s.phone}</a></div>` : ""}
             ${s.email ? `<div class="servicer-detail"><span>✉️</span> <a href="mailto:${s.email}">${s.email}</a></div>` : ""}
+            ${s.pib ? `<div class="servicer-detail"><span>🧾</span> ${t("servicer_pib")}: ${s.pib}</div>` : ""}
+            ${s.mbr ? `<div class="servicer-detail"><span>🏢</span> ${t("servicer_mbr")}: ${s.mbr}</div>` : ""}
+            ${s.account ? `<div class="servicer-detail"><span>💳</span> ${s.account}</div>` : ""}
             ${s.notes ? `<div class="servicer-detail servicer-detail--notes"><span>📝</span> ${s.notes}</div>` : ""}
           </div>
         </div>
@@ -124,6 +127,18 @@ function openServicerForm(servicer = null) {
         <label class="form-label">${t("servicer_email")}</label>
         <input id="sf-email" class="form-input" type="email" value="${s.email || ""}" placeholder="servis@example.com" />
       </div>
+      <div class="form-group">
+        <label class="form-label">${t("servicer_pib")}</label>
+        <input id="sf-pib" class="form-input" type="text" value="${s.pib || ""}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("servicer_mbr")}</label>
+        <input id="sf-mbr" class="form-input" type="text" value="${s.mbr || ""}" />
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">${t("servicer_account")}</label>
+        <input id="sf-account" class="form-input" type="text" value="${s.account || ""}" placeholder="160-..." />
+      </div>
       <div class="form-group" style="grid-column:1/-1">
         <label class="form-label">${t("notes")}</label>
         <textarea id="sf-notes" class="form-input form-textarea" rows="2">${s.notes || ""}</textarea>
@@ -148,6 +163,9 @@ function openServicerForm(servicer = null) {
         address: document.getElementById("sf-address")?.value.trim() || null,
         phone:   document.getElementById("sf-phone")?.value.trim() || null,
         email:   document.getElementById("sf-email")?.value.trim() || null,
+        pib:     document.getElementById("sf-pib")?.value.trim() || null,
+        mbr:     document.getElementById("sf-mbr")?.value.trim() || null,
+        account: document.getElementById("sf-account")?.value.trim() || null,
         notes:   document.getElementById("sf-notes")?.value.trim() || null,
       };
 
