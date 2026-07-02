@@ -13,6 +13,17 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { openScheduleForm, getScheduledServices, cancelScheduledService } from "./schedule.js";
 
+// ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
+const VEHICLE_COLORS = [
+  "white", "black", "red", "blue", "orange",
+  "green", "yellow", "light_gray", "dark_gray", "brown", "other"
+];
+
+function colorLabel(code) {
+  if (!code) return null;
+  return VEHICLE_COLORS.includes(code) ? t("color_" + code) : code;
+}
+
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allVehicles = [];
 let currentFilter = "all";
@@ -234,6 +245,7 @@ function renderTechTab(v) {
     [t("vehicle_brand"),      v.brand],
     [t("vehicle_model"),      v.model],
     [t("vehicle_type"),       v.vehicleType],
+    [t("vehicle_category"),   v.category],
     [t("vehicle_plate"),      v.plate],
     [t("vehicle_vin"),        v.vin],
     [t("vehicle_year"),       v.year],
@@ -242,8 +254,9 @@ function renderTechTab(v) {
     [t("vehicle_power_kw"),   v.powerKw ? v.powerKw + " kW" : null],
     [t("vehicle_seats"),      v.seats],
     [t("vehicle_payload"),    v.payload ? v.payload + " kg" : null],
+    [t("vehicle_mass"),       v.mass ? v.mass + " kg" : null],
     [t("vehicle_fuel_type"),  v.fuelType ? t("fuel_" + v.fuelType) : null],
-    [t("vehicle_color"),      v.color],
+    [t("vehicle_color"),      colorLabel(v.color)],
     [t("vehicle_current_km"), v.currentKm ? v.currentKm.toLocaleString() + " km" : null],
     [t("vehicle_reg_expiry"), formatDate(v.regExpiry)],
     [t("vehicle_insurance_company"), v.insuranceCompany],
@@ -334,13 +347,19 @@ function openVehicleForm(vehicle = null) {
         <input id="f-vehicleType" class="form-input" type="text" value="${v.vehicleType || ""}" />
       </div>
       <div class="form-group">
+        <label class="form-label">${t("vehicle_category")}</label>
+        <input id="f-category" class="form-input" type="text" value="${v.category || ""}" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label class="form-label">${t("vehicle_plate")} *</label>
         <input id="f-plate" class="form-input" type="text" value="${v.plate || ""}" style="text-transform:uppercase" />
       </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">${t("vehicle_vin")}</label>
-      <input id="f-vin" class="form-input" type="text" value="${v.vin || ""}" style="text-transform:uppercase" />
+      <div class="form-group">
+        <label class="form-label">${t("vehicle_vin")}</label>
+        <input id="f-vin" class="form-input" type="text" maxlength="17" value="${v.vin || ""}" style="text-transform:uppercase" />
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -374,6 +393,10 @@ function openVehicleForm(vehicle = null) {
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label class="form-label">${t("vehicle_mass")}</label>
+        <input id="f-mass" class="form-input" type="number" value="${v.mass || ""}" />
+      </div>
+      <div class="form-group">
         <label class="form-label">${t("vehicle_fuel_type")}</label>
         <select id="f-fuelType" class="form-select">
           <option value="">—</option>
@@ -382,10 +405,21 @@ function openVehicleForm(vehicle = null) {
           ).join("")}
         </select>
       </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("vehicle_color")}</label>
-        <input id="f-color" class="form-input" type="text" value="${v.color || ""}" />
+        <select id="f-color" class="form-select">
+          <option value="">—</option>
+          ${VEHICLE_COLORS.map(c =>
+            `<option value="${c}" ${v.color === c ? "selected" : ""}>${t("color_" + c)}</option>`
+          ).join("")}
+          ${v.color && !VEHICLE_COLORS.includes(v.color)
+            ? `<option value="${v.color}" selected>${v.color}</option>`
+            : ""}
+        </select>
       </div>
+      <div class="form-group"></div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -451,6 +485,13 @@ function openVehicleForm(vehicle = null) {
     bodyHTML,
     async () => saveVehicle(vehicle?.id || null)
   );
+
+  // Datum isteka registracije se kod nas poklapa sa datumom isteka osiguranja —
+  // automatski se prepisuje, ali ostaje editabilno po potrebi.
+  document.getElementById("f-regExpiry")?.addEventListener("change", (e) => {
+    const insuranceInput = document.getElementById("f-insuranceExpiry");
+    if (insuranceInput) insuranceInput.value = e.target.value;
+  });
 }
 
 // ── FIELD ERROR HELPER ───────────────────────────────────────
@@ -488,6 +529,7 @@ async function saveVehicle(vehicleId) {
   if (!brand) { fieldError("f-brand", t("vehicle_brand_required")); valid = false; }
   if (!model) { fieldError("f-model", t("vehicle_model_required")); valid = false; }
   if (!plate) { fieldError("f-plate", t("vehicle_plate_required")); valid = false; }
+  if (vin && vin.length > 17) { fieldError("f-vin", t("vehicle_vin_max_error")); valid = false; }
   if (!valid) throw new Error("validation");
 
   try {
@@ -520,14 +562,16 @@ async function saveVehicle(vehicleId) {
     const data = {
       brand, model, plate, vin,
       vehicleType:      document.getElementById("f-vehicleType")?.value.trim() || null,
+      category:         document.getElementById("f-category")?.value.trim() || null,
       year:             numOrNull("f-year"),
       firstRegDate:     dateOrNull("f-firstRegDate"),
       engineCc:         numOrNull("f-engineCc"),
       powerKw:          numOrNull("f-powerKw"),
       seats:            numOrNull("f-seats"),
       payload:          numOrNull("f-payload"),
+      mass:             numOrNull("f-mass"),
       fuelType:         document.getElementById("f-fuelType")?.value || null,
-      color:            document.getElementById("f-color")?.value.trim() || null,
+      color:            document.getElementById("f-color")?.value || null,
       status:           document.getElementById("f-status")?.value || "active",
       currentKm:        numOrNull("f-currentKm"),
       regExpiry:        dateOrNull("f-regExpiry"),
