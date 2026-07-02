@@ -164,6 +164,8 @@
   "service_next_date": "Next service (date)",
   "service_next_km": "Next service (km)",
   "service_workshop": "Service center",
+  "service_workshop_select_ph": "— Select service provider —",
+  "service_workshop_other": "Other (enter manually)",
   "report_generate": "Generate report",
   "report_vehicle": "Vehicle report",
   "report_driver": "Driver report",

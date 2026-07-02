@@ -12,6 +12,7 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { openScheduleForm, getScheduledServices, cancelScheduledService } from "./schedule.js";
+import { getServiceProviders } from "./servicers.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
 const VEHICLE_COLORS = [
@@ -658,7 +659,9 @@ function confirmDeleteVehicle(vehicle) {
 }
 
 // ── SERVIS FORMA ──────────────────────────────────────────────
-function openServiceForm(vehicle) {
+async function openServiceForm(vehicle) {
+  const servicers = await getServiceProviders();
+
   const bodyHTML = `
     <div class="form-row">
       <div class="form-group">
@@ -686,7 +689,12 @@ function openServiceForm(vehicle) {
     </div>
     <div class="form-group">
       <label class="form-label">${t("service_workshop")}</label>
-      <input id="sf-workshop" class="form-input" type="text" />
+      <select id="sf-workshop-select" class="form-select">
+        <option value="">${t("service_workshop_select_ph")}</option>
+        ${servicers.map(sp => `<option value="${sp.id}">${sp.name}</option>`).join("")}
+        <option value="__other__">${t("service_workshop_other")}</option>
+      </select>
+      <input id="sf-workshop" class="form-input" type="text" style="margin-top:8px;display:none" placeholder="${t("service_workshop")}" />
     </div>
     <div class="form-group">
       <label class="form-label">${t("service_description")}</label>
@@ -708,6 +716,17 @@ function openServiceForm(vehicle) {
     const dateVal = document.getElementById("sf-date")?.value;
     if (!dateVal) return;
     try {
+      const selectedId = document.getElementById("sf-workshop-select")?.value || "";
+      let workshop = null;
+      let servicerId = null;
+      if (selectedId === "__other__") {
+        workshop = document.getElementById("sf-workshop")?.value.trim() || null;
+      } else if (selectedId) {
+        const sp = servicers.find(x => x.id === selectedId);
+        workshop = sp?.name || null;
+        servicerId = selectedId;
+      }
+
       await addDoc(collection(db, "companies", S.companyId, "services"), {
         vehicleId:   vehicle.id,
         vehiclePlate: vehicle.plate,
@@ -715,7 +734,8 @@ function openServiceForm(vehicle) {
         serviceDate: new Date(dateVal),
         km:          numOrNull("sf-km"),
         cost:        numOrNull("sf-cost"),
-        workshop:    document.getElementById("sf-workshop")?.value.trim() || null,
+        workshop,
+        servicerId,
         description: document.getElementById("sf-desc")?.value.trim() || null,
         nextDate:    dateOrNull("sf-nextDate"),
         nextKm:      numOrNull("sf-nextKm"),
@@ -728,6 +748,19 @@ function openServiceForm(vehicle) {
       if (content) loadServiceTab(content, vehicle);
     } catch (e) {
       showToast(`${t("error")}: ${e.message}`, "error");
+    }
+  });
+
+  // Prikaži slobodno polje samo kad je izabrano "Drugo"
+  document.getElementById("sf-workshop-select")?.addEventListener("change", (e) => {
+    const freeInput = document.getElementById("sf-workshop");
+    if (!freeInput) return;
+    if (e.target.value === "__other__") {
+      freeInput.style.display = "";
+      freeInput.focus();
+    } else {
+      freeInput.style.display = "none";
+      freeInput.value = "";
     }
   });
 }

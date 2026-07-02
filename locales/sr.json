@@ -164,6 +164,8 @@
   "service_next_date": "Sledeći servis (datum)",
   "service_next_km": "Sledeći servis (km)",
   "service_workshop": "Servisni centar",
+  "service_workshop_select_ph": "— Izaberi servisera —",
+  "service_workshop_other": "Drugo (unesi ručno)",
   "report_generate": "Generiši izveštaj",
   "report_vehicle": "Izveštaj po vozilu",
   "report_driver": "Izveštaj po vozaču",
