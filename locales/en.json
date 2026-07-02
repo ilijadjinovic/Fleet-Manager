@@ -74,6 +74,7 @@
   "color_brown": "Brown",
   "color_other": "Other",
   "vehicle_status": "Vehicle status",
+  "vehicle_registered": "Registered",
   "vehicle_status_active": "Active",
   "vehicle_status_service": "In service",
   "vehicle_status_broken": "Broken",

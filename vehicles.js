@@ -24,6 +24,31 @@ function colorLabel(code) {
   return VEHICLE_COLORS.includes(code) ? t("color_" + code) : code;
 }
 
+// ── STATUS REGISTRACIJE (automatski, na osnovu datuma isteka) ───
+// Nezavisno od polja "status" (koje opisuje opšte stanje vozila:
+// u funkciji / servis / kvar / van upotrebe). Ne čuva se u bazi —
+// računa se svaki put pri prikazu, pa je uvek tačan i menja se
+// sam čim datum isteka prođe, ili čim se unese novi datum.
+function isVehicleRegistered(v) {
+  if (!v || !v.regExpiry) return null; // nema unetog datuma — nepoznato
+  const regDate = v.regExpiry.toDate ? v.regExpiry.toDate() : new Date(v.regExpiry);
+  if (isNaN(regDate)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  regDate.setHours(0, 0, 0, 0);
+  return regDate.getTime() >= today.getTime();
+}
+
+function regBadge(v) {
+  const reg = isVehicleRegistered(v);
+  if (reg === null) return "";
+  const label = reg ? t("vehicle_registered") : t("vehicle_status_unregistered");
+  const style = reg
+    ? "background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.4);"
+    : "background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);";
+  return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-left:6px;white-space:nowrap;${style}">${label}</span>`;
+}
+
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allVehicles = [];
 let currentFilter = "all";
@@ -106,7 +131,13 @@ function renderList() {
   if (!list) return;
 
   let filtered = allVehicles;
-  if (currentFilter !== "all") filtered = filtered.filter(v => v.status === currentFilter);
+  if (currentFilter !== "all") {
+    if (currentFilter === "unregistered") {
+      filtered = filtered.filter(v => isVehicleRegistered(v) === false);
+    } else {
+      filtered = filtered.filter(v => v.status === currentFilter);
+    }
+  }
   if (searchTerm) {
     filtered = filtered.filter(v =>
       `${v.brand} ${v.model} ${v.plate} ${v.vin}`.toLowerCase().includes(searchTerm)
@@ -159,6 +190,7 @@ function vehicleCard(v) {
           <span class="vehicle-card__detail-value">
             ${regDate ? regDate.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS") : "—"}
             ${regWarning ? ` <span class="reg-warn">(${daysToReg}d)</span>` : ""}
+            ${regBadge(v)}
           </span>
         </div>
         <div class="vehicle-card__detail">
@@ -258,7 +290,7 @@ function renderTechTab(v) {
     [t("vehicle_fuel_type"),  v.fuelType ? t("fuel_" + v.fuelType) : null],
     [t("vehicle_color"),      colorLabel(v.color)],
     [t("vehicle_current_km"), v.currentKm ? v.currentKm.toLocaleString() + " km" : null],
-    [t("vehicle_reg_expiry"), formatDate(v.regExpiry)],
+    [t("vehicle_reg_expiry"), `${formatDate(v.regExpiry)}${regBadge(v)}`],
     [t("vehicle_insurance_company"), v.insuranceCompany],
     [t("vehicle_insurance_policy"),  v.insurancePolicy],
     [t("vehicle_insurance_expiry"),  formatDate(v.insuranceExpiry)],
@@ -425,9 +457,12 @@ function openVehicleForm(vehicle = null) {
       <div class="form-group">
         <label class="form-label">${t("vehicle_status")}</label>
         <select id="f-status" class="form-select">
-          ${["active","service","broken","unregistered","inactive"].map(s =>
+          ${["active","service","broken","inactive"].map(s =>
             `<option value="${s}" ${(v.status || "active") === s ? "selected" : ""}>${t("vehicle_status_" + s)}</option>`
           ).join("")}
+          ${v.status === "unregistered"
+            ? `<option value="unregistered" selected>${t("vehicle_status_unregistered")}</option>`
+            : ""}
         </select>
       </div>
       <div class="form-group">
@@ -441,6 +476,7 @@ function openVehicleForm(vehicle = null) {
       <div class="form-group">
         <label class="form-label">${t("vehicle_reg_expiry")}</label>
         <input id="f-regExpiry" class="form-input" type="date" value="${toDateInput(v.regExpiry)}" />
+        <div id="f-reg-badge" style="margin-top:6px">${regBadge(v)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_insurance_expiry")}</label>
@@ -491,6 +527,9 @@ function openVehicleForm(vehicle = null) {
   document.getElementById("f-regExpiry")?.addEventListener("change", (e) => {
     const insuranceInput = document.getElementById("f-insuranceExpiry");
     if (insuranceInput) insuranceInput.value = e.target.value;
+
+    const badgeDiv = document.getElementById("f-reg-badge");
+    if (badgeDiv) badgeDiv.innerHTML = regBadge({ regExpiry: e.target.value });
   });
 }
 
