@@ -29,7 +29,7 @@ function colorLabel(code) {
 // u funkciji / servis / kvar / van upotrebe). Ne čuva se u bazi —
 // računa se svaki put pri prikazu, pa je uvek tačan i menja se
 // sam čim datum isteka prođe, ili čim se unese novi datum.
-function isVehicleRegistered(v) {
+export function isVehicleRegistered(v) {
   if (!v || !v.regExpiry) return null; // nema unetog datuma — nepoznato
   const regDate = v.regExpiry.toDate ? v.regExpiry.toDate() : new Date(v.regExpiry);
   if (isNaN(regDate)) return null;

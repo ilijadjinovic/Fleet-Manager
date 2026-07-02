@@ -11,6 +11,7 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo } from "./app.js";
 import { getCompanies } from "./firebase.js";
 import { getScheduledServices } from "./schedule.js";
+import { isVehicleRegistered } from "./vehicles.js";
 
 export async function renderDashboard(container) {
   const isMasterAdmin = S.profile?.role === "master_admin";
@@ -90,7 +91,7 @@ async function loadDashboardData() {
     const total = vehicles.length;
     const active = vehicles.filter(v => v.status === "active").length;
     const inService = vehicles.filter(v => v.status === "service").length;
-    const unregistered = vehicles.filter(v => v.status === "unregistered").length;
+    const unregistered = vehicles.filter(v => isVehicleRegistered(v) === false).length;
     const broken = vehicles.filter(v => v.status === "broken").length;
 
     // Nadolazeće registracije (u sledećih 30 dana)
