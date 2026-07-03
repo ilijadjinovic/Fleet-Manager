@@ -134,11 +134,16 @@ async function loadDashboardData() {
     const assignedCount = assignmentsSnap?.docs?.length || 0;
 
     // Zakazani servisi (narednih 30 dana)
-    const scheduledServices = await getScheduledServices(cid).catch(() => []);
+    const scheduledServices = await getScheduledServices(cid).catch((e) => {
+      console.error("[DEBUG] dashboard getScheduledServices GREŠKA:", e);
+      return [];
+    });
+    console.log("[DEBUG] dashboard scheduledServices (pre filtera):", scheduledServices);
     const upcomingScheduled = scheduledServices.filter(s => {
       const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
       return d >= todayStart && d <= in30;
     });
+    console.log("[DEBUG] dashboard upcomingScheduled (posle filtera, todayStart=", todayStart, "in30=", in30, "):", upcomingScheduled);
 
     const isDriver = role === "driver";
 

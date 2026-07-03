@@ -5,7 +5,7 @@
 
 import { db } from "./firebase.js";
 import {
-  collection, getDocs, addDoc, deleteDoc, doc,
+  collection, getDocs, addDoc, updateDoc, deleteDoc, doc,
   query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang } from "./i18n.js";
@@ -14,16 +14,39 @@ import { getServiceProviders } from "./servicers.js";
 
 const SERVICE_TYPES = ["oil", "tires", "brakes", "technical", "registration", "ac", "other"];
 
-// ── ZAKAŽI SERVIS — otvori formu ─────────────────────────────
-export async function openScheduleForm(vehicle) {
+// Lokalni datum/vreme za <input type="date"/"time"> — bez UTC pomeranja (za razliku od toISOString)
+function toLocalDateInput(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+function toLocalTimeInput(d) {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
+}
+
+// ── ZAKAŽI SERVIS — otvori formu (kreiranje ili izmena) ───────
+// options.existing  — postojeći zakazani servis (uključuje formu u režim izmene)
+// options.onSuccess — poziva se posle uspešnog snimanja (npr. da se lista osveži)
+export async function openScheduleForm(vehicle, options = {}) {
+  const { existing = null, onSuccess = null } = options;
+  const isEdit = !!existing;
   const providers = await getServiceProviders();
 
+  const existingDate = existing?.scheduledDate
+    ? (existing.scheduledDate.toDate ? existing.scheduledDate.toDate() : new Date(existing.scheduledDate))
+    : null;
+  const dateVal0 = existingDate ? toLocalDateInput(existingDate) : "";
+  const timeVal0 = existingDate ? toLocalTimeInput(existingDate) : "08:00";
+
   const typeOptions = SERVICE_TYPES.map(st =>
-    `<option value="${st}">${t("service_type_" + st) || st}</option>`
+    `<option value="${st}" ${existing?.serviceType === st ? "selected" : ""}>${t("service_type_" + st) || st}</option>`
   ).join("");
 
   const providerOptions = providers.length > 0
-    ? providers.map(p => `<option value="${p.id}" data-name="${p.name}" data-address="${p.address || ''}" data-phone="${p.phone || ''}">${p.name}</option>`).join("")
+    ? providers.map(p => `<option value="${p.id}" data-name="${p.name}" data-address="${p.address || ''}" data-phone="${p.phone || ''}" ${existing?.serviceProviderId === p.id ? "selected" : ""}>${p.name}</option>`).join("")
     : "";
 
   const bodyHTML = `
@@ -37,11 +60,11 @@ export async function openScheduleForm(vehicle) {
 
       <div class="form-group">
         <label class="form-label">${t("schedule_date")}</label>
-        <input id="sch-date" class="form-input" type="date" />
+        <input id="sch-date" class="form-input" type="date" value="${dateVal0}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("schedule_time")}</label>
-        <input id="sch-time" class="form-input" type="time" value="08:00" />
+        <input id="sch-time" class="form-input" type="time" value="${timeVal0}" />
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
@@ -55,32 +78,32 @@ export async function openScheduleForm(vehicle) {
       <div id="sch-manual-fields" style="grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:12px">
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">${t("schedule_provider_name")}</label>
-          <input id="sch-name" class="form-input" type="text" placeholder="Naziv servisa..." />
+          <input id="sch-name" class="form-input" type="text" placeholder="Naziv servisa..." value="${!existing?.serviceProviderId && existing?.serviceProviderName ? existing.serviceProviderName : ""}" />
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">${t("schedule_provider_address")}</label>
-          <input id="sch-address" class="form-input" type="text" placeholder="${t("schedule_provider_address_ph")}" />
+          <input id="sch-address" class="form-input" type="text" placeholder="${t("schedule_provider_address_ph")}" value="${!existing?.serviceProviderId && existing?.serviceProviderAddress ? existing.serviceProviderAddress : ""}" />
         </div>
         <div class="form-group">
           <label class="form-label">${t("servicer_phone")}</label>
-          <input id="sch-phone" class="form-input" type="tel" placeholder="+381..." />
+          <input id="sch-phone" class="form-input" type="tel" placeholder="+381..." value="${!existing?.serviceProviderId && existing?.serviceProviderPhone ? existing.serviceProviderPhone : ""}" />
         </div>
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
         <label class="form-label">${t("schedule_notes")}</label>
-        <textarea id="sch-notes" class="form-input form-textarea" rows="2" placeholder="${t("schedule_notes_ph")}"></textarea>
+        <textarea id="sch-notes" class="form-input form-textarea" rows="2" placeholder="${t("schedule_notes_ph")}">${existing?.notes || ""}</textarea>
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="sch-push" checked />
+          <input type="checkbox" id="sch-push" ${isEdit ? "" : "checked"} />
           <span>${t("schedule_push")}</span>
         </label>
       </div>
       <div class="form-group" style="grid-column:1/-1">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="sch-ics" checked />
+          <input type="checkbox" id="sch-ics" ${isEdit ? "" : "checked"} />
           <span>${t("schedule_ics")}</span>
         </label>
       </div>
@@ -89,7 +112,9 @@ export async function openScheduleForm(vehicle) {
   `;
 
   openModal(
-    `📅 ${t("schedule_title_prefix")} — ${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
+    isEdit
+      ? `✏️ ${t("edit")} — ${vehicle.brand} ${vehicle.model} (${vehicle.plate})`
+      : `📅 ${t("schedule_title_prefix")} — ${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
     bodyHTML,
     async () => {
       const dateVal = document.getElementById("sch-date")?.value;
@@ -125,25 +150,38 @@ export async function openScheduleForm(vehicle) {
       const sendPush = document.getElementById("sch-push")?.checked;
       const exportIcs = document.getElementById("sch-ics")?.checked;
 
-      // Snimi u Firestore
-      await addDoc(collection(db, "companies", S.companyId, "scheduledServices"), {
-        vehicleId:       vehicle.id,
-        vehiclePlate:    vehicle.plate,
-        vehicleBrand:    vehicle.brand,
-        vehicleModel:    vehicle.model,
-        serviceType:     type,
-        scheduledDate,
-        serviceProviderId:      providerId,
-        serviceProviderName:    providerName,
-        serviceProviderAddress: providerAddress,
-        serviceProviderPhone:   providerPhone,
-        notes,
-        createdBy:  S.user.uid,
-        createdAt:  serverTimestamp(),
-        status:     "scheduled",
-      });
+      // Snimi u Firestore — kreiranje ili izmena
+      if (isEdit) {
+        await updateDoc(doc(db, "companies", S.companyId, "scheduledServices", existing.id), {
+          serviceType:     type,
+          scheduledDate,
+          serviceProviderId:      providerId,
+          serviceProviderName:    providerName,
+          serviceProviderAddress: providerAddress,
+          serviceProviderPhone:   providerPhone,
+          notes,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, "companies", S.companyId, "scheduledServices"), {
+          vehicleId:       vehicle.id,
+          vehiclePlate:    vehicle.plate,
+          vehicleBrand:    vehicle.brand,
+          vehicleModel:    vehicle.model,
+          serviceType:     type,
+          scheduledDate,
+          serviceProviderId:      providerId,
+          serviceProviderName:    providerName,
+          serviceProviderAddress: providerAddress,
+          serviceProviderPhone:   providerPhone,
+          notes,
+          createdBy:  S.user.uid,
+          createdAt:  serverTimestamp(),
+          status:     "scheduled",
+        });
+      }
 
-      showToast(t("schedule_success"), "success");
+      showToast(isEdit ? t("schedule_updated") : t("schedule_success"), "success");
 
       // Push notifikacija
       if (sendPush) {
@@ -164,6 +202,8 @@ export async function openScheduleForm(vehicle) {
           ].filter(Boolean).join("\\n"),
         });
       }
+
+      if (onSuccess) onSuccess();
     }
   );
 
@@ -252,8 +292,11 @@ export async function getScheduledServices(companyId, options = {}) {
       );
     }
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch {
+    const result = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    console.log("[DEBUG] getScheduledServices companyId=", companyId, "options=", options, "→ broj dokumenata:", result.length, result);
+    return result;
+  } catch (e) {
+    console.error("[DEBUG] getScheduledServices GREŠKA:", e);
     return [];
   }
 }
