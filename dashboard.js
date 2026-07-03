@@ -160,7 +160,7 @@ async function loadDashboardData() {
       })}
     `;
 
-    // Event listeneri za kartice
+    // Event listeneri za kartice 
     if (!isDriver) {
       attachDashboardEvents();
     }

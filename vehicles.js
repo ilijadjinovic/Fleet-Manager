@@ -125,7 +125,7 @@ async function loadVehicles() {
   }
 }
 
-// ── RENDER LISTA ──────────────────────────────────────────────
+// ── RENDER  LISTA ──────────────────────────────────────────────
 function renderList() {
   const list = document.getElementById("vehicles-list");
   if (!list) return;
