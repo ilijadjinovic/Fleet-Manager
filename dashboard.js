@@ -10,9 +10,7 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo } from "./app.js";
 import { getCompanies } from "./firebase.js";
-import { getScheduledServices } from "./schedule.js";
-import { openScheduledServiceDetail } from "./schedule.js";
-import { isVehicleRegistered } from "./vehicles.js";
+import { isVehicleRegistered, openVehicleDetail } from "./vehicles.js";
 
 export async function renderDashboard(container) {
   const isMasterAdmin = S.profile?.role === "master_admin";
@@ -133,17 +131,26 @@ async function loadDashboardData() {
     }
     const assignedCount = assignmentsSnap?.docs?.length || 0;
 
-    // Zakazani servisi (narednih 30 dana)
-    const scheduledServices = await getScheduledServices(cid).catch((e) => {
-      console.error("[DEBUG] dashboard getScheduledServices GREŠKA:", e);
-      return [];
+    // Zakazani servisi = unosi u "Servisna istorija" sa datumom u budućnosti
+    // (narednih 30 dana) — ovako se u praksi zakazuje, kroz "Dodaj servis".
+    const servicesSnap = await getDocs(
+      query(
+        collection(db, "companies", cid, "services"),
+        where("serviceDate", ">=", todayStart),
+        where("serviceDate", "<=", in30),
+        orderBy("serviceDate", "asc")
+      )
+    ).catch(() => ({ docs: [] }));
+
+    const upcomingScheduled = servicesSnap.docs.map(d => {
+      const s = { id: d.id, ...d.data() };
+      const veh = vehicles.find(v => v.id === s.vehicleId);
+      return {
+        ...s,
+        vehicleBrand: veh?.brand || "",
+        vehicleModel: veh?.model || "",
+      };
     });
-    console.log("[DEBUG] dashboard scheduledServices (pre filtera):", scheduledServices);
-    const upcomingScheduled = scheduledServices.filter(s => {
-      const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
-      return d >= todayStart && d <= in30;
-    });
-    console.log("[DEBUG] dashboard upcomingScheduled (posle filtera, todayStart=", todayStart, "in30=", in30, "):", upcomingScheduled);
 
     const isDriver = role === "driver";
 
@@ -155,7 +162,7 @@ async function loadDashboardData() {
 
     // Event listeneri za kartice
     if (!isDriver) {
-      attachDashboardEvents(upcomingScheduled);
+      attachDashboardEvents();
     }
 
   } catch (e) {
@@ -228,16 +235,16 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
         ${!upcomingScheduled || upcomingScheduled.length === 0
           ? `<p class="empty-text">${t("schedule_no_data")}</p>`
           : upcomingScheduled.map(s => {
-              const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
+              const d = s.serviceDate?.toDate ? s.serviceDate.toDate() : new Date(s.serviceDate);
               const daysLeft = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
               const urgency = daysLeft <= 2 ? "urgent" : daysLeft <= 7 ? "warning" : "ok";
-              const dateStr = d.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+              const dateStr = formatDate(d);
               return `
-                <div class="upcoming-item upcoming-item--${urgency}" data-scheduled-id="${s.id}" style="cursor:pointer">
+                <div class="upcoming-item upcoming-item--${urgency}" data-vehicle-id="${s.vehicleId}" style="cursor:pointer">
                   <div class="upcoming-item__main">
                     <span class="upcoming-item__name">${s.vehicleBrand} ${s.vehicleModel}</span>
                     <span class="upcoming-item__plate">${s.vehiclePlate}</span>
-                    ${s.serviceProviderName ? `<span class="upcoming-item__plate">🔧 ${s.serviceProviderName}</span>` : ""}
+                    ${s.workshop ? `<span class="upcoming-item__plate">🔧 ${s.workshop}</span>` : ""}
                   </div>
                   <div class="upcoming-item__right">
                     <span class="upcoming-item__date">${dateStr}</span>
@@ -293,7 +300,7 @@ function renderDriverDashboard(assignmentsSnap) {
   `;
 }
 
-function attachDashboardEvents(upcomingScheduled = []) {
+function attachDashboardEvents() {
   document.querySelectorAll(".stat-card[data-nav]").forEach(card => {
     card.style.cursor = "pointer";
     card.addEventListener("click", () => {
@@ -314,11 +321,16 @@ function attachDashboardEvents(upcomingScheduled = []) {
     });
   });
 
-  // Klik na zakazani servis u panelu → detalji tog servisa
-  document.querySelectorAll("[data-scheduled-id]").forEach(item => {
+  // Klik na zakazani servis u panelu → detalji vozila, tab "Servisna istorija"
+  document.querySelectorAll("[data-vehicle-id]").forEach(item => {
     item.addEventListener("click", () => {
-      const s = upcomingScheduled.find(x => x.id === item.dataset.scheduledId);
-      if (s) openScheduledServiceDetail(s);
+      const vehicleId = item.dataset.vehicleId;
+      if (!vehicleId) return;
+      S.activeTab = "vehicles";
+      document.querySelectorAll(".nav-btn").forEach(btn => {
+        btn.classList.toggle("nav-btn--active", btn.dataset.tab === "vehicles");
+      });
+      openVehicleDetail(vehicleId, "service");
     });
   });
 }

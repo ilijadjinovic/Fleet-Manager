@@ -11,7 +11,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
-import { openScheduleForm, getScheduledServices, cancelScheduledService } from "./schedule.js";
 import { getServiceProviders } from "./servicers.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
@@ -209,13 +208,33 @@ function vehicleCard(v) {
 }
 
 // ── DETAIL POGLED ─────────────────────────────────────────────
-async function openVehicleDetail(vehicleId) {
+// initialTab — omogućava da se skoči direktno na neki tab (npr. sa dashboarda na "service")
+export async function openVehicleDetail(vehicleId, initialTab = "tech") {
   currentVehicleId = vehicleId;
-  const vehicle = allVehicles.find(v => v.id === vehicleId);
-  if (!vehicle) return;
+  let vehicle = allVehicles.find(v => v.id === vehicleId);
+
+  // Ako vozilo nije u kešu (npr. ulazak direktno sa dashboarda, bez prethodne posete
+  // tabu "Vozila"), dohvati ga direktno iz Firestore-a.
+  if (!vehicle) {
+    try {
+      const snap = await getDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId));
+      if (!snap.exists()) return;
+      vehicle = { id: snap.id, ...snap.data() };
+      allVehicles.push(vehicle);
+    } catch {
+      return;
+    }
+  }
 
   const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
   const container = document.getElementById("content");
+
+  const TABS = [
+    { key: "tech",        label: t("vehicle_tab_tech") },
+    { key: "finance",     label: t("vehicle_tab_finance") },
+    { key: "service",     label: t("vehicle_tab_service") },
+    { key: "assignments", label: t("vehicle_tab_assignments") },
+  ];
 
   container.innerHTML = `
     <div class="detail-header">
@@ -233,10 +252,9 @@ async function openVehicleDetail(vehicleId) {
     </div>
 
     <div class="tab-strip" id="vehicle-tabs">
-      <button class="tab-strip__btn tab-strip__btn--active" data-vtab="tech">${t("vehicle_tab_tech")}</button>
-      <button class="tab-strip__btn" data-vtab="finance">${t("vehicle_tab_finance")}</button>
-      <button class="tab-strip__btn" data-vtab="service">${t("vehicle_tab_service")}</button>
-      <button class="tab-strip__btn" data-vtab="assignments">${t("vehicle_tab_assignments")}</button>
+      ${TABS.map(tb => `
+        <button class="tab-strip__btn ${tb.key === initialTab ? "tab-strip__btn--active" : ""}" data-vtab="${tb.key}">${tb.label}</button>
+      `).join("")}
     </div>
 
     <div id="vehicle-tab-content"></div>
@@ -256,8 +274,9 @@ async function openVehicleDetail(vehicleId) {
     renderVehicleTab(btn.dataset.vtab, vehicle);
   });
 
-  renderVehicleTab("tech", vehicle);
+  renderVehicleTab(initialTab, vehicle);
 }
+
 
 // ── VEHICLE TABOVI ────────────────────────────────────────────
 function renderVehicleTab(tab, vehicle) {
@@ -268,7 +287,6 @@ function renderVehicleTab(tab, vehicle) {
     case "tech":     content.innerHTML = renderTechTab(vehicle); break;
     case "finance":  content.innerHTML = renderFinanceTab(vehicle); break;
     case "service":    loadServiceTab(content, vehicle); break;
-    case "scheduled":  loadScheduledTab(content, vehicle); break;
     case "assignments": loadAssignmentsTab(content, vehicle); break;
   }
 }
@@ -779,62 +797,9 @@ function detailTable(rows) {
   `;
 }
 
-// ── ZAKAZANI SERVISI TAB ─────────────────────────────────────
-async function loadScheduledTab(content, vehicle) {
-  content.innerHTML = `<div class="loading">${t("loading")}</div>`;
-  const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
+// ── ZAKAZANI SERVISI TAB je uklonjen ──────────────────────────
+// (nikad nije bio povezan ni sa jednim tab dugmetom u UI — mrtav kod)
 
-  try {
-    const scheduled = await getScheduledServices(S.companyId, { vehicleId: vehicle.id });
-
-    let html = "";
-
-    if (canEdit) {
-      html += `<div style="margin-bottom:12px">
-        <button class="btn btn--primary btn--sm" id="btn-schedule-new">📅 ${t("vehicle_scheduled_new")}</button>
-      </div>`;
-    }
-
-    if (scheduled.length === 0) {
-      html += `<p class="empty-text">${t("vehicle_scheduled_no_data")}</p>`;
-    } else {
-      html += `<div class="service-list">`;
-      for (const s of scheduled) {
-        const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
-        const dateStr = d.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
-        html += `<div class="service-item" data-id="${s.id}">
-          <div class="service-item__header">
-            <span class="service-item__type">📅 ${t("service_type_" + s.serviceType) || s.serviceType}</span>
-            <span class="service-item__date">${dateStr}</span>
-          </div>`;
-        if (s.serviceProviderName)    html += `<div class="service-item__workshop">🔧 ${s.serviceProviderName}</div>`;
-        if (s.serviceProviderAddress) html += `<div class="service-item__workshop">📍 ${s.serviceProviderAddress}</div>`;
-        if (s.serviceProviderPhone)   html += `<div class="service-item__workshop">📞 ${s.serviceProviderPhone}</div>`;
-        if (s.notes)                  html += `<div class="service-item__desc">${s.notes}</div>`;
-        if (canEdit) html += `<button class="btn btn--danger btn--sm btn-cancel-scheduled" data-id="${s.id}" style="margin-top:8px">${t("schedule_cancel")}</button>`;
-        html += `</div>`;
-      }
-      html += `</div>`;
-    }
-
-    content.innerHTML = html;
-
-    document.getElementById("btn-schedule-new")?.addEventListener("click", () => {
-      openScheduleForm(vehicle);
-    });
-
-    content.querySelectorAll(".btn-cancel-scheduled").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        await cancelScheduledService(btn.dataset.id);
-        showToast(t("schedule_canceled"), "success");
-        loadScheduledTab(content, vehicle);
-      });
-    });
-
-  } catch (e) {
-    content.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
-  }
-}
 
 function serviceItem(s) {
   return `
