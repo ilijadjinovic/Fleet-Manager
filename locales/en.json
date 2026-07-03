@@ -215,6 +215,7 @@
   "user_first_name": "First name",
   "user_last_name": "Last name",
   "tab_servicers": "Service Providers",
+  "tab_schedule": "Scheduled Services",
   "servicer_add": "Add service provider",
   "servicer_no_data": "No service providers added yet. Add the first one.",
   "servicer_name_required": "Name is required",

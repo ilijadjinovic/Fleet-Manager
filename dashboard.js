@@ -11,6 +11,7 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo } from "./app.js";
 import { getCompanies } from "./firebase.js";
 import { getScheduledServices } from "./schedule.js";
+import { openScheduledServiceDetail } from "./schedule.js";
 import { isVehicleRegistered } from "./vehicles.js";
 
 export async function renderDashboard(container) {
@@ -149,7 +150,7 @@ async function loadDashboardData() {
 
     // Event listeneri za kartice
     if (!isDriver) {
-      attachDashboardEvents();
+      attachDashboardEvents(upcomingScheduled);
     }
 
   } catch (e) {
@@ -227,7 +228,7 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
               const urgency = daysLeft <= 2 ? "urgent" : daysLeft <= 7 ? "warning" : "ok";
               const dateStr = d.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
               return `
-                <div class="upcoming-item upcoming-item--${urgency}">
+                <div class="upcoming-item upcoming-item--${urgency}" data-scheduled-id="${s.id}" style="cursor:pointer">
                   <div class="upcoming-item__main">
                     <span class="upcoming-item__name">${s.vehicleBrand} ${s.vehicleModel}</span>
                     <span class="upcoming-item__plate">${s.vehiclePlate}</span>
@@ -287,7 +288,7 @@ function renderDriverDashboard(assignmentsSnap) {
   `;
 }
 
-function attachDashboardEvents() {
+function attachDashboardEvents(upcomingScheduled = []) {
   document.querySelectorAll(".stat-card[data-nav]").forEach(card => {
     card.style.cursor = "pointer";
     card.addEventListener("click", () => {
@@ -305,6 +306,14 @@ function attachDashboardEvents() {
       } else {
         navigateTo(card.dataset.nav);
       }
+    });
+  });
+
+  // Klik na zakazani servis u panelu → detalji tog servisa
+  document.querySelectorAll("[data-scheduled-id]").forEach(item => {
+    item.addEventListener("click", () => {
+      const s = upcomingScheduled.find(x => x.id === item.dataset.scheduledId);
+      if (s) openScheduledServiceDetail(s);
     });
   });
 }

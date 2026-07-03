@@ -186,6 +186,53 @@ export async function openScheduleForm(vehicle) {
   }, 50);
 }
 
+// ── DETALJI POJEDINAČNOG ZAKAZANOG SERVISA ────────────────────
+// Poziva se sa dashboard-a (klik na stavku u panelu "Zakazani servisi").
+export function openScheduledServiceDetail(s) {
+  const container = document.getElementById("content");
+  if (!container) return;
+
+  const d = s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate);
+  const dateStr = d.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+
+  container.innerHTML = `
+    <div class="detail-header">
+      <button class="btn btn--ghost btn--sm" id="btn-back-scheduled">${t("vehicle_back")}</button>
+      <div class="detail-header__title">
+        <h2>${s.vehicleBrand} ${s.vehicleModel}</h2>
+        <span class="badge badge--info">${s.vehiclePlate}</span>
+      </div>
+    </div>
+    ${scheduledDetailTable([
+      [t("schedule_service_type"), t("service_type_" + s.serviceType) || s.serviceType],
+      [t("schedule_date"), dateStr],
+      [t("schedule_provider_name"), s.serviceProviderName],
+      [t("schedule_provider_address"), s.serviceProviderAddress],
+      [t("servicer_phone"), s.serviceProviderPhone],
+      [t("schedule_notes"), s.notes],
+    ])}
+  `;
+
+  document.getElementById("btn-back-scheduled")?.addEventListener("click", () => {
+    import("./app.js").then(({ navigateTo }) => navigateTo("dashboard"));
+  });
+}
+
+function scheduledDetailTable(rows) {
+  return `
+    <div class="detail-table">
+      ${rows.filter(([, v]) => v !== null && v !== undefined && v !== "").map(([label, value]) => `
+        <div class="detail-row">
+          <div class="detail-row__label">${label}</div>
+          <div class="detail-row__value">${value}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 // ── DOHVATI ZAKAZANE SERVISE ──────────────────────────────────
 export async function getScheduledServices(companyId, options = {}) {
   try {

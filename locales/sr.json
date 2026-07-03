@@ -219,6 +219,7 @@
   "user_first_name": "Ime",
   "user_last_name": "Prezime",
   "tab_servicers": "Serviseri",
+  "tab_schedule": "Zakazani servisi",
   "servicer_add": "Dodaj servisera",
   "servicer_no_data": "Nema unetih servisera. Dodajte prvog servisera.",
   "servicer_name_required": "Naziv je obavezan",
