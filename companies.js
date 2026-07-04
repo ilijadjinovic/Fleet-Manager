@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
+import { mountPendingBanner } from "./pending-requests.js";
 
 export async function renderCompanies(container) {
   if (S.profile?.role !== "master_admin") {
@@ -29,99 +30,13 @@ export async function renderCompanies(container) {
     <div id="companies-list"><div class="loading">${t("loading")}</div></div>
   `;
 
-  await Promise.all([loadPendingRequests(), loadCompanies()]);
-}
-
-// ── PENDING ZAHTEVI ───────────────────────────────────────────
-async function loadPendingRequests() {
-  const section = document.getElementById("pending-section");
-  try {
-    const snap = await getDocs(
-      query(collection(db, "adminNotifications"),
-        where("type", "==", "pending_fleet_admin"),
-        where("status", "==", "unread"),
-        orderBy("createdAt", "desc")
-      )
-    );
-
-    const pending = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (pending.length === 0) { section.innerHTML = ""; return; }
-
-    section.innerHTML = `
-      <div class="pending-banner">
-        <div class="pending-banner__title">
-          🔔 ${t("company_pending_title")} (${pending.length})
-        </div>
-        <div class="pending-list" id="pending-list">
-          ${pending.map(p => pendingItem(p)).join("")}
-        </div>
-      </div>
-    `;
-
-    // Bind dugmadi
-    section.querySelectorAll(".btn-approve").forEach(btn => {
-      btn.addEventListener("click", () => approveUser(btn.dataset.uid, btn.dataset.notifId));
-    });
-    section.querySelectorAll(".btn-reject").forEach(btn => {
-      btn.addEventListener("click", () => rejectUser(btn.dataset.uid, btn.dataset.notifId));
-    });
-
-  } catch (e) {
-    section.innerHTML = "";
-    console.error("Pending load error:", e);
-  }
-}
-
-function pendingItem(p) {
-  return `
-    <div class="pending-item" id="pending-${p.id}">
-      <div class="pending-item__info">
-        <strong>${p.userName}</strong>
-        <span class="pending-item__company">
-          🏢 ${p.companyName}
-          ${p.joinExisting
-            ? `<span class="badge badge--info" style="margin-left:6px">${t("company_join_badge")}</span>`
-            : `<span class="badge badge--active" style="margin-left:6px">${t("company_new_badge")}</span>`}
-        </span>
-      </div>
-      <div class="pending-item__actions">
-        <button class="btn btn--primary btn--sm btn-approve"
-          data-uid="${p.userUid}" data-notif-id="${p.id}">
-          ${t("approve")}
-        </button>
-        <button class="btn btn--danger btn--sm btn-reject"
-          data-uid="${p.userUid}" data-notif-id="${p.id}">
-          ${t("reject")}
-        </button>
-      </div>
-    </div>
-  `;
-}
-
-async function approveUser(uid, notifId) {
-  try {
-    await updateDoc(doc(db, "users", uid), {
-      status: "active", approvedAt: serverTimestamp(), approvedBy: S.user.uid
-    });
-    await updateDoc(doc(db, "adminNotifications", notifId), { status: "resolved" });
-    document.getElementById(`pending-${notifId}`)?.remove();
-    showToast(t("company_approved_msg"), "success");
-    loadCompanies();
-  } catch (e) {
-    showToast(`${t("error")}: ${e.message}`, "error");
-  }
-}
-
-async function rejectUser(uid, notifId) {
-  if (!confirm(t("confirm_delete"))) return;
-  try {
-    await updateDoc(doc(db, "users", uid), { status: "rejected" });
-    await updateDoc(doc(db, "adminNotifications", notifId), { status: "resolved" });
-    document.getElementById(`pending-${notifId}`)?.remove();
-    showToast(t("company_rejected_msg"), "warning");
-  } catch (e) {
-    showToast(`${t("error")}: ${e.message}`, "error");
-  }
+  await Promise.all([
+    mountPendingBanner(document.getElementById("pending-section"), {
+      compact: false,
+      onChange: loadCompanies, // posle approve/reject — refresh broja admina na karticama
+    }),
+    loadCompanies(),
+  ]);
 }
 
 // ── LISTA FIRMI ───────────────────────────────────────────────

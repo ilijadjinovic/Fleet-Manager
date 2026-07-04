@@ -11,6 +11,7 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo } from "./app.js";
 import { getCompanies } from "./firebase.js";
 import { isVehicleRegistered, openVehicleDetail } from "./vehicles.js";
+import { mountPendingBanner } from "./pending-requests.js";
 
 export async function renderDashboard(container) {
   const isMasterAdmin = S.profile?.role === "master_admin";
@@ -41,6 +42,7 @@ export async function renderDashboard(container) {
       <h2 class="page-title" data-i18n="tab_dashboard">${t("tab_dashboard")}</h2>
       ${companySwitcherHTML}
     </div>
+    ${isMasterAdmin ? `<div id="pending-banner-section"></div>` : ""}
     <div id="dashboard-content">
       <div class="loading">${t("loading")}</div>
     </div>
@@ -51,6 +53,9 @@ export async function renderDashboard(container) {
     document.getElementById("company-select")?.addEventListener("change", (e) => {
       setActiveCompany(e.target.value || null);
     });
+    // Baner "Zahtevi za pristup" — nezavisan od izabrane firme,
+    // pending zahtevi mogu biti za bilo koju firmu.
+    mountPendingBanner(document.getElementById("pending-banner-section"), { compact: true });
   }
 
   if (!S.companyId) {
