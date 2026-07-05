@@ -12,6 +12,7 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
+import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
 const VEHICLE_COLORS = [
@@ -84,6 +85,7 @@ export async function renderVehicles(container, initialFilter = null) {
         <button class="chip ${currentFilter === 'service' ? 'chip--active' : ''}" data-filter="service">${t("vehicle_status_service")}</button>
         <button class="chip ${currentFilter === 'broken' ? 'chip--active' : ''}" data-filter="broken">${t("vehicle_status_broken")}</button>
         <button class="chip ${currentFilter === 'unregistered' ? 'chip--active' : ''}" data-filter="unregistered">${t("vehicle_status_unregistered")}</button>
+        <button class="chip ${currentFilter === 'archived' ? 'chip--active' : ''}" data-filter="archived">${t("vehicle_status_archived")}</button>
       </div>
     </div>
 
@@ -131,11 +133,18 @@ function renderList() {
   if (!list) return;
 
   let filtered = allVehicles;
-  if (currentFilter !== "all") {
-    if (currentFilter === "unregistered") {
-      filtered = filtered.filter(v => isVehicleRegistered(v) === false);
-    } else {
-      filtered = filtered.filter(v => v.status === currentFilter);
+  if (currentFilter === "archived") {
+    filtered = filtered.filter(v => v.archived === true);
+  } else {
+    // Arhivirana vozila se ne prikazuju ni u jednom drugom filteru
+    // (uključujući "svi") — vidljiva su samo iza posebnog filtera.
+    filtered = filtered.filter(v => v.archived !== true);
+    if (currentFilter !== "all") {
+      if (currentFilter === "unregistered") {
+        filtered = filtered.filter(v => isVehicleRegistered(v) === false);
+      } else {
+        filtered = filtered.filter(v => v.status === currentFilter);
+      }
     }
   }
   if (searchTerm) {
@@ -168,13 +177,16 @@ function vehicleCard(v) {
   const regWarning = daysToReg !== null && daysToReg <= 30;
 
   return `
-    <div class="vehicle-card" data-id="${v.id}">
+    <div class="vehicle-card ${v.archived ? "vehicle-card--archived" : ""}" data-id="${v.id}">
       <div class="vehicle-card__header">
         <div class="vehicle-card__info">
           <div class="vehicle-card__name">${v.brand} ${v.model}</div>
           <div class="vehicle-card__plate">${v.plate}</div>
         </div>
-        <span class="badge badge--${v.status || 'active'}">${t("vehicle_status_" + (v.status || "active"))}</span>
+        ${v.archived
+          ? `<span class="badge badge--cancelled">${t("vehicle_status_archived")}</span>`
+          : `<span class="badge badge--${v.status || 'active'}">${t("vehicle_status_" + (v.status || "active"))}</span>`
+        }
       </div>
       <div class="vehicle-card__details">
         <div class="vehicle-card__detail">
@@ -208,13 +220,13 @@ function vehicleCard(v) {
 }
 
 // ── DETAIL POGLED ─────────────────────────────────────────────
-// initialTab — omogućava da se skoči direktno na neki tab (npr. sa dashboarda na "service")
+// initialTab — omogućava skok direktno na neki tab (npr. sa dashboarda na "service")
 export async function openVehicleDetail(vehicleId, initialTab = "tech") {
   currentVehicleId = vehicleId;
   let vehicle = allVehicles.find(v => v.id === vehicleId);
 
-  // Ako vozilo nije u kešu (npr. ulazak direktno sa dashboarda, bez prethodne posete
-  // tabu "Vozila"), dohvati ga direktno iz Firestore-a.
+  // Ako vozilo nije u kešu (npr. ulazak direktno sa dashboarda, bez prethodne
+  // posete tabu "Vozila"), dohvati ga direktno iz Firestore-a.
   if (!vehicle) {
     try {
       const snap = await getDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId));
@@ -236,20 +248,31 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech") {
     { key: "assignments", label: t("vehicle_tab_assignments") },
   ];
 
+  const isMasterAdmin = S.profile?.role === "master_admin";
+
   container.innerHTML = `
     <div class="detail-header">
       <button class="btn btn--ghost btn--sm" id="btn-back">${t("vehicle_back")}</button>
       <div class="detail-header__title">
         <h2>${vehicle.brand} ${vehicle.model}</h2>
-        <span class="badge badge--${vehicle.status || 'active'}">${t("vehicle_status_" + (vehicle.status || "active"))}</span>
+        ${vehicle.archived
+          ? `<span class="badge badge--cancelled">${t("vehicle_status_archived")}</span>`
+          : `<span class="badge badge--${vehicle.status || 'active'}">${t("vehicle_status_" + (vehicle.status || "active"))}</span>`
+        }
       </div>
       ${canEdit ? `
         <div class="detail-header__actions">
-          <button class="btn btn--secondary btn--sm" id="btn-edit-vehicle">✏️ ${t("edit")}</button>
-          <button class="btn btn--danger btn--sm" id="btn-delete-vehicle">🗑️ ${t("delete")}</button>
+          ${vehicle.archived ? `
+            <button class="btn btn--secondary btn--sm" id="btn-unarchive-vehicle">${t("vehicle_unarchive_btn")}</button>
+            ${isMasterAdmin ? `<button class="btn btn--danger btn--sm" id="btn-hard-delete-vehicle">${t("vehicle_hard_delete_btn")}</button>` : ""}
+          ` : `
+            <button class="btn btn--secondary btn--sm" id="btn-edit-vehicle">✏️ ${t("edit")}</button>
+            <button class="btn btn--danger btn--sm" id="btn-delete-vehicle">${t("vehicle_archive_btn")}</button>
+          `}
         </div>
       ` : ""}
     </div>
+    ${vehicle.archived ? `<div class="empty-state" style="padding:14px;margin-bottom:14px;text-align:left;background:var(--color-surface-2);border-radius:var(--radius-md);border:1px solid var(--color-border);">${t("vehicle_archived_notice")}</div>` : ""}
 
     <div class="tab-strip" id="vehicle-tabs">
       ${TABS.map(tb => `
@@ -263,7 +286,9 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech") {
   document.getElementById("btn-back")?.addEventListener("click", () => renderVehicles(container));
   if (canEdit) {
     document.getElementById("btn-edit-vehicle")?.addEventListener("click", () => openVehicleForm(vehicle));
-    document.getElementById("btn-delete-vehicle")?.addEventListener("click", () => confirmDeleteVehicle(vehicle));
+    document.getElementById("btn-delete-vehicle")?.addEventListener("click", () => archiveVehicle(vehicle));
+    document.getElementById("btn-unarchive-vehicle")?.addEventListener("click", () => unarchiveVehicle(vehicle));
+    document.getElementById("btn-hard-delete-vehicle")?.addEventListener("click", () => confirmHardDeleteVehicle(vehicle));
   }
 
   document.getElementById("vehicle-tabs")?.addEventListener("click", (e) => {
@@ -276,7 +301,6 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech") {
 
   renderVehicleTab(initialTab, vehicle);
 }
-
 
 // ── VEHICLE TABOVI ────────────────────────────────────────────
 function renderVehicleTab(tab, vehicle) {
@@ -328,7 +352,7 @@ function renderFinanceTab(v) {
 
 async function loadServiceTab(container, vehicle) {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
-  const canEdit = S.profile?.role !== "driver";
+  const canEdit = S.profile?.role !== "driver" && !vehicle.archived;
   try {
     const snap = await getDocs(
       query(
@@ -339,16 +363,56 @@ async function loadServiceTab(container, vehicle) {
     );
     const services = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+    // Nadolazeći/u toku/propušteni servisi na vrh (najzakasneliji/najbliži
+    // prvi), završeni i otkazani ispod (najskoriji prvi) — a ne prosto po
+    // datumu opadajuće za sve.
+    services.sort((a, b) => {
+      const da = a.serviceDate?.toDate ? a.serviceDate.toDate() : new Date(a.serviceDate);
+      const db_ = b.serviceDate?.toDate ? b.serviceDate.toDate() : new Date(b.serviceDate);
+      const aResolved = [SERVICE_STATUS.DONE, SERVICE_STATUS.CANCELLED].includes(effectiveServiceStatus(a));
+      const bResolved = [SERVICE_STATUS.DONE, SERVICE_STATUS.CANCELLED].includes(effectiveServiceStatus(b));
+      if (aResolved !== bResolved) return aResolved ? 1 : -1;
+      return aResolved ? (db_ - da) : (da - db_);
+    });
+
     container.innerHTML = `
       ${canEdit ? `<div style="margin-bottom:12px"><button class="btn btn--primary btn--sm" id="btn-add-service">+ ${t("service_add")}</button></div>` : ""}
       ${services.length === 0
         ? `<div class="empty-state"><div class="empty-state__icon">🔧</div><p>${t("no_data")}</p></div>`
-        : `<div class="service-list">${services.map(s => serviceItem(s)).join("")}</div>`
+        : `<div class="service-list">${services.map(s => serviceItem(s, vehicle, canEdit)).join("")}</div>`
       }
     `;
 
     if (canEdit) {
       document.getElementById("btn-add-service")?.addEventListener("click", () => openServiceForm(vehicle));
+
+      container.querySelectorAll(".btn-edit-service").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const s = services.find(x => x.id === btn.dataset.id);
+          if (s) openServiceForm(vehicle, s);
+        });
+      });
+      container.querySelectorAll(".btn-delete-service").forEach(btn => {
+        btn.addEventListener("click", () => confirmDeleteService(vehicle, btn.dataset.id));
+      });
+      container.querySelectorAll(".btn-service-taken").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const s = services.find(x => x.id === btn.dataset.id);
+          if (s) markServiceTaken(vehicle, s);
+        });
+      });
+      container.querySelectorAll(".btn-service-complete").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const s = services.find(x => x.id === btn.dataset.id);
+          if (s) openCompleteServiceModal(vehicle, s);
+        });
+      });
+      container.querySelectorAll(".btn-service-cancel").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const s = services.find(x => x.id === btn.dataset.id);
+          if (s) cancelService(vehicle, s);
+        });
+      });
     }
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
@@ -664,9 +728,48 @@ async function saveVehicle(vehicleId) {
   }
 }
 
-// ── BRISANJE VOZILA ───────────────────────────────────────────
-function confirmDeleteVehicle(vehicle) {
-  if (!confirm(t("confirm_delete"))) return;
+// ── ARHIVIRANJE / VRAĆANJE / TRAJNO BRISANJE VOZILA ───────────
+function archiveVehicle(vehicle) {
+  if (!confirm(t("vehicle_archive_confirm"))) return;
+  updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), {
+    archived: true,
+    archivedAt: serverTimestamp(),
+    archivedBy: S.user?.uid || null,
+  })
+    .then(() => {
+      vehicle.archived = true;
+      showToast(t("success"), "success");
+      const container = document.getElementById("content");
+      if (container) openVehicleDetail(vehicle.id);
+    })
+    .catch(e => showToast(`${t("error")}: ${e.message}`, "error"));
+}
+
+function unarchiveVehicle(vehicle) {
+  if (!confirm(t("vehicle_unarchive_confirm"))) return;
+  updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), {
+    archived: false,
+  })
+    .then(() => {
+      vehicle.archived = false;
+      showToast(t("success"), "success");
+      const container = document.getElementById("content");
+      if (container) openVehicleDetail(vehicle.id);
+    })
+    .catch(e => showToast(`${t("error")}: ${e.message}`, "error"));
+}
+
+// Trajno brisanje — samo za master_admin, samo dok je vozilo već arhivirano
+// (mora se prvo svesno arhivirati pre nego što se trajno obriše). Briše samo
+// dokument vozila; istorija (servisi/vožnje/zaduženja/gorivo) ostaje u bazi
+// kao osirotinjeni zapisi — to je korisnik svesno prihvatio.
+function confirmHardDeleteVehicle(vehicle) {
+  const typed = prompt(`${t("vehicle_hard_delete_confirm_prompt")}\n\n${vehicle.plate}`);
+  if (typed === null) return;
+  if (typed.trim().toUpperCase() !== (vehicle.plate || "").trim().toUpperCase()) {
+    showToast(t("vehicle_hard_delete_mismatch"), "error");
+    return;
+  }
   deleteDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id))
     .then(() => {
       showToast(t("success"), "success");
@@ -676,8 +779,10 @@ function confirmDeleteVehicle(vehicle) {
     .catch(e => showToast(`${t("error")}: ${e.message}`, "error"));
 }
 
-// ── SERVIS FORMA ──────────────────────────────────────────────
-async function openServiceForm(vehicle) {
+// ── SERVIS FORMA (dodavanje / editovanje) ────────────────────
+async function openServiceForm(vehicle, service = null) {
+  const isEdit = !!service;
+  const s = service || {};
   const servicers = await getServiceProviders();
 
   const bodyHTML = `
@@ -686,51 +791,62 @@ async function openServiceForm(vehicle) {
         <label class="form-label">${t("service_type")} *</label>
         <select id="sf-type" class="form-select">
           ${["regular","tech","tires","repair","other"].map(st =>
-            `<option value="${st}">${t("service_type_" + st)}</option>`
+            `<option value="${st}" ${s.serviceType === st ? "selected" : ""}>${t("service_type_" + st)}</option>`
           ).join("")}
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_date")} *</label>
-        <input id="sf-date" class="form-input" type="date" value="${new Date().toISOString().split("T")[0]}" />
+        <input id="sf-date" class="form-input" type="date"
+          value="${isEdit ? toDateInput(s.serviceDate) : new Date().toISOString().split("T")[0]}" />
       </div>
     </div>
+    ${!isEdit ? `
+    <div class="form-group form-group--checkbox">
+      <label class="form-checkbox-label">
+        <input id="sf-already-done" type="checkbox" />
+        ${t("service_already_done_label")}
+      </label>
+    </div>
+    ` : ""}
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("service_km")}</label>
-        <input id="sf-km" class="form-input" type="number" value="${vehicle.currentKm || ""}" />
+        <input id="sf-km" class="form-input" type="number" value="${isEdit ? (s.km ?? "") : (vehicle.currentKm || "")}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_cost")}</label>
-        <input id="sf-cost" class="form-input" type="number" />
+        <input id="sf-cost" class="form-input" type="number" value="${s.cost ?? ""}" />
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">${t("service_workshop")}</label>
       <select id="sf-workshop-select" class="form-select">
         <option value="">${t("service_workshop_select_ph")}</option>
-        ${servicers.map(sp => `<option value="${sp.id}">${sp.name}</option>`).join("")}
-        <option value="__other__">${t("service_workshop_other")}</option>
+        ${servicers.map(sp => `<option value="${sp.id}" ${s.servicerId === sp.id ? "selected" : ""}>${sp.name}</option>`).join("")}
+        <option value="__other__" ${!s.servicerId && s.workshop ? "selected" : ""}>${t("service_workshop_other")}</option>
       </select>
-      <input id="sf-workshop" class="form-input" type="text" style="margin-top:8px;display:none" placeholder="${t("service_workshop")}" />
+      <input id="sf-workshop" class="form-input" type="text" style="margin-top:8px;display:${!s.servicerId && s.workshop ? "" : "none"}"
+        placeholder="${t("service_workshop")}" value="${!s.servicerId && s.workshop ? s.workshop : ""}" />
     </div>
     <div class="form-group">
       <label class="form-label">${t("service_description")}</label>
-      <textarea id="sf-desc" class="form-textarea"></textarea>
+      <textarea id="sf-desc" class="form-textarea">${s.description || ""}</textarea>
     </div>
+    <div class="form-section-title" style="margin-top:4px">${t("service_completion_section")}</div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">${t("service_next_date")}</label>
-        <input id="sf-nextDate" class="form-input" type="date" />
+        <label class="form-label">${t("service_end_date")}</label>
+        <input id="sf-endDate" class="form-input" type="date" value="${toDateInput(s.endDate)}" />
       </div>
       <div class="form-group">
-        <label class="form-label">${t("service_next_km")}</label>
-        <input id="sf-nextKm" class="form-input" type="number" />
+        <label class="form-label">${t("service_end_km")}</label>
+        <input id="sf-endKm" class="form-input" type="number" value="${s.endKm ?? ""}" />
       </div>
     </div>
   `;
 
-  openModal(t("service_add"), bodyHTML, async () => {
+  openModal(isEdit ? `${t("edit")}: ${t("service_type_" + s.serviceType) || s.serviceType}` : t("service_add"), bodyHTML, async () => {
     const dateVal = document.getElementById("sf-date")?.value;
     if (!dateVal) return;
     try {
@@ -745,23 +861,39 @@ async function openServiceForm(vehicle) {
         servicerId = selectedId;
       }
 
-      await addDoc(collection(db, "companies", S.companyId, "services"), {
-        vehicleId:   vehicle.id,
+      const data = {
+        vehicleId:    vehicle.id,
         vehiclePlate: vehicle.plate,
-        serviceType: document.getElementById("sf-type")?.value,
-        serviceDate: new Date(dateVal),
-        km:          numOrNull("sf-km"),
-        cost:        numOrNull("sf-cost"),
+        serviceType:  document.getElementById("sf-type")?.value,
+        serviceDate:  new Date(dateVal),
+        km:           numOrNull("sf-km"),
+        cost:         numOrNull("sf-cost"),
         workshop,
         servicerId,
-        description: document.getElementById("sf-desc")?.value.trim() || null,
-        nextDate:    dateOrNull("sf-nextDate"),
-        nextKm:      numOrNull("sf-nextKm"),
-        createdBy:   S.user.uid,
-        createdAt:   serverTimestamp(),
-      });
+        description:  document.getElementById("sf-desc")?.value.trim() || null,
+        endDate:      dateOrNull("sf-endDate"),
+        endKm:        numOrNull("sf-endKm"),
+      };
+
+      if (isEdit) {
+        await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
+          ...data, updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Novi zapis: status zavisi isključivo od checkbox-a "servis je već
+        // obavljen" — ne od datuma. Ako korisnik ne čekira, zapis ostaje
+        // "planned" (čeka potvrdu da je vozilo odvezeno) čak i ako je datum
+        // već u prošlosti — tada će se prikazati kao "propušteno" (overdue)
+        // sve dok neko ručno ne potvrdi ili otkaže.
+        const alreadyDone = document.getElementById("sf-already-done")?.checked || false;
+        data.status = alreadyDone ? SERVICE_STATUS.DONE : SERVICE_STATUS.PLANNED;
+
+        await addDoc(collection(db, "companies", S.companyId, "services"), {
+          ...data, createdBy: S.user.uid, createdAt: serverTimestamp(),
+        });
+      }
+
       showToast(t("success"), "success");
-      // reload service tab
       const content = document.getElementById("vehicle-tab-content");
       if (content) loadServiceTab(content, vehicle);
     } catch (e) {
@@ -783,6 +915,118 @@ async function openServiceForm(vehicle) {
   });
 }
 
+// ── VOZILO ODVEZENO U SERVIS ──────────────────────────────────
+async function markServiceTaken(vehicle, service) {
+  if (!confirm(t("service_taken_confirm"))) return;
+  try {
+    await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
+      status: SERVICE_STATUS.IN_PROGRESS,
+      previousVehicleStatus: vehicle.status || "active",
+      takenAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), {
+      status: "service", updatedAt: serverTimestamp(),
+    });
+    vehicle.status = "service"; // isti objekat referenciran i u allVehicles — ažurira i listu
+    refreshVehicleHeaderBadge(vehicle);
+    showToast(t("success"), "success");
+    const content = document.getElementById("vehicle-tab-content");
+    if (content) loadServiceTab(content, vehicle);
+  } catch (e) {
+    showToast(`${t("error")}: ${e.message}`, "error");
+  }
+}
+
+// ── SERVIS ZAVRŠEN ────────────────────────────────────────────
+function openCompleteServiceModal(vehicle, service) {
+  const bodyHTML = `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">${t("service_end_date")}</label>
+        <input id="cs-endDate" class="form-input" type="date" value="${new Date().toISOString().split("T")[0]}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("service_end_km")}</label>
+        <input id="cs-endKm" class="form-input" type="number" value="${vehicle.currentKm || ""}" />
+      </div>
+    </div>
+  `;
+
+  openModal(t("service_complete_title"), bodyHTML, async () => {
+    try {
+      const endKm = numOrNull("cs-endKm");
+      await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
+        status: SERVICE_STATUS.DONE,
+        endDate: dateOrNull("cs-endDate"),
+        endKm,
+      });
+      const vehicleUpdate = {
+        status: service.previousVehicleStatus || "active",
+        updatedAt: serverTimestamp(),
+      };
+      if (endKm && endKm > (vehicle.currentKm || 0)) vehicleUpdate.currentKm = endKm;
+      await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), vehicleUpdate);
+
+      vehicle.status = vehicleUpdate.status;
+      if (vehicleUpdate.currentKm) vehicle.currentKm = vehicleUpdate.currentKm;
+      refreshVehicleHeaderBadge(vehicle);
+      showToast(t("success"), "success");
+      const content = document.getElementById("vehicle-tab-content");
+      if (content) loadServiceTab(content, vehicle);
+    } catch (e) {
+      showToast(`${t("error")}: ${e.message}`, "error");
+    }
+  });
+}
+
+// ── OTKAZIVANJE SERVISA ───────────────────────────────────────
+async function cancelService(vehicle, service) {
+  if (!confirm(t("service_cancel_confirm"))) return;
+  try {
+    await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
+      status: SERVICE_STATUS.CANCELLED,
+    });
+
+    // Ako je servis bio "u toku" (vozilo već odvezeno) — otkazivanje vraća
+    // vozilo na status koji je imalo pre odlaska na servis.
+    if (effectiveServiceStatus(service) === SERVICE_STATUS.IN_PROGRESS && service.previousVehicleStatus) {
+      await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), {
+        status: service.previousVehicleStatus, updatedAt: serverTimestamp(),
+      });
+      vehicle.status = service.previousVehicleStatus;
+      refreshVehicleHeaderBadge(vehicle);
+    }
+
+    showToast(t("success"), "success");
+    const content = document.getElementById("vehicle-tab-content");
+    if (content) loadServiceTab(content, vehicle);
+  } catch (e) {
+    showToast(`${t("error")}: ${e.message}`, "error");
+  }
+}
+
+// ── BRISANJE SERVISNOG ZAPISA ─────────────────────────────────
+async function confirmDeleteService(vehicle, serviceId) {
+  if (!confirm(t("confirm_delete"))) return;
+  try {
+    await deleteDoc(doc(db, "companies", S.companyId, "services", serviceId));
+    showToast(t("success"), "success");
+    const content = document.getElementById("vehicle-tab-content");
+    if (content) loadServiceTab(content, vehicle);
+  } catch (e) {
+    showToast(`${t("error")}: ${e.message}`, "error");
+  }
+}
+
+// ── AŽURIRAJ BADGE U HEADERU DETALJA (bez punog re-rendera) ───
+function refreshVehicleHeaderBadge(vehicle) {
+  const badge = document.querySelector(".detail-header__title .badge");
+  if (badge) {
+    badge.className = `badge badge--${vehicle.status || "active"}`;
+    badge.textContent = t("vehicle_status_" + (vehicle.status || "active"));
+  }
+}
+
 // ── HELPERS ───────────────────────────────────────────────────
 function detailTable(rows) {
   return `
@@ -797,15 +1041,53 @@ function detailTable(rows) {
   `;
 }
 
-// ── ZAKAZANI SERVISI TAB je uklonjen ──────────────────────────
-// (nikad nije bio povezan ni sa jednim tab dugmetom u UI — mrtav kod)
+function serviceItem(s, vehicle, canEdit) {
+  const status = effectiveServiceStatus(s);
+  const today = isServiceToday(s);
+  const overdue = isServiceOverdue(s);
 
+  const cancelled = status === SERVICE_STATUS.CANCELLED;
 
-function serviceItem(s) {
+  const statusBadge = cancelled
+    ? `<span class="badge badge--cancelled">${t("service_status_cancelled")}</span>`
+    : overdue
+      ? `<span class="badge badge--broken">⚠️ ${t("service_status_overdue")} — ${t("service_overdue_days", { n: overdueDays(s) })}</span>`
+      : status === SERVICE_STATUS.PLANNED
+        ? `<span class="badge badge--info">${t("service_status_planned")}</span>`
+        : status === SERVICE_STATUS.IN_PROGRESS
+          ? `<span class="badge badge--service">${t("service_status_in_progress")}</span>`
+          : "";
+
+  const todayBadge = today && status !== SERVICE_STATUS.DONE && !cancelled
+    ? `<span class="today-badge">${t("dashboard_today")}</span>`
+    : "";
+
+  let actions = "";
+  if (canEdit) {
+    // Dugmad za potvrdu/otkazivanje ostaju dostupna i kad je servis propušten
+    // (overdue) — administrator može da klikne i sutra i kasnije, dugmad nikad
+    // sama od sebe ne nestaju dok se ne klikne ili zapis ne bude otkazan/obrisan.
+    if (status === SERVICE_STATUS.PLANNED) {
+      actions += `<button class="btn btn--primary btn--sm btn-service-taken" data-id="${s.id}">${t("service_taken_btn")}</button>`;
+      actions += `<button class="btn btn--secondary btn--sm btn-service-cancel" data-id="${s.id}">${t("service_cancel_btn")}</button>`;
+    } else if (status === SERVICE_STATUS.IN_PROGRESS) {
+      actions += `<button class="btn btn--primary btn--sm btn-service-complete" data-id="${s.id}">${t("service_complete_btn")}</button>`;
+      actions += `<button class="btn btn--secondary btn--sm btn-service-cancel" data-id="${s.id}">${t("service_cancel_btn")}</button>`;
+    }
+    if (!cancelled) {
+      actions += `<button class="btn btn--ghost btn--sm btn-edit-service" data-id="${s.id}" title="${t("edit")}">✏️</button>`;
+    }
+    actions += `<button class="btn btn--ghost btn--sm btn-delete-service" data-id="${s.id}" title="${t("delete")}">🗑️</button>`;
+  }
+
   return `
-    <div class="service-item">
+    <div class="service-item ${cancelled ? "service-item--cancelled" : overdue ? "service-item--overdue" : today && status !== SERVICE_STATUS.DONE ? "service-item--today" : ""}">
       <div class="service-item__header">
-        <span class="badge badge--info">${t("service_type_" + s.serviceType) || s.serviceType}</span>
+        <div class="service-item__badges">
+          <span class="badge badge--info">${t("service_type_" + s.serviceType) || s.serviceType}</span>
+          ${statusBadge}
+          ${todayBadge}
+        </div>
         <span class="service-item__date">${formatDate(s.serviceDate)}</span>
       </div>
       ${s.description ? `<div class="service-item__desc">${s.description}</div>` : ""}
@@ -814,7 +1096,8 @@ function serviceItem(s) {
         ${s.cost ? `<span>💰 ${s.cost.toLocaleString()} RSD</span>` : ""}
         ${s.workshop ? `<span>🔧 ${s.workshop}</span>` : ""}
       </div>
-      ${s.nextDate ? `<div class="service-item__next">${t("vehicle_service_next")}: ${formatDate(s.nextDate)}${s.nextKm ? " / " + s.nextKm.toLocaleString() + " km" : ""}</div>` : ""}
+      ${s.endDate || s.endKm ? `<div class="service-item__next">${t("vehicle_service_end")}: ${formatDate(s.endDate)}${s.endKm ? " / " + s.endKm.toLocaleString() + " km" : ""}</div>` : ""}
+      ${actions ? `<div class="service-item__actions">${actions}</div>` : ""}
     </div>
   `;
 }
