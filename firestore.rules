@@ -56,7 +56,11 @@ service cloud.firestore {
 
     // ── KOMPANIJE ────────────────────────────────────────────
     match /companies/{companyId} {
-      allow read: if isCompanyMember(companyId);
+      // Čitanje dozvoljeno svakom prijavljenom korisniku (ne samo članovima firme),
+      // jer je PIB/naziv/adresa javni podatak i ova provera je neophodna
+      // pri self-registraciji (provera da li firma već postoji po PIB-u),
+      // pre nego što korisnik uopšte ima users/{uid} dokument.
+      allow read: if isAuth();
       // Fleet admin može kreirati firmu (self-registration)
       allow create: if isAuth();
       allow update: if isMasterAdmin() || isFleetAdmin(companyId);
