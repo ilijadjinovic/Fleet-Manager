@@ -11,6 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t } from "./i18n.js";
 import { S, showToast } from "./app.js";
+import { isVehicleRegistered } from "./vehicles.js";
 import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js";
 
 // ── FONT ZA SRPSKA SLOVA (š đ č ć ž) ───────────────────────────
@@ -107,6 +108,9 @@ export async function renderReports(container) {
       <button class="btn btn--primary" id="btn-report-vehicles">
         📄 ${t("report_download_pdf")} — Vozila
       </button>
+      <button class="btn btn--secondary" id="btn-report-vehicles-table" style="margin-top:8px">
+        📊 ${t("report_download_table_pdf")}
+      </button>
     </div>
 
     <!-- IZVEŠTAJ PO VOZAČU -->
@@ -143,6 +147,7 @@ export async function renderReports(container) {
   bindSelectAll("chk-drivers-all",  "chk-driver");
 
   document.getElementById("btn-report-vehicles")?.addEventListener("click", () => generateVehicleReport(vehicles));
+  document.getElementById("btn-report-vehicles-table")?.addEventListener("click", () => generateVehiclesTableReport(vehicles));
   document.getElementById("btn-report-drivers")?.addEventListener("click",  () => generateDriverReport(drivers));
 }
 
@@ -229,6 +234,106 @@ async function generateVehicleReport(allVehicles) {
     setStatus("");
     showToast(`${t("error")}: ${e.message}`, "error");
   }
+}
+
+// ── TABELARNI (SPREADSHEET) PDF IZVEŠTAJ VOZILA ────────────────
+// Za razliku od generateVehicleReport (jedno vozilo po strani, sa
+// detaljima/servisima/troškovima), ovo je pregledna tabela svih
+// izabranih vozila — kao Excel tabela — jedan red po vozilu.
+async function generateVehiclesTableReport(allVehicles) {
+  const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
+  if (selectedIds.length === 0) { showToast("Izaberite bar jedno vozilo", "warning"); return; }
+
+  setStatus("Učitavanje podataka...");
+
+  try {
+    const JsPDF   = await getJsPDF();
+    const company = await loadCompany();
+    const vehicles = allVehicles.filter(v => selectedIds.includes(v.id));
+
+    const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    registerReportFont(pdf);
+
+    let y = drawTableReportHeader(pdf, company);
+
+    const cols = [
+      [t("report_table_col_vehicle"), 38],
+      [t("vehicle_plate"),            22],
+      ["VIN",                         32],
+      [t("vehicle_year"),             12],
+      [t("vehicle_current_km"),       20],
+      [t("vehicle_reg_expiry"),       22],
+      [t("report_table_col_driver"),  34],
+    ];
+
+    y = drawTableHeader(pdf, cols, y);
+    vehicles.forEach((v, i) => {
+      y = drawTableRow(pdf, cols, [
+        `${v.brand || ""} ${v.model || ""}`.trim() || "—",
+        v.plate || "—",
+        v.vin || "—",
+        v.year || "—",
+        v.currentKm ? v.currentKm.toLocaleString() : "—",
+        v.regExpiry ? formatDateSr(v.regExpiry) : "—",
+        v.assignedDriverName || "—",
+      ], y, i % 2 === 0);
+    });
+
+    drawPageNumber(pdf);
+
+    const fileName = `fleet-vozila-tabelarni-${formatDateFile(new Date())}.pdf`;
+    pdf.save(fileName);
+    setStatus("");
+    showToast("PDF je preuzet", "success");
+
+  } catch (e) {
+    console.error("Report error:", e);
+    setStatus("");
+    showToast(`${t("error")}: ${e.message}`, "error");
+  }
+}
+
+// Header za tabelarni izveštaj — bez perioda (ovo je trenutni presek
+// stanja voznog parka, ne izveštaj za vremenski period).
+function drawTableReportHeader(pdf, company) {
+  let y = M;
+
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(16);
+  pdf.setTextColor(26, 39, 68);
+  pdf.text(company.name || "Fleet Manager", M, y);
+  y += 7;
+
+  pdf.setFont(REPORT_FONT, "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(100);
+  const details = [
+    company.pib     ? `PIB: ${company.pib}` : null,
+    company.address ? company.address       : null,
+  ].filter(Boolean);
+  if (details.length > 0) {
+    pdf.text(details.join("   |   "), M, y);
+    y += 5;
+  }
+
+  pdf.setDrawColor(61, 126, 255);
+  pdf.setLineWidth(0.5);
+  pdf.line(M, y, M + PW, y);
+  y += 6;
+
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(11);
+  pdf.setTextColor(26, 39, 68);
+  pdf.text(t("report_table_pdf_title"), M, y);
+  y += 6;
+
+  pdf.setFont(REPORT_FONT, "normal");
+  pdf.setFontSize(8.5);
+  pdf.setTextColor(120);
+  pdf.text(`Generisano: ${formatDateSr(new Date())}`, M, y);
+  y += 6;
+
+  return y + 2;
 }
 
 // ── IZVEŠTAJ PO VOZAČIMA ──────────────────────────────────────
