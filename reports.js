@@ -111,6 +111,9 @@ export async function renderReports(container) {
       <button class="btn btn--secondary" id="btn-report-vehicles-table" style="margin-top:8px">
         📊 ${t("report_download_table_pdf")}
       </button>
+      <button class="btn btn--secondary" id="btn-report-vehicles-csv" style="margin-top:8px">
+        📊 ${t("report_download_csv")}
+      </button>
     </div>
 
     <!-- IZVEŠTAJ PO VOZAČU -->
@@ -148,6 +151,7 @@ export async function renderReports(container) {
 
   document.getElementById("btn-report-vehicles")?.addEventListener("click", () => generateVehicleReport(vehicles));
   document.getElementById("btn-report-vehicles-table")?.addEventListener("click", () => generateVehiclesTableReport(vehicles));
+  document.getElementById("btn-report-vehicles-csv")?.addEventListener("click",   () => exportVehiclesCSV(vehicles));
   document.getElementById("btn-report-drivers")?.addEventListener("click",  () => generateDriverReport(drivers));
 }
 
@@ -251,35 +255,38 @@ async function generateVehiclesTableReport(allVehicles) {
     const company = await loadCompany();
     const vehicles = allVehicles.filter(v => selectedIds.includes(v.id));
 
-    const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    // Landscape — više horizontalnog prostora za 7 kolona
+    const pdf = new JsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     registerReportFont(pdf);
 
-    let y = drawTableReportHeader(pdf, company);
+    let y = drawTableReportHeader(pdf, company, PW_L);
 
+    // Kratke, namenske labele kolona (ne pune labele sa kartice vozila —
+    // te su predugačke za usku kolonu i "gomilaju" header).
     const cols = [
-      [t("report_table_col_vehicle"), 38],
-      [t("vehicle_plate"),            22],
-      ["VIN",                         32],
-      [t("vehicle_year"),             12],
-      [t("vehicle_current_km"),       20],
-      [t("vehicle_reg_expiry"),       22],
-      [t("report_table_col_driver"),  34],
+      [t("report_table_col_vehicle"), 55],
+      [t("report_table_col_plate"),   25],
+      [t("report_table_col_reg"),     28],
+      [t("report_table_col_vin"),     45],
+      [t("report_table_col_year"),    15],
+      [t("report_table_col_km"),      25],
+      [t("report_table_col_driver"),  50],
     ];
 
-    y = drawTableHeader(pdf, cols, y);
+    y = drawTableHeaderL(pdf, cols, y);
     vehicles.forEach((v, i) => {
-      y = drawTableRow(pdf, cols, [
+      y = drawTableRowWrapped(pdf, cols, [
         `${v.brand || ""} ${v.model || ""}`.trim() || "—",
         v.plate || "—",
+        v.regExpiry ? formatDateSr(v.regExpiry) : "—",
         v.vin || "—",
         v.year || "—",
         v.currentKm ? v.currentKm.toLocaleString() : "—",
-        v.regExpiry ? formatDateSr(v.regExpiry) : "—",
         v.assignedDriverName || "—",
       ], y, i % 2 === 0);
     });
 
-    drawPageNumber(pdf);
+    drawPageNumberL(pdf);
 
     const fileName = `fleet-vozila-tabelarni-${formatDateFile(new Date())}.pdf`;
     pdf.save(fileName);
@@ -293,9 +300,61 @@ async function generateVehiclesTableReport(allVehicles) {
   }
 }
 
+// ── CSV EXPORT (Excel) — ista selekcija vozila kao PDF iznad ──
+// Odvojene kolone Marka/Model (umesto spojenog "Vozilo") i km kao čist
+// broj (bez teksta "km") — lakše za dalje sortiranje/filtriranje/formule
+// u Excel-u. ";" kao separator i BOM na početku — Excel u sr-RS regionu
+// podrazumeva zapetu kao decimalni separator, pa mu je ";" ispravan
+// separator kolona, a BOM obezbeđuje da se š/đ/č/ć/ž ispravno prikažu.
+function exportVehiclesCSV(allVehicles) {
+  const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
+  if (selectedIds.length === 0) { showToast("Izaberite bar jedno vozilo", "warning"); return; }
+
+  const vehicles = allVehicles.filter(v => selectedIds.includes(v.id));
+
+  const headers = [
+    t("vehicle_brand"), t("vehicle_model"), t("report_table_col_plate"),
+    t("report_table_col_reg"), t("report_table_col_vin"), t("vehicle_year"),
+    t("vehicle_current_km"), t("report_table_col_driver"),
+  ];
+
+  const rows = vehicles.map(v => [
+    v.brand || "",
+    v.model || "",
+    v.plate || "",
+    v.regExpiry ? formatDateSr(v.regExpiry) : "",
+    v.vin || "",
+    v.year || "",
+    v.currentKm ?? "",
+    v.assignedDriverName || "",
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(csvEscape).join(";"))
+    .join("\r\n");
+
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `fleet-vozila-${formatDateFile(new Date())}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  showToast("CSV je preuzet", "success");
+}
+
+function csvEscape(val) {
+  const s = String(val ?? "");
+  if (s.includes(";") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
 // Header za tabelarni izveštaj — bez perioda (ovo je trenutni presek
 // stanja voznog parka, ne izveštaj za vremenski period).
-function drawTableReportHeader(pdf, company) {
+function drawTableReportHeader(pdf, company, pw = PW) {
   let y = M;
 
   pdf.setFont(REPORT_FONT, "bold");
@@ -318,7 +377,7 @@ function drawTableReportHeader(pdf, company) {
 
   pdf.setDrawColor(61, 126, 255);
   pdf.setLineWidth(0.5);
-  pdf.line(M, y, M + PW, y);
+  pdf.line(M, y, M + pw, y);
   y += 6;
 
   pdf.setFont(REPORT_FONT, "bold");
@@ -401,6 +460,11 @@ async function generateDriverReport(allDrivers) {
 const M  = 15;   // margin
 const PW = 180;  // page width (A4 210 - 2*15)
 const PH = 277;  // page height usable
+
+// Landscape dimenzije — koristi ih samo tabelarni (spreadsheet) izveštaj,
+// jer mu treba više horizontalnog prostora za 7 kolona.
+const PW_L = 267;  // page width  (A4 landscape 297 - 2*15)
+const PH_L = 190;  // page height usable (A4 landscape 210 - 20)
 
 function drawHeader(pdf, company, from, to) {
   let y = M;
@@ -525,6 +589,77 @@ function drawPageNumber(pdf) {
   pdf.setFontSize(8);
   pdf.setTextColor(150);
   pdf.text(`Strana ${pageCount}`, M + PW - 10, PH + 10, { align: "right" });
+}
+
+// ── LANDSCAPE VARIJANTE (koristi ih samo tabelarni izveštaj) ──
+function checkPageBreakL(pdf, y, needed = 10) {
+  if (y + needed > PH_L) {
+    pdf.addPage();
+    drawPageNumberL(pdf);
+    return M + 10;
+  }
+  return y;
+}
+
+function drawPageNumberL(pdf) {
+  const pageCount = pdf.internal.getNumberOfPages();
+  pdf.setPage(pageCount);
+  pdf.setFont(REPORT_FONT, "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(150);
+  pdf.text(`Strana ${pageCount}`, M + PW_L - 10, PH_L + 10, { align: "right" });
+}
+
+function drawTableHeaderL(pdf, cols, y) {
+  y = checkPageBreakL(pdf, y, 8);
+  pdf.setFillColor(26, 39, 68);
+  pdf.rect(M, y - 4, PW_L, 7, "F");
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(8);
+  pdf.setTextColor(255);
+  let x = M + 2;
+  cols.forEach(([label, width]) => {
+    pdf.text(label, x, y);
+    x += width;
+  });
+  return y + 6;
+}
+
+// Red tabele koji prelama tekst po celim rečima (pdf.splitTextToSize),
+// umesto da seče na fiksnom broju karaktera — potrebno za duge nazive
+// vozila/vozača koji ne staju u jednu liniju. Visina reda je promenljiva:
+// raste sa brojem linija koje zahteva najduži tekst u tom redu.
+function drawTableRowWrapped(pdf, cols, values, y, shade = false) {
+  const lineH = 4.2;
+
+  pdf.setFont(REPORT_FONT, "normal");
+  pdf.setFontSize(8);
+  const wrapped = cols.map(([, width], i) => {
+    const val = String(values[i] ?? "—");
+    return pdf.splitTextToSize(val, width - 3);
+  });
+  const maxLines  = Math.max(1, ...wrapped.map(w => w.length));
+  const rowHeight = maxLines * lineH + 2;
+
+  y = checkPageBreakL(pdf, y, rowHeight + 2);
+
+  if (shade) {
+    pdf.setFillColor(248, 250, 255);
+    pdf.rect(M, y - 4, PW_L, rowHeight, "F");
+  }
+
+  pdf.setTextColor(40);
+  let x = M + 2;
+  cols.forEach(([, width], i) => {
+    let ly = y;
+    wrapped[i].forEach(line => {
+      pdf.text(line, x, ly);
+      ly += lineH;
+    });
+    x += width;
+  });
+
+  return y + rowHeight + 2;
 }
 
 // ── VOZILO SEKCIJE ────────────────────────────────────────────
