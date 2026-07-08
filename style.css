@@ -467,6 +467,7 @@ body {
 .stat-card--service::before{ background: var(--color-warning); }
 .stat-card--unreg::before  { background: var(--color-danger); }
 .stat-card--broken::before  { background: #f97316; }
+.stat-card--inactive::before{ background: #94a3b8; }
 .stat-card--assigned::before{ background: #8b5cf6; }
 .stat-card--archived::before{ background: #64748b; }
 
