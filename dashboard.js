@@ -103,6 +103,7 @@ async function loadDashboardData() {
     const inService = activeVehicles.filter(v => v.status === "service").length;
     const unregistered = activeVehicles.filter(v => isVehicleRegistered(v) === false).length;
     const broken = activeVehicles.filter(v => v.status === "broken").length;
+    const inactive = activeVehicles.filter(v => v.status === "inactive").length;
 
     // Nadolazeće registracije (u sledećih 30 dana)
     const today = new Date();
@@ -196,7 +197,7 @@ async function loadDashboardData() {
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount
+        total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount
       })}
     `;
 
@@ -211,7 +212,7 @@ async function loadDashboardData() {
   }
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // lokalna ponoć
 
@@ -237,6 +238,12 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
       <div class="stat-card stat-card--broken" data-nav="vehicles" data-filter="broken">
         <div class="stat-card__value">${broken}</div>
         <div class="stat-card__label">${t("vehicle_status_broken")}</div>
+      </div>
+      ` : ""}
+      ${inactive > 0 ? `
+      <div class="stat-card stat-card--inactive" data-nav="vehicles" data-filter="inactive">
+        <div class="stat-card__value">${inactive}</div>
+        <div class="stat-card__label">${t("vehicle_status_inactive")}</div>
       </div>
       ` : ""}
       ${archivedCount > 0 ? `
