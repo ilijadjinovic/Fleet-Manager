@@ -102,15 +102,16 @@ export async function renderReports(container) {
       <div class="form-group">
         <label class="form-label">${t("report_select_vehicles")}</label>
         <div class="multi-select" id="vehicle-select">
-          <label class="multi-select__all">
-            <input type="checkbox" id="chk-vehicles-all" checked />
-            ${t("report_all")} (${vehicles.length})
-          </label>
-          <div class="multi-select__groups" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">
+          <div class="multi-select__all" style="flex-wrap:wrap;gap:16px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="chk-vehicles-all" checked />
+              ${t("report_all")} (${vehicles.length})
+            </label>
+            <span style="width:1px;height:16px;background:var(--color-border)"></span>
             ${VEHICLE_STATUS_GROUPS.map(g => `
-              <label class="multi-select__item" style="width:auto;display:inline-flex;gap:6px;padding:4px 10px">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
                 <input type="checkbox" class="chk-status-group" data-group="${g}" />
-                <span>${t("vehicle_status_" + g)}</span>
+                ${t("vehicle_status_" + g)}
               </label>
             `).join("")}
           </div>
