@@ -216,6 +216,11 @@ function vehicleCard(v) {
           <span>👤</span> ${v.assignedDriverName}
         </div>
       ` : ""}
+      ${v.notes ? `
+        <div class="vehicle-card__notes">
+          <span>📝</span> ${v.notes}
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -247,6 +252,7 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech") {
     { key: "finance",     label: t("vehicle_tab_finance") },
     { key: "service",     label: t("vehicle_tab_service") },
     { key: "assignments", label: t("vehicle_tab_assignments") },
+    { key: "notes",       label: t("vehicle_tab_notes") },
   ];
 
   const isMasterAdmin = S.profile?.role === "master_admin";
@@ -313,6 +319,7 @@ function renderVehicleTab(tab, vehicle) {
     case "finance":  content.innerHTML = renderFinanceTab(vehicle); break;
     case "service":    loadServiceTab(content, vehicle); break;
     case "assignments": loadAssignmentsTab(content, vehicle); break;
+    case "notes":    content.innerHTML = renderNotesTab(vehicle); break;
   }
 }
 
@@ -349,6 +356,13 @@ function renderFinanceTab(v) {
     [t("vehicle_purchase_value"), v.purchaseValue ? Number(v.purchaseValue).toLocaleString() + " RSD" : null],
   ];
   return detailTable(rows);
+}
+
+function renderNotesTab(v) {
+  if (!v.notes) {
+    return `<div class="empty-state">${t("no_data")}</div>`;
+  }
+  return `<div class="vehicle-notes-box">${v.notes}</div>`;
 }
 
 async function loadServiceTab(container, vehicle) {
