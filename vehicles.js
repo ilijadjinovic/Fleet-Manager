@@ -84,6 +84,7 @@ export async function renderVehicles(container, initialFilter = null) {
         <button class="chip ${currentFilter === 'active' ? 'chip--active' : ''}" data-filter="active">${t("vehicle_status_active")}</button>
         <button class="chip ${currentFilter === 'service' ? 'chip--active' : ''}" data-filter="service">${t("vehicle_status_service")}</button>
         <button class="chip ${currentFilter === 'broken' ? 'chip--active' : ''}" data-filter="broken">${t("vehicle_status_broken")}</button>
+        <button class="chip ${currentFilter === 'inactive' ? 'chip--active' : ''}" data-filter="inactive">${t("vehicle_status_inactive")}</button>
         <button class="chip ${currentFilter === 'unregistered' ? 'chip--active' : ''}" data-filter="unregistered">${t("vehicle_status_unregistered")}</button>
         <button class="chip ${currentFilter === 'archived' ? 'chip--active' : ''}" data-filter="archived">${t("vehicle_status_archived")}</button>
       </div>
