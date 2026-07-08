@@ -73,13 +73,13 @@ export async function renderReports(container) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">${t("report_date_from")}</label>
-          <input id="rep-from" class="form-input" type="date"
-            value="${firstDayOfMonth()}" />
+          <input id="rep-from" class="form-input" type="text" inputmode="numeric" maxlength="10"
+            placeholder="dd/mm/gggg" value="${toDMY(firstDayOfMonth())}" />
         </div>
         <div class="form-group">
           <label class="form-label">${t("report_date_to")}</label>
-          <input id="rep-to" class="form-input" type="date"
-            value="${today()}" />
+          <input id="rep-to" class="form-input" type="text" inputmode="numeric" maxlength="10"
+            placeholder="dd/mm/gggg" value="${toDMY(today())}" />
         </div>
       </div>
     </div>
@@ -153,6 +153,9 @@ export async function renderReports(container) {
   document.getElementById("btn-report-vehicles-table")?.addEventListener("click", () => generateVehiclesTableReport(vehicles));
   document.getElementById("btn-report-vehicles-csv")?.addEventListener("click",   () => exportVehiclesCSV(vehicles));
   document.getElementById("btn-report-drivers")?.addEventListener("click",  () => generateDriverReport(drivers));
+
+  attachDateMask("rep-from");
+  attachDateMask("rep-to");
 }
 
 // ── BIND SELECT ALL ───────────────────────────────────────────
@@ -181,8 +184,9 @@ async function generateVehicleReport(allVehicles) {
   const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
   if (selectedIds.length === 0) { showToast("Izaberite bar jedno vozilo", "warning"); return; }
 
-  const from = new Date(document.getElementById("rep-from")?.value);
-  const to   = new Date(document.getElementById("rep-to")?.value);
+  const from = parseDMY(document.getElementById("rep-from")?.value);
+  const to   = parseDMY(document.getElementById("rep-to")?.value);
+  if (!from || !to) { showToast(t("required_field"), "warning"); return; }
   to.setHours(23, 59, 59);
 
   setStatus("Učitavanje podataka...");
@@ -400,8 +404,9 @@ async function generateDriverReport(allDrivers) {
   const selectedIds = [...document.querySelectorAll(".chk-driver:checked")].map(c => c.value);
   if (selectedIds.length === 0) { showToast("Izaberite bar jednog vozača", "warning"); return; }
 
-  const from = new Date(document.getElementById("rep-from")?.value);
-  const to   = new Date(document.getElementById("rep-to")?.value);
+  const from = parseDMY(document.getElementById("rep-from")?.value);
+  const to   = parseDMY(document.getElementById("rep-to")?.value);
+  if (!from || !to) { showToast(t("required_field"), "warning"); return; }
   to.setHours(23, 59, 59);
 
   setStatus("Učitavanje podataka...");
@@ -1001,4 +1006,39 @@ function firstDayOfMonth() {
 
 function today() {
   return new Date().toISOString().split("T")[0];
+}
+
+// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
+// <input type="date"> prikazuje kalendar u formatu koji zavisi od
+// jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
+// pa koristimo tekstualno polje sa maskom umesto toga.
+function toDMY(val) {
+  if (!val) return "";
+  const d = val.toDate ? val.toDate() : new Date(val);
+  if (isNaN(d)) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+function parseDMY(str) {
+  if (!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d;
+}
+
+function attachDateMask(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("input", () => {
+    const digits = el.value.replace(/\D/g, "").slice(0, 8);
+    let out = digits;
+    if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    el.value = out;
+  });
 }

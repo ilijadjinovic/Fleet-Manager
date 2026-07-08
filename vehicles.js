@@ -484,7 +484,8 @@ function openVehicleForm(vehicle = null) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_first_reg")}</label>
-        <input id="f-firstRegDate" class="form-input" type="date" value="${toDateInput(v.firstRegDate)}" />
+        <input id="f-firstRegDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${toDMY(v.firstRegDate)}" />
       </div>
     </div>
     <div class="form-row">
@@ -559,12 +560,14 @@ function openVehicleForm(vehicle = null) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("vehicle_reg_expiry")}</label>
-        <input id="f-regExpiry" class="form-input" type="date" value="${toDateInput(v.regExpiry)}" />
+        <input id="f-regExpiry" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${toDMY(v.regExpiry)}" />
         <div id="f-reg-badge" style="margin-top:6px">${regBadge(v)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_insurance_expiry")}</label>
-        <input id="f-insuranceExpiry" class="form-input" type="date" value="${toDateInput(v.insuranceExpiry)}" />
+        <input id="f-insuranceExpiry" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${toDMY(v.insuranceExpiry)}" />
       </div>
     </div>
     <div class="form-row">
@@ -582,7 +585,8 @@ function openVehicleForm(vehicle = null) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("vehicle_purchase_date")}</label>
-        <input id="f-purchaseDate" class="form-input" type="date" value="${toDateInput(v.purchaseDate)}" />
+        <input id="f-purchaseDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${toDMY(v.purchaseDate)}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_purchase_type")}</label>
@@ -608,12 +612,14 @@ function openVehicleForm(vehicle = null) {
 
   // Datum isteka registracije se kod nas poklapa sa datumom isteka osiguranja —
   // automatski se prepisuje, ali ostaje editabilno po potrebi.
+  ["f-firstRegDate", "f-regExpiry", "f-insuranceExpiry", "f-purchaseDate"].forEach(attachDateMask);
+
   document.getElementById("f-regExpiry")?.addEventListener("change", (e) => {
     const insuranceInput = document.getElementById("f-insuranceExpiry");
     if (insuranceInput) insuranceInput.value = e.target.value;
 
     const badgeDiv = document.getElementById("f-reg-badge");
-    if (badgeDiv) badgeDiv.innerHTML = regBadge({ regExpiry: e.target.value });
+    if (badgeDiv) badgeDiv.innerHTML = regBadge({ regExpiry: parseDMY(e.target.value) });
   });
 }
 
@@ -798,8 +804,8 @@ async function openServiceForm(vehicle, service = null) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_date")} *</label>
-        <input id="sf-date" class="form-input" type="date"
-          value="${isEdit ? toDateInput(s.serviceDate) : new Date().toISOString().split("T")[0]}" />
+        <input id="sf-date" class="form-input" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/gggg"
+          value="${isEdit ? toDMY(s.serviceDate) : todayDMY()}" />
       </div>
     </div>
     ${!isEdit ? `
@@ -838,7 +844,8 @@ async function openServiceForm(vehicle, service = null) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("service_end_date")}</label>
-        <input id="sf-endDate" class="form-input" type="date" value="${toDateInput(s.endDate)}" />
+        <input id="sf-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${toDMY(s.endDate)}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_end_km")}</label>
@@ -848,8 +855,8 @@ async function openServiceForm(vehicle, service = null) {
   `;
 
   openModal(isEdit ? `${t("edit")}: ${t("service_type_" + s.serviceType) || s.serviceType}` : t("service_add"), bodyHTML, async () => {
-    const dateVal = document.getElementById("sf-date")?.value;
-    if (!dateVal) return;
+    const serviceDateVal = dateOrNull("sf-date");
+    if (!serviceDateVal) return;
     try {
       const selectedId = document.getElementById("sf-workshop-select")?.value || "";
       let workshop = null;
@@ -866,7 +873,7 @@ async function openServiceForm(vehicle, service = null) {
         vehicleId:    vehicle.id,
         vehiclePlate: vehicle.plate,
         serviceType:  document.getElementById("sf-type")?.value,
-        serviceDate:  new Date(dateVal),
+        serviceDate:  serviceDateVal,
         km:           numOrNull("sf-km"),
         cost:         numOrNull("sf-cost"),
         workshop,
@@ -901,6 +908,8 @@ async function openServiceForm(vehicle, service = null) {
       showToast(`${t("error")}: ${e.message}`, "error");
     }
   });
+
+  ["sf-date", "sf-endDate"].forEach(attachDateMask);
 
   // Prikaži slobodno polje samo kad je izabrano "Drugo"
   document.getElementById("sf-workshop-select")?.addEventListener("change", (e) => {
@@ -944,7 +953,8 @@ function openCompleteServiceModal(vehicle, service) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("service_end_date")}</label>
-        <input id="cs-endDate" class="form-input" type="date" value="${new Date().toISOString().split("T")[0]}" />
+        <input id="cs-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${todayDMY()}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_end_km")}</label>
@@ -978,6 +988,8 @@ function openCompleteServiceModal(vehicle, service) {
       showToast(`${t("error")}: ${e.message}`, "error");
     }
   });
+
+  attachDateMask("cs-endDate");
 }
 
 // ── OTKAZIVANJE SERVISA ───────────────────────────────────────
@@ -1132,11 +1144,50 @@ function formatDate(val) {
   return isNaN(d) ? "—" : d.toLocaleDateString(locale);
 }
 
-function toDateInput(val) {
+// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
+// Napomena: <input type="date"> prikazuje kalendar/datum u formatu koji
+// zavisi od jezika/regije PODEŠENE U BROWSERU/OS-u korisnika (mm/dd/yyyy
+// za en-US, dd/mm/yyyy za sr-RS, itd.) — to nije nešto što aplikacija može
+// da promeni preko HTML/CSS/JS za taj input tip. Zato ovde koristimo obično
+// tekstualno polje sa maskom, tako da je format uvek dd/mm/yyyy za sve
+// korisnike, nezavisno od podešavanja njihovog browsera.
+
+function toDMY(val) {
   if (!val) return "";
   const d = val.toDate ? val.toDate() : new Date(val);
   if (isNaN(d)) return "";
-  return d.toISOString().split("T")[0];
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+function todayDMY() {
+  return toDMY(new Date());
+}
+
+// Parsira "dd/mm/yyyy" u Date objekat (lokalno vreme, ponoć). Vraća null
+// ako string nije kompletan ili predstavlja nepostojeći datum (npr. 31/02).
+function parseDMY(str) {
+  if (!str) return null;
+  const m = str.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d;
+}
+
+// Auto-formatiranje dok korisnik kuca: cifre se same grupišu u dd/mm/yyyy.
+function attachDateMask(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("input", () => {
+    const digits = el.value.replace(/\D/g, "").slice(0, 8);
+    let out = digits;
+    if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    el.value = out;
+  });
 }
 
 function numOrNull(id) {
@@ -1146,5 +1197,5 @@ function numOrNull(id) {
 
 function dateOrNull(id) {
   const val = document.getElementById(id)?.value;
-  return val ? new Date(val) : null;
+  return val ? parseDMY(val) : null;
 }

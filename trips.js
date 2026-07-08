@@ -544,7 +544,6 @@ async function saveIncidentEntry() {
 
 // ── FORMA ZA RAZDUŽENJE (VOZAČ) ───────────────────────────────
 function openDriverUnassignForm() {
-  const today  = new Date().toISOString().split("T")[0];
   const bodyHTML = `
     <div class="unassign-info">
       <div>🚗 <strong>${activeAssignment.vehicleBrand} ${activeAssignment.vehicleModel}</strong> — ${activeAssignment.vehiclePlate}</div>
@@ -556,7 +555,8 @@ function openDriverUnassignForm() {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Datum razduženja *</label>
-        <input id="du-endDate" class="form-input" type="date" value="${today}" />
+        <input id="du-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="dd/mm/gggg" value="${todayDMY()}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("assignment_end_km")}</label>
@@ -572,6 +572,7 @@ function openDriverUnassignForm() {
   `;
 
   openModal(t("assignment_unassign") + " " + t("assignment_vehicle").toLowerCase(), bodyHTML, () => processDriverUnassign());
+  attachDateMask("du-endDate");
 }
 
 async function processDriverUnassign() {
@@ -580,6 +581,11 @@ async function processDriverUnassign() {
   const notes   = document.getElementById("du-notes")?.value.trim();
 
   if (!endDate) {
+    showEntryError("unassign-form-error", t("assignment_unassign_date_required"));
+    return;
+  }
+  const endDateObj = parseDMY(endDate);
+  if (!endDateObj) {
     showEntryError("unassign-form-error", t("assignment_unassign_date_required"));
     return;
   }
@@ -599,7 +605,7 @@ async function processDriverUnassign() {
       doc(db, "companies", S.companyId, "assignments", activeAssignment.id),
       {
         status:        "closed",
-        endDate:       new Date(endDate),
+        endDate:       endDateObj,
         endKm,
         unassignNotes: notes || null,
         closedByDriver: true,
@@ -814,4 +820,37 @@ function formatDate(val) {
 function showEntryError(id, msg) {
   const el = document.getElementById(id);
   if (el) { el.textContent = msg; el.classList.remove("hidden"); }
+}
+
+// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
+// <input type="date"> prikazuje kalendar u formatu koji zavisi od
+// jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
+// pa koristimo tekstualno polje sa maskom umesto toga.
+function todayDMY() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+function parseDMY(str) {
+  if (!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d;
+}
+
+function attachDateMask(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("input", () => {
+    const digits = el.value.replace(/\D/g, "").slice(0, 8);
+    let out = digits;
+    if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    el.value = out;
+  });
 }
