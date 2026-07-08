@@ -166,24 +166,13 @@ export async function renderReports(container) {
     <div id="report-status"></div>
   `;
 
-  // Select all checkboxes
-  bindSelectAll("chk-vehicles-all", "chk-vehicle");
+  // ── "Svi" i statusni filteri — Vozila ──────────────────────
+  // "Svi" je međusobno isključiv sa svim statusnim filterima (biranje bilo
+  // kog statusa automatski gasi "Svi", i obrnuto). Statusni filteri se
+  // MEĐUSOBNO kombinuju kao presek (AND) — npr. "Vozno" + "Neregistrovano"
+  // znači vozila koja su ISTOVREMENO aktivna I neregistrovana.
+  bindVehicleFilters(vehicles);
   bindSelectAll("chk-drivers-all",  "chk-driver");
-
-  // Brzi izbor po statusu — čekiranje/dečekiranje grupe menja selekciju
-  // svih vozila koja pripadaju toj grupi (ista logika kao filter u tabu Vozila).
-  document.querySelectorAll(".chk-status-group").forEach(groupChk => {
-    groupChk.addEventListener("change", () => {
-      const group = groupChk.dataset.group;
-      document.querySelectorAll(".chk-vehicle").forEach(itemChk => {
-        const vehicle = vehicles.find(v => v.id === itemChk.value);
-        if (vehicle && vehicleMatchesGroup(vehicle, group)) {
-          itemChk.checked = groupChk.checked;
-          itemChk.dispatchEvent(new Event("change"));
-        }
-      });
-    });
-  });
 
   document.getElementById("btn-report-vehicles")?.addEventListener("click", () => generateVehicleReport(vehicles));
   document.getElementById("btn-report-vehicles-table")?.addEventListener("click", () => generateVehiclesTableReport(vehicles));
@@ -204,6 +193,66 @@ function bindSelectAll(allId, itemClass) {
     c.addEventListener("change", () => {
       const all   = document.querySelectorAll(`.${itemClass}`);
       const checked = document.querySelectorAll(`.${itemClass}:checked`);
+      if (allChk) allChk.checked = all.length === checked.length;
+    });
+  });
+}
+
+// ── BIND VOZILA: "Svi" + statusni filteri ─────────────────────
+// "Svi" je isključiv sa statusnim filterima (biranje bilo kog statusa gasi
+// "Svi", i obrnuto — biranje "Svi" gasi sve statusne filtere). Statusni
+// filteri se kombinuju kao presek (AND): vozilo mora da poklopi SVAKI
+// trenutno čekirani status da bi bilo selektovano.
+function bindVehicleFilters(vehicles) {
+  const allChk     = document.getElementById("chk-vehicles-all");
+  const groupChks  = [...document.querySelectorAll(".chk-status-group")];
+  const itemChks   = () => [...document.querySelectorAll(".chk-vehicle")];
+
+  function selectAllVehicles(checked) {
+    itemChks().forEach(c => { c.checked = checked; });
+  }
+
+  function applyGroupIntersection() {
+    const activeGroups = groupChks.filter(c => c.checked).map(c => c.dataset.group);
+    itemChks().forEach(itemChk => {
+      const vehicle = vehicles.find(v => v.id === itemChk.value);
+      itemChk.checked = !!vehicle && activeGroups.every(g => vehicleMatchesGroup(vehicle, g));
+    });
+  }
+
+  allChk?.addEventListener("change", () => {
+    if (allChk.checked) {
+      groupChks.forEach(c => { c.checked = false; });
+      selectAllVehicles(true);
+    } else if (!groupChks.some(c => c.checked)) {
+      // Ručno dečekirano "Svi" bez ijednog aktivnog statusnog filtera —
+      // ponaša se kao klasično "deselektuj sve".
+      selectAllVehicles(false);
+    }
+  });
+
+  groupChks.forEach(groupChk => {
+    groupChk.addEventListener("change", () => {
+      if (groupChk.checked && allChk) allChk.checked = false;
+
+      if (!groupChks.some(c => c.checked)) {
+        // Nijedan statusni filter više nije aktivan — vrati se na "Svi".
+        if (allChk) allChk.checked = true;
+        selectAllVehicles(true);
+        return;
+      }
+      applyGroupIntersection();
+    });
+  });
+
+  // Ručno (pojedinačno) čekiranje vozila i dalje radi nezavisno — samo
+  // ažurira "Svi" kad nijedan statusni filter nije aktivan, da ne bi
+  // "oteo" stanje filterima.
+  itemChks().forEach(c => {
+    c.addEventListener("change", () => {
+      if (groupChks.some(g => g.checked)) return;
+      const all     = itemChks();
+      const checked = all.filter(x => x.checked);
       if (allChk) allChk.checked = all.length === checked.length;
     });
   });
