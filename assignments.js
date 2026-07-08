@@ -224,7 +224,7 @@ async function openAssignmentForm(existing = null) {
   const activeDrivers = allDrivers.filter(d => d.active !== false);
 
   const bodyHTML = `
-    <div class="form-section-title">Vozilo i vozač</div>
+    <div class="form-section-title">${t("assignment_form_section_vehicle_driver")}</div>
 
     <div class="form-group">
       <label class="form-label">${t("assignment_vehicle")} *</label>
@@ -252,7 +252,7 @@ async function openAssignmentForm(existing = null) {
       </div>
     </div>
 
-    <div class="form-section-title" style="margin-top:4px">Period i tip puta</div>
+    <div class="form-section-title" style="margin-top:4px">${t("assignment_form_section_period")}</div>
 
     <div class="form-row">
       <div class="form-group">
@@ -264,7 +264,7 @@ async function openAssignmentForm(existing = null) {
         <label class="form-label">${t("assignment_end_date")}</label>
         <input id="af-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
           placeholder="${datePlaceholder()}" value="${isEdit ? toDMY(a.endDate) : ""}" />
-        <span class="form-hint">Ostavite prazno za neodređeno trajanje</span>
+        <span class="form-hint">${t("assignment_end_date_hint")}</span>
       </div>
     </div>
 
@@ -272,7 +272,7 @@ async function openAssignmentForm(existing = null) {
       <label class="form-label">${t("assignment_start_km")}</label>
       <input id="af-startKm" class="form-input" type="number"
         value="${a.startKm || ""}"
-        placeholder="Popunjava se automatski iz kartice vozila" />
+        placeholder="${t('assignment_start_km_placeholder')}" />
     </div>
 
     <div class="form-group">
@@ -507,7 +507,7 @@ async function saveAssignment(assignmentId, existing) {
           status:  "closed",
           endDate: closeDate,
           endKm:   null,
-          closedReason: `Automatski zatvoreno — novo zaduženje (${driver.firstName} ${driver.lastName})`,
+          closedReason: `${t("assignment_auto_closed_reason_label")} (${driver.firstName} ${driver.lastName})`,
           updatedAt: serverTimestamp(),
         });
         break;
@@ -591,11 +591,11 @@ function showConflictDialog(existingAssignment, newDriver, suggestedCloseDate) {
       const bodyHTML = `
         <div class="conflict-dialog">
           <div class="conflict-dialog__icon">⚠️</div>
-          <p>Vozilo je trenutno zaduženo:</p>
+          <p>${t("assignment_conflict_vehicle_busy")}</p>
           <div class="conflict-info">
             <strong>👤 ${existingAssignment.driverName}</strong>
             <span>od ${formatDate(existingAssignment.startDate)}</span>
-            <span class="badge badge--warning">Bez datuma završetka</span>
+            <span class="badge badge--warning">${t("assignment_conflict_no_end_date_badge")}</span>
           </div>
           <p>Da biste zadužili vozilo vozaču
             <strong>${newDriver.firstName} ${newDriver.lastName}</strong>,
@@ -641,15 +641,15 @@ function openUnassignForm(assignment) {
     <div class="unassign-info">
       <div>🚗 <strong>${assignment.vehicleBrand} ${assignment.vehicleModel}</strong> — ${assignment.vehiclePlate}</div>
       <div>👤 ${assignment.driverName}</div>
-      <div>📅 Zaduženo: ${formatDate(assignment.startDate)}</div>
-      ${assignment.startKm ? `<div>🛣️ Početna km: ${assignment.startKm.toLocaleString()}</div>` : ""}
+      <div>📅 ${t("trip_assigned_label")}: ${formatDate(assignment.startDate)}</div>
+      ${assignment.startKm ? `<div>🛣️ ${t("assignment_start_km")}: ${assignment.startKm.toLocaleString()}</div>` : ""}
     </div>
 
-    <div class="form-section-title" style="margin-top:12px">Razduženje</div>
+    <div class="form-section-title" style="margin-top:12px">${t("assignment_unassign_title")}</div>
 
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Datum razduženja *</label>
+        <label class="form-label">${t("assignment_unassign_date_label")}</label>
         <input id="ua-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
           placeholder="${datePlaceholder()}" value="${todayDMY()}" />
       </div>
@@ -663,7 +663,7 @@ function openUnassignForm(assignment) {
 
     <div class="form-group">
       <label class="form-label">${t("notes")}</label>
-      <textarea id="ua-notes" class="form-textarea" placeholder="Napomena o razduženju..."></textarea>
+      <textarea id="ua-notes" class="form-textarea" placeholder="${t('assignment_unassign_notes_ph')}"></textarea>
     </div>
 
     <p id="unassign-error" class="login-error hidden"></p>

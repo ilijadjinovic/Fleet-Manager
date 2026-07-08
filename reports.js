@@ -21,6 +21,18 @@ import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js
 // u dokument. Ime fonta koje se koristi kroz ceo fajl je "DejaVuSans".
 const REPORT_FONT = "DejaVuSans";
 
+// Isti redosled/set statusa kao filter chipovi u tabu Vozila.
+const VEHICLE_STATUS_GROUPS = ["active", "service", "broken", "inactive", "unregistered", "archived"];
+
+// Ista logika poklapanja kao renderList() u vehicles.js: arhivirana vozila
+// pripadaju ISKLJUČIVO grupi "archived" i ne pojavljuju se ni u jednoj drugoj.
+function vehicleMatchesGroup(v, group) {
+  if (group === "archived") return v.archived === true;
+  if (v.archived) return false;
+  if (group === "unregistered") return isVehicleRegistered(v) === false;
+  return (v.status || "active") === group;
+}
+
 function registerReportFont(pdf) {
   pdf.addFileToVFS("DejaVuSans.ttf", DEJAVU_SANS_REGULAR_B64);
   pdf.addFileToVFS("DejaVuSans-Bold.ttf", DEJAVU_SANS_BOLD_B64);
@@ -94,6 +106,14 @@ export async function renderReports(container) {
             <input type="checkbox" id="chk-vehicles-all" checked />
             ${t("report_all")} (${vehicles.length})
           </label>
+          <div class="multi-select__groups" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">
+            ${VEHICLE_STATUS_GROUPS.map(g => `
+              <label class="multi-select__item" style="width:auto;display:inline-flex;gap:6px;padding:4px 10px">
+                <input type="checkbox" class="chk-status-group" data-group="${g}" />
+                <span>${t("vehicle_status_" + g)}</span>
+              </label>
+            `).join("")}
+          </div>
           <div class="multi-select__list">
             ${vehicles.map(v => `
               <label class="multi-select__item">
@@ -149,6 +169,21 @@ export async function renderReports(container) {
   bindSelectAll("chk-vehicles-all", "chk-vehicle");
   bindSelectAll("chk-drivers-all",  "chk-driver");
 
+  // Brzi izbor po statusu — čekiranje/dečekiranje grupe menja selekciju
+  // svih vozila koja pripadaju toj grupi (ista logika kao filter u tabu Vozila).
+  document.querySelectorAll(".chk-status-group").forEach(groupChk => {
+    groupChk.addEventListener("change", () => {
+      const group = groupChk.dataset.group;
+      document.querySelectorAll(".chk-vehicle").forEach(itemChk => {
+        const vehicle = vehicles.find(v => v.id === itemChk.value);
+        if (vehicle && vehicleMatchesGroup(vehicle, group)) {
+          itemChk.checked = groupChk.checked;
+          itemChk.dispatchEvent(new Event("change"));
+        }
+      });
+    });
+  });
+
   document.getElementById("btn-report-vehicles")?.addEventListener("click", () => generateVehicleReport(vehicles));
   document.getElementById("btn-report-vehicles-table")?.addEventListener("click", () => generateVehiclesTableReport(vehicles));
   document.getElementById("btn-report-vehicles-csv")?.addEventListener("click",   () => exportVehiclesCSV(vehicles));
@@ -182,14 +217,14 @@ async function loadCompany() {
 // ── IZVEŠTAJ PO VOZILIMA ──────────────────────────────────────
 async function generateVehicleReport(allVehicles) {
   const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
-  if (selectedIds.length === 0) { showToast("Izaberite bar jedno vozilo", "warning"); return; }
+  if (selectedIds.length === 0) { showToast(t("report_select_vehicle_required"), "warning"); return; }
 
   const from = parseDMY(document.getElementById("rep-from")?.value);
   const to   = parseDMY(document.getElementById("rep-to")?.value);
   if (!from || !to) { showToast(t("required_field"), "warning"); return; }
   to.setHours(23, 59, 59);
 
-  setStatus("Učitavanje podataka...");
+  setStatus(t("loading"));
 
   try {
     const JsPDF  = await getJsPDF();
@@ -235,7 +270,7 @@ async function generateVehicleReport(allVehicles) {
     const fileName = `fleet-vozila-${formatDateFile(from)}-${formatDateFile(to)}.pdf`;
     pdf.save(fileName);
     setStatus("");
-    showToast("PDF je preuzet", "success");
+    showToast(t("report_pdf_downloaded"), "success");
 
   } catch (e) {
     console.error("Report error:", e);
@@ -250,9 +285,9 @@ async function generateVehicleReport(allVehicles) {
 // izabranih vozila — kao Excel tabela — jedan red po vozilu.
 async function generateVehiclesTableReport(allVehicles) {
   const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
-  if (selectedIds.length === 0) { showToast("Izaberite bar jedno vozilo", "warning"); return; }
+  if (selectedIds.length === 0) { showToast(t("report_select_vehicle_required"), "warning"); return; }
 
-  setStatus("Učitavanje podataka...");
+  setStatus(t("loading"));
 
   try {
     const JsPDF   = await getJsPDF();
@@ -295,7 +330,7 @@ async function generateVehiclesTableReport(allVehicles) {
     const fileName = `fleet-vozila-tabelarni-${formatDateFile(new Date())}.pdf`;
     pdf.save(fileName);
     setStatus("");
-    showToast("PDF je preuzet", "success");
+    showToast(t("report_pdf_downloaded"), "success");
 
   } catch (e) {
     console.error("Report error:", e);
@@ -312,7 +347,7 @@ async function generateVehiclesTableReport(allVehicles) {
 // separator kolona, a BOM obezbeđuje da se š/đ/č/ć/ž ispravno prikažu.
 function exportVehiclesCSV(allVehicles) {
   const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
-  if (selectedIds.length === 0) { showToast("Izaberite bar jedno vozilo", "warning"); return; }
+  if (selectedIds.length === 0) { showToast(t("report_select_vehicle_required"), "warning"); return; }
 
   const vehicles = allVehicles.filter(v => selectedIds.includes(v.id));
 
@@ -345,7 +380,7 @@ function exportVehiclesCSV(allVehicles) {
   a.click();
   URL.revokeObjectURL(url);
 
-  showToast("CSV je preuzet", "success");
+  showToast(t("report_csv_downloaded"), "success");
 }
 
 function csvEscape(val) {
@@ -371,7 +406,7 @@ function drawTableReportHeader(pdf, company, pw = PW) {
   pdf.setFontSize(8);
   pdf.setTextColor(100);
   const details = [
-    company.pib     ? `PIB: ${company.pib}` : null,
+    company.pib     ? `${t("company_pib")}: ${company.pib}` : null,
     company.address ? company.address       : null,
   ].filter(Boolean);
   if (details.length > 0) {
@@ -393,7 +428,7 @@ function drawTableReportHeader(pdf, company, pw = PW) {
   pdf.setFont(REPORT_FONT, "normal");
   pdf.setFontSize(8.5);
   pdf.setTextColor(120);
-  pdf.text(`Generisano: ${formatDateSr(new Date())}`, M, y);
+  pdf.text(`${t("report_pdf_generated_label")}: ${formatDateSr(new Date())}`, M, y);
   y += 6;
 
   return y + 2;
@@ -402,14 +437,14 @@ function drawTableReportHeader(pdf, company, pw = PW) {
 // ── IZVEŠTAJ PO VOZAČIMA ──────────────────────────────────────
 async function generateDriverReport(allDrivers) {
   const selectedIds = [...document.querySelectorAll(".chk-driver:checked")].map(c => c.value);
-  if (selectedIds.length === 0) { showToast("Izaberite bar jednog vozača", "warning"); return; }
+  if (selectedIds.length === 0) { showToast(t("report_select_driver_required"), "warning"); return; }
 
   const from = parseDMY(document.getElementById("rep-from")?.value);
   const to   = parseDMY(document.getElementById("rep-to")?.value);
   if (!from || !to) { showToast(t("required_field"), "warning"); return; }
   to.setHours(23, 59, 59);
 
-  setStatus("Učitavanje podataka...");
+  setStatus(t("loading"));
 
   try {
     const JsPDF   = await getJsPDF();
@@ -452,7 +487,7 @@ async function generateDriverReport(allDrivers) {
     const fileName = `fleet-vozaci-${formatDateFile(from)}-${formatDateFile(to)}.pdf`;
     pdf.save(fileName);
     setStatus("");
-    showToast("PDF je preuzet", "success");
+    showToast(t("report_pdf_downloaded"), "success");
 
   } catch (e) {
     console.error("Report error:", e);
@@ -487,11 +522,11 @@ function drawHeader(pdf, company, from, to) {
   pdf.setTextColor(100);
 
   const details = [
-    company.pib      ? `PIB: ${company.pib}`           : null,
-    company.mbr      ? `MBR: ${company.mbr}`           : null,
-    company.address  ? company.address                  : null,
-    company.phone    ? `Tel: ${company.phone}`          : null,
-    company.email    ? company.email                    : null,
+    company.pib      ? `${t("company_pib")}: ${company.pib}`     : null,
+    company.mbr      ? `${t("company_mbr")}: ${company.mbr}`     : null,
+    company.address  ? company.address                            : null,
+    company.phone    ? `${t("company_phone")}: ${company.phone}` : null,
+    company.email    ? company.email                             : null,
   ].filter(Boolean);
 
   if (details.length > 0) {
@@ -509,7 +544,7 @@ function drawHeader(pdf, company, from, to) {
   pdf.setFontSize(9);
   pdf.setTextColor(120);
   pdf.text(
-    `Period: ${formatDateSr(from)} — ${formatDateSr(to)}   |   Generisano: ${formatDateSr(new Date())}`,
+    `${t("report_pdf_period_label")}: ${formatDateSr(from)} — ${formatDateSr(to)}   |   ${t("report_pdf_generated_label")}: ${formatDateSr(new Date())}`,
     M, y
   );
   y += 8;
@@ -593,7 +628,7 @@ function drawPageNumber(pdf) {
   pdf.setFont(REPORT_FONT, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(150);
-  pdf.text(`Strana ${pageCount}`, M + PW - 10, PH + 10, { align: "right" });
+  pdf.text(`${t("report_pdf_page_label")} ${pageCount}`, M + PW - 10, PH + 10, { align: "right" });
 }
 
 // ── LANDSCAPE VARIJANTE (koristi ih samo tabelarni izveštaj) ──
@@ -612,7 +647,7 @@ function drawPageNumberL(pdf) {
   pdf.setFont(REPORT_FONT, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(150);
-  pdf.text(`Strana ${pageCount}`, M + PW_L - 10, PH_L + 10, { align: "right" });
+  pdf.text(`${t("report_pdf_page_label")} ${pageCount}`, M + PW_L - 10, PH_L + 10, { align: "right" });
 }
 
 function drawTableHeaderL(pdf, cols, y) {
@@ -669,36 +704,36 @@ function drawTableRowWrapped(pdf, cols, values, y, shade = false) {
 
 // ── VOZILO SEKCIJE ────────────────────────────────────────────
 function drawVehicleSection(pdf, v, y) {
-  y = drawSectionTitle(pdf, `VOZILO: ${v.brand} ${v.model} — ${v.plate}`, y);
-  y = drawRow(pdf, "VIN / Broj šasije",    v.vin,          y, true);
-  y = drawRow(pdf, "Godina proizvodnje",   v.year,         y);
-  y = drawRow(pdf, "Prva registracija",    formatDateSr(v.firstRegDate), y, true);
-  y = drawRow(pdf, "Zapremina / Snaga",    v.engineCc ? `${v.engineCc} cm³ / ${v.powerKw || "—"} kW` : null, y);
-  y = drawRow(pdf, "Vrsta goriva",         v.fuelType ? t("fuel_" + v.fuelType) : null, y, true);
-  y = drawRow(pdf, "Broj sedišta",         v.seats,        y);
-  y = drawRow(pdf, "Nosivost",             v.payload ? `${v.payload} kg` : null, y, true);
-  y = drawRow(pdf, "Trenutna km",          v.currentKm ? `${v.currentKm.toLocaleString()} km` : null, y);
-  y = drawRow(pdf, "Registracija ističe",  formatDateSr(v.regExpiry),  y, true);
-  y = drawRow(pdf, "Osiguranje ističe",    formatDateSr(v.insuranceExpiry), y);
-  y = drawRow(pdf, "Osiguravač / Polisa",  v.insuranceCompany ? `${v.insuranceCompany} / ${v.insurancePolicy || "—"}` : null, y, true);
-  y = drawRow(pdf, "Nabavna vrednost",     v.purchaseValue ? `${Number(v.purchaseValue).toLocaleString()} RSD` : null, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_vehicle_label")}: ${v.brand} ${v.model} — ${v.plate}`, y);
+  y = drawRow(pdf, t("vehicle_vin"),              v.vin,          y, true);
+  y = drawRow(pdf, t("vehicle_year"),              v.year,         y);
+  y = drawRow(pdf, t("vehicle_first_reg"),         formatDateSr(v.firstRegDate), y, true);
+  y = drawRow(pdf, t("report_pdf_engine_power_label"), v.engineCc ? `${v.engineCc} cm³ / ${v.powerKw || "—"} kW` : null, y);
+  y = drawRow(pdf, t("vehicle_fuel_type"),         v.fuelType ? t("fuel_" + v.fuelType) : null, y, true);
+  y = drawRow(pdf, t("vehicle_seats"),             v.seats,        y);
+  y = drawRow(pdf, t("vehicle_payload"),           v.payload ? `${v.payload} kg` : null, y, true);
+  y = drawRow(pdf, t("vehicle_current_km"),        v.currentKm ? `${v.currentKm.toLocaleString()} km` : null, y);
+  y = drawRow(pdf, t("vehicle_reg_expiry"),        formatDateSr(v.regExpiry),  y, true);
+  y = drawRow(pdf, t("vehicle_insurance_expiry"),  formatDateSr(v.insuranceExpiry), y);
+  y = drawRow(pdf, t("report_pdf_insurance_policy_label"), v.insuranceCompany ? `${v.insuranceCompany} / ${v.insurancePolicy || "—"}` : null, y, true);
+  y = drawRow(pdf, t("vehicle_purchase_value"),    v.purchaseValue ? `${Number(v.purchaseValue).toLocaleString()} RSD` : null, y);
   return y + 4;
 }
 
 function drawAssignmentsSection(pdf, assignments, y) {
-  y = drawSectionTitle(pdf, `ZADUŽENJA (${assignments.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_assignments")} (${assignments.length})`, y);
   if (assignments.length === 0) {
     y = drawEmptyRow(pdf, y);
     return y;
   }
 
   const cols = [
-    ["Vozač",       55],
-    ["Od",          28],
-    ["Do",          28],
-    ["Poč. km",     28],
-    ["Kraj. km",    28],
-    ["Tip",         20],
+    [t("report_pdf_col_driver"),    55],
+    [t("report_pdf_col_from"),      28],
+    [t("report_pdf_col_to"),        28],
+    [t("report_pdf_col_start_km"),  28],
+    [t("report_pdf_col_end_km"),    28],
+    [t("report_pdf_col_type"),      20],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -709,7 +744,7 @@ function drawAssignmentsSection(pdf, assignments, y) {
       a.endDate ? formatDateSr(a.endDate) : "—",
       a.startKm ? a.startKm.toLocaleString() : "—",
       a.endKm   ? a.endKm.toLocaleString()   : "—",
-      a.tripType === "intercity" ? `Međugrad: ${a.destination || ""}` : "Lokalno",
+      a.tripType === "intercity" ? `${t("assignment_intercity")}: ${a.destination || ""}` : t("assignment_local"),
     ], y, i % 2 === 0);
   });
 
@@ -720,7 +755,7 @@ function drawAssignmentsSection(pdf, assignments, y) {
     pdf.setFont(REPORT_FONT, "bold");
     pdf.setFontSize(8.5);
     pdf.setTextColor(26, 39, 68);
-    pdf.text(`Ukupno pređeno: ${totalKm.toLocaleString()} km`, M + 2, y);
+    pdf.text(`${t("report_pdf_total_km_label")}: ${totalKm.toLocaleString()} km`, M + 2, y);
     y += 6;
   }
 
@@ -728,15 +763,15 @@ function drawAssignmentsSection(pdf, assignments, y) {
 }
 
 function drawServicesSection(pdf, services, y) {
-  y = drawSectionTitle(pdf, `SERVISNA ISTORIJA (${services.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_services")} (${services.length})`, y);
   if (services.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
-    ["Vrsta",       50],
-    ["Datum",       28],
-    ["Km",          25],
-    ["Troškovi",    28],
-    ["Servis",      55],
+    [t("report_pdf_col_kind"),      50],
+    [t("report_pdf_col_date"),      28],
+    [t("report_pdf_col_km"),        25],
+    [t("report_pdf_col_cost"),      28],
+    [t("report_pdf_col_workshop"),  55],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -765,7 +800,7 @@ function drawServicesSection(pdf, services, y) {
     pdf.setFont(REPORT_FONT, "bold");
     pdf.setFontSize(8.5);
     pdf.setTextColor(26, 39, 68);
-    pdf.text(`Ukupni troškovi servisa: ${totalCost.toLocaleString()} RSD`, M + 2, y);
+    pdf.text(`${t("report_pdf_total_service_cost_label")}: ${totalCost.toLocaleString()} RSD`, M + 2, y);
     y += 6;
   }
 
@@ -773,16 +808,16 @@ function drawServicesSection(pdf, services, y) {
 }
 
 function drawFuelingsSection(pdf, fuelings, y) {
-  y = drawSectionTitle(pdf, `TOČENJA GORIVA (${fuelings.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_fuelings")} (${fuelings.length})`, y);
   if (fuelings.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
-    ["Datum",     28],
-    ["Gorivo",    25],
-    ["Količina",  25],
-    ["Iznos",     28],
-    ["Cena/L",    25],
-    ["Pumpa",     55],
+    [t("report_pdf_col_date"),        28],
+    [t("report_pdf_col_fuel"),        25],
+    [t("report_pdf_col_amount"),      25],
+    [t("report_pdf_col_price"),       28],
+    [t("report_pdf_col_price_per_l"), 25],
+    [t("report_pdf_col_station"),     55],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -805,8 +840,8 @@ function drawFuelingsSection(pdf, fuelings, y) {
   pdf.setFontSize(8.5);
   pdf.setTextColor(26, 39, 68);
   pdf.text(
-    `Ukupno: ${totalL.toFixed(2)} L  /  ${totalCost.toLocaleString()} RSD` +
-    (totalL > 0 ? `  /  prosek: ${(totalCost/totalL).toFixed(2)} RSD/L` : ""),
+    `${t("report_pdf_fuel_total_label")}: ${totalL.toFixed(2)} L  /  ${totalCost.toLocaleString()} RSD` +
+    (totalL > 0 ? `  /  ${t("report_pdf_fuel_avg_label")}: ${(totalCost/totalL).toFixed(2)} RSD/L` : ""),
     M + 2, y
   );
   return y + 8;
@@ -814,18 +849,21 @@ function drawFuelingsSection(pdf, fuelings, y) {
 
 function drawCostsSection(pdf, costs, y) {
   if (costs.length === 0) return y;
-  y = drawSectionTitle(pdf, `OSTALI TROŠKOVI (${costs.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_costs")} (${costs.length})`, y);
 
   const cols = [
-    ["Datum",    28],
-    ["Vrsta",    40],
-    ["Iznos",    28],
-    ["Lokacija", 90],
+    [t("report_pdf_col_date"),           28],
+    [t("report_pdf_col_kind"),           40],
+    [t("report_pdf_col_price"),          28],
+    [t("report_pdf_location_label"),     90],
   ];
 
   y = drawTableHeader(pdf, cols, y);
   costs.forEach((c, i) => {
-    const typeLabels = { toll:"Putarina", parking:"Parking", washing:"Pranje", other_cost:"Ostalo" };
+    const typeLabels = {
+      toll: t("trip_entry_toll"), parking: t("trip_entry_parking"),
+      washing: t("trip_entry_washing"), other_cost: t("trip_entry_cost"),
+    };
     y = drawTableRow(pdf, cols, [
       formatDateSr(c.createdAt),
       typeLabels[c.type] || c.type,
@@ -839,18 +877,24 @@ function drawCostsSection(pdf, costs, y) {
   pdf.setFont(REPORT_FONT, "bold");
   pdf.setFontSize(8.5);
   pdf.setTextColor(26, 39, 68);
-  pdf.text(`Ukupno ostali troškovi: ${total.toLocaleString()} RSD`, M + 2, y);
+  pdf.text(`${t("report_pdf_total_other_costs_label")}: ${total.toLocaleString()} RSD`, M + 2, y);
   return y + 8;
 }
 
 function drawIncidentsSection(pdf, incidents, y) {
   if (incidents.length === 0) return y;
-  y = drawSectionTitle(pdf, `PRIJAVE — KVAROVI / OŠTEĆENJA / NEZGODE (${incidents.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_incidents")} (${incidents.length})`, y);
 
   incidents.forEach((inc, i) => {
     checkPageBreak(pdf, y, 20);
-    const typeLabels = { fault:"Kvar", damage:"Oštećenje", accident:"Nezgoda", other:"Ostalo" };
-    const statusLabels = { open:"Otvoreno", in_progress:"U obradi", closed:"Zatvoreno" };
+    const typeLabels = {
+      fault: t("incident_fault"), damage: t("incident_damage"),
+      accident: t("incident_accident"), other: t("incident_other"),
+    };
+    const statusLabels = {
+      open: t("incident_status_open"), in_progress: t("incident_status_in_progress"),
+      closed: t("incident_status_closed"),
+    };
 
     if (i % 2 === 0) {
       pdf.setFillColor(248, 250, 255);
@@ -877,12 +921,12 @@ function drawIncidentsSection(pdf, incidents, y) {
 
     if (inc.location) {
       pdf.setTextColor(100);
-      pdf.text(`Lokacija: ${inc.location}`, M + 2, y);
+      pdf.text(`${t("report_pdf_location_label")}: ${inc.location}`, M + 2, y);
       y += 4.5;
     }
     if (inc.resolution) {
       pdf.setTextColor(34, 197, 94);
-      pdf.text(`Rešenje: ${inc.resolution.substring(0, 80)}`, M + 2, y);
+      pdf.text(`${t("incident_resolution_label")}: ${inc.resolution.substring(0, 80)}`, M + 2, y);
       y += 4.5;
     }
     y += 2;
@@ -893,29 +937,29 @@ function drawIncidentsSection(pdf, incidents, y) {
 
 // ── VOZAČ SEKCIJE ─────────────────────────────────────────────
 function drawDriverSection(pdf, d, y) {
-  y = drawSectionTitle(pdf, `VOZAČ: ${d.firstName} ${d.lastName}`, y);
-  y = drawRow(pdf, "JMBG",                    d.jmbg,             y, true);
-  y = drawRow(pdf, "Godište",                 d.birthYear,        y);
-  y = drawRow(pdf, "Kategorije dozvole",      d.licenseCategories,y, true);
-  y = drawRow(pdf, "Radno mesto",             d.position,         y);
-  y = drawRow(pdf, "Telefon",                 d.phone,            y, true);
-  y = drawRow(pdf, "Email",                   d.email,            y);
-  y = drawRow(pdf, "Adresa stanovanja",       d.homeAddress,      y, true);
-  y = drawRow(pdf, "Adresa radnog mesta",     d.workAddress,      y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_driver_label")}: ${d.firstName} ${d.lastName}`, y);
+  y = drawRow(pdf, t("driver_jmbg_label"),      d.jmbg,             y, true);
+  y = drawRow(pdf, t("driver_birth_year"),      d.birthYear,        y);
+  y = drawRow(pdf, t("driver_license_cat"),     d.licenseCategories,y, true);
+  y = drawRow(pdf, t("driver_position"),        d.position,         y);
+  y = drawRow(pdf, t("driver_phone"),           d.phone,            y, true);
+  y = drawRow(pdf, t("driver_email"),           d.email,            y);
+  y = drawRow(pdf, t("driver_home_address"),    d.homeAddress,      y, true);
+  y = drawRow(pdf, t("driver_work_address"),    d.workAddress,      y);
   return y + 4;
 }
 
 function drawDriverAssignmentsSection(pdf, assignments, y) {
-  y = drawSectionTitle(pdf, `ZADUŽENA VOZILA (${assignments.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_driver_assignments")} (${assignments.length})`, y);
   if (assignments.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
-    ["Vozilo",      55],
-    ["Tablica",     28],
-    ["Od",          25],
-    ["Do",          25],
-    ["Poč. km",     25],
-    ["Kraj. km",    25],
+    [t("report_table_col_vehicle"), 55],
+    [t("report_pdf_col_plate"),     28],
+    [t("report_pdf_col_from"),      25],
+    [t("report_pdf_col_to"),        25],
+    [t("report_pdf_col_start_km"),  25],
+    [t("report_pdf_col_end_km"),    25],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -937,7 +981,7 @@ function drawDriverAssignmentsSection(pdf, assignments, y) {
       pdf.setFont(REPORT_FONT, "italic");
       pdf.setFontSize(7.5);
       pdf.setTextColor(100);
-      pdf.text(`  → Međugrad: ${a.destination}${a.route ? " / " + a.route : ""}`, M + 4, y);
+      pdf.text(`  → ${t("assignment_intercity")}: ${a.destination}${a.route ? " / " + a.route : ""}`, M + 4, y);
       y += 4.5;
     }
   });
@@ -947,7 +991,7 @@ function drawDriverAssignmentsSection(pdf, assignments, y) {
     pdf.setFont(REPORT_FONT, "bold");
     pdf.setFontSize(8.5);
     pdf.setTextColor(26, 39, 68);
-    pdf.text(`Ukupno pređeno: ${totalKm.toLocaleString()} km`, M + 2, y);
+    pdf.text(`${t("report_pdf_total_km_label")}: ${totalKm.toLocaleString()} km`, M + 2, y);
     y += 6;
   }
 
@@ -958,7 +1002,7 @@ function drawEmptyRow(pdf, y) {
   pdf.setFont(REPORT_FONT, "italic");
   pdf.setFontSize(8);
   pdf.setTextColor(150);
-  pdf.text("Nema podataka za izabrani period", M + 2, y);
+  pdf.text(t("report_pdf_no_data"), M + 2, y);
   return y + 8;
 }
 

@@ -145,7 +145,7 @@ function renderDriverView(container) {
       <div class="km-confirm-box" id="km-confirm-box">
         <div class="km-confirm-box__label">${t("trip_km_system")}</div>
         <div class="km-confirm-box__value">${v?.currentKm?.toLocaleString() || a.startKm?.toLocaleString() || "—"} km</div>
-        <div class="km-confirm-box__hint">Da li se ovo slaže sa stanjem na brzinomeru?</div>
+        <div class="km-confirm-box__hint">${t("trip_km_confirm_hint")}</div>
         <div class="km-confirm-box__actions">
           <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ ${t("trip_km_confirm")}</button>
           <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ ${t("trip_km_enter_actual")}</button>
@@ -219,7 +219,7 @@ function bindKmConfirm() {
 
   document.getElementById("btn-confirm-km")?.addEventListener("click", async () => {
     document.getElementById("km-confirm-box").innerHTML = `
-      <div class="km-confirmed">✅ Kilometraža potvrđena: <strong>${systemKm?.toLocaleString()} km</strong></div>
+      <div class="km-confirmed">✅ ${t("trip_km_confirmed")}: <strong>${systemKm?.toLocaleString()} km</strong></div>
     `;
   });
 
@@ -498,7 +498,7 @@ async function saveIncidentEntry() {
   const type = document.querySelector("input[name='ti-type']:checked")?.value || "fault";
 
   if (!description) {
-    showEntryError("incident-form-error", "Opis je obavezan");
+    showEntryError("incident-form-error", t("required_field") + ": " + t("incident_description"));
     return;
   }
 
@@ -547,14 +547,14 @@ function openDriverUnassignForm() {
   const bodyHTML = `
     <div class="unassign-info">
       <div>🚗 <strong>${activeAssignment.vehicleBrand} ${activeAssignment.vehicleModel}</strong> — ${activeAssignment.vehiclePlate}</div>
-      <div>📅 Zaduženo: ${formatDate(activeAssignment.startDate)}</div>
-      ${activeAssignment.startKm ? `<div>🛣️ Početna km: ${activeAssignment.startKm.toLocaleString()}</div>` : ""}
+      <div>📅 ${t("trip_assigned_label")}: ${formatDate(activeAssignment.startDate)}</div>
+      ${activeAssignment.startKm ? `<div>🛣️ ${t("assignment_start_km")}: ${activeAssignment.startKm.toLocaleString()}</div>` : ""}
     </div>
 
     <div class="form-section-title" style="margin-top:12px">${t("assignment_unassign_title")}</div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Datum razduženja *</label>
+        <label class="form-label">${t("assignment_unassign_date_label")}</label>
         <input id="du-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
           placeholder="${datePlaceholder()}" value="${todayDMY()}" />
       </div>
@@ -665,7 +665,7 @@ function tripEntryCard(entry) {
           </div>
           <div class="trip-entry-card__sub">
             🏪 ${entry.fuelStation}
-            ${entry.receiptNo ? ` · Račun: ${entry.receiptNo}` : ""}
+            ${entry.receiptNo ? ` · ${t("trip_fuel_receipt")}: ${entry.receiptNo}` : ""}
             ${entry.currentKm ? ` · ${entry.currentKm.toLocaleString()} km` : ""}
           </div>
         ` : entry.type === "toll" || entry.type === "parking" || entry.type === "washing" || entry.type === "other_cost" ? `
@@ -673,7 +673,7 @@ function tripEntryCard(entry) {
             <strong>${entry.amount?.toLocaleString()} RSD</strong>
           </div>
           ${entry.location ? `<div class="trip-entry-card__sub">📍 ${entry.location}</div>` : ""}
-          ${entry.receiptNo ? `<div class="trip-entry-card__sub">Račun: ${entry.receiptNo}</div>` : ""}
+          ${entry.receiptNo ? `<div class="trip-entry-card__sub">${t("trip_fuel_receipt")}: ${entry.receiptNo}</div>` : ""}
         ` : `
           <div class="trip-entry-card__main">${entry.description || ""}</div>
           ${entry.location ? `<div class="trip-entry-card__sub">📍 ${entry.location}</div>` : ""}
@@ -800,7 +800,7 @@ async function refreshEntries() {
     const div = document.createElement("div");
     div.className = "trip-stats";
     div.innerHTML = `
-      <div class="trip-stat-box"><div class="trip-stat-box__value">${totalFuel.toFixed(1)} L</div><div class="trip-stat-box__label">Gorivo</div></div>
+      <div class="trip-stat-box"><div class="trip-stat-box__value">${totalFuel.toFixed(1)} L</div><div class="trip-stat-box__label">${t("trip_stats_fuel")}</div></div>
       <div class="trip-stat-box"><div class="trip-stat-box__value">${totalCost.toLocaleString()} RSD</div><div class="trip-stat-box__label">${t("trip_stats_cost")}</div></div>
       <div class="trip-stat-box ${incidentCount > 0 ? "trip-stat-box--warn" : ""}"><div class="trip-stat-box__value">${incidentCount}</div><div class="trip-stat-box__label">${t("trip_stats_incidents")}</div></div>
       <div class="trip-stat-box"><div class="trip-stat-box__value">${tripEntries.length}</div><div class="trip-stat-box__label">${t("trip_stats_entries")}</div></div>
