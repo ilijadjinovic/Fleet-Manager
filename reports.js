@@ -9,7 +9,7 @@ import {
   collection, query, where, orderBy, getDocs,
   doc, getDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t } from "./i18n.js";
+import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast } from "./app.js";
 import { isVehicleRegistered } from "./vehicles.js";
 import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js";
@@ -74,12 +74,12 @@ export async function renderReports(container) {
         <div class="form-group">
           <label class="form-label">${t("report_date_from")}</label>
           <input id="rep-from" class="form-input" type="text" inputmode="numeric" maxlength="10"
-            placeholder="dd/mm/gggg" value="${toDMY(firstDayOfMonth())}" />
+            placeholder="${datePlaceholder()}" value="${toDMY(firstDayOfMonth())}" />
         </div>
         <div class="form-group">
           <label class="form-label">${t("report_date_to")}</label>
           <input id="rep-to" class="form-input" type="text" inputmode="numeric" maxlength="10"
-            placeholder="dd/mm/gggg" value="${toDMY(today())}" />
+            placeholder="${datePlaceholder()}" value="${toDMY(today())}" />
         </div>
       </div>
     </div>
@@ -1006,6 +1006,12 @@ function firstDayOfMonth() {
 
 function today() {
   return new Date().toISOString().split("T")[0];
+}
+
+// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
+// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
+function datePlaceholder() {
+  return getCurrentLang() === "en" ? "dd/mm/yyyy" : "dd/mm/gggg";
 }
 
 // ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────

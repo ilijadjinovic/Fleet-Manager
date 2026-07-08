@@ -258,12 +258,12 @@ async function openAssignmentForm(existing = null) {
       <div class="form-group">
         <label class="form-label">${t("assignment_start_date")} *</label>
         <input id="af-startDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${isEdit ? toDMY(a.startDate) : todayDMY()}" />
+          placeholder="${datePlaceholder()}" value="${isEdit ? toDMY(a.startDate) : todayDMY()}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("assignment_end_date")}</label>
         <input id="af-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${isEdit ? toDMY(a.endDate) : ""}" />
+          placeholder="${datePlaceholder()}" value="${isEdit ? toDMY(a.endDate) : ""}" />
         <span class="form-hint">Ostavite prazno za neodređeno trajanje</span>
       </div>
     </div>
@@ -604,7 +604,7 @@ function showConflictDialog(existingAssignment, newDriver, suggestedCloseDate) {
           <div class="form-group" style="margin-top:12px">
             <label class="form-label">${t("assignment_conflict_close_date")}</label>
             <input id="conflict-close-date" class="form-input" type="text" inputmode="numeric" maxlength="10"
-              placeholder="dd/mm/gggg" value="${toDMY(suggestedCloseDate)}" />
+              placeholder="${datePlaceholder()}" value="${toDMY(suggestedCloseDate)}" />
             <span class="form-hint">${t("assignment_conflict_close_hint")}</span>
           </div>
         </div>
@@ -651,7 +651,7 @@ function openUnassignForm(assignment) {
       <div class="form-group">
         <label class="form-label">Datum razduženja *</label>
         <input id="ua-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${todayDMY()}" />
+          placeholder="${datePlaceholder()}" value="${todayDMY()}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("assignment_end_km")}</label>
@@ -760,6 +760,12 @@ function toDMY(val) {
 
 function todayDMY() {
   return toDMY(new Date());
+}
+
+// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
+// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
+function datePlaceholder() {
+  return getCurrentLang() === "en" ? "dd/mm/yyyy" : "dd/mm/gggg";
 }
 
 function parseDMY(str) {

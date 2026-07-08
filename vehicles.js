@@ -485,7 +485,7 @@ function openVehicleForm(vehicle = null) {
       <div class="form-group">
         <label class="form-label">${t("vehicle_first_reg")}</label>
         <input id="f-firstRegDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${toDMY(v.firstRegDate)}" />
+          placeholder="${datePlaceholder()}" value="${toDMY(v.firstRegDate)}" />
       </div>
     </div>
     <div class="form-row">
@@ -561,13 +561,13 @@ function openVehicleForm(vehicle = null) {
       <div class="form-group">
         <label class="form-label">${t("vehicle_reg_expiry")}</label>
         <input id="f-regExpiry" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${toDMY(v.regExpiry)}" />
+          placeholder="${datePlaceholder()}" value="${toDMY(v.regExpiry)}" />
         <div id="f-reg-badge" style="margin-top:6px">${regBadge(v)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_insurance_expiry")}</label>
         <input id="f-insuranceExpiry" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${toDMY(v.insuranceExpiry)}" />
+          placeholder="${datePlaceholder()}" value="${toDMY(v.insuranceExpiry)}" />
       </div>
     </div>
     <div class="form-row">
@@ -586,7 +586,7 @@ function openVehicleForm(vehicle = null) {
       <div class="form-group">
         <label class="form-label">${t("vehicle_purchase_date")}</label>
         <input id="f-purchaseDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${toDMY(v.purchaseDate)}" />
+          placeholder="${datePlaceholder()}" value="${toDMY(v.purchaseDate)}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_purchase_type")}</label>
@@ -804,7 +804,7 @@ async function openServiceForm(vehicle, service = null) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_date")} *</label>
-        <input id="sf-date" class="form-input" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/gggg"
+        <input id="sf-date" class="form-input" type="text" inputmode="numeric" maxlength="10" placeholder="${datePlaceholder()}"
           value="${isEdit ? toDMY(s.serviceDate) : todayDMY()}" />
       </div>
     </div>
@@ -845,7 +845,7 @@ async function openServiceForm(vehicle, service = null) {
       <div class="form-group">
         <label class="form-label">${t("service_end_date")}</label>
         <input id="sf-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${toDMY(s.endDate)}" />
+          placeholder="${datePlaceholder()}" value="${toDMY(s.endDate)}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_end_km")}</label>
@@ -954,7 +954,7 @@ function openCompleteServiceModal(vehicle, service) {
       <div class="form-group">
         <label class="form-label">${t("service_end_date")}</label>
         <input id="cs-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${todayDMY()}" />
+          placeholder="${datePlaceholder()}" value="${todayDMY()}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_end_km")}</label>
@@ -1163,6 +1163,12 @@ function toDMY(val) {
 
 function todayDMY() {
   return toDMY(new Date());
+}
+
+// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
+// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
+function datePlaceholder() {
+  return getCurrentLang() === "en" ? "dd/mm/yyyy" : "dd/mm/gggg";
 }
 
 // Parsira "dd/mm/yyyy" u Date objekat (lokalno vreme, ponoć). Vraća null

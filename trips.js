@@ -556,7 +556,7 @@ function openDriverUnassignForm() {
       <div class="form-group">
         <label class="form-label">Datum razduženja *</label>
         <input id="du-endDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
-          placeholder="dd/mm/gggg" value="${todayDMY()}" />
+          placeholder="${datePlaceholder()}" value="${todayDMY()}" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("assignment_end_km")}</label>
@@ -831,6 +831,12 @@ function todayDMY() {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
+// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
+function datePlaceholder() {
+  return getCurrentLang() === "en" ? "dd/mm/yyyy" : "dd/mm/gggg";
 }
 
 function parseDMY(str) {
