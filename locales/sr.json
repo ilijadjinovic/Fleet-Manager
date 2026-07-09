@@ -335,7 +335,7 @@
   "trip_stats_fuel": "Gorivo",
   "trip_stats_cost": "Ukupni troškovi",
   "trip_stats_incidents": "Prijave",
-  "trip_stats_entries": "Unosa",
+  "trip_stats_entries": "Ukupno unosa",
   "trip_no_assignment": "Nemate aktivno zaduženje",
   "trip_no_assignment_sub": "Kada vam fleet administrator dodeli vozilo, ovde ćete moći da unosite podatke o vožnji.",
   "trip_admin_title": "Evidencija vožnji",
@@ -558,5 +558,10 @@
   "assignment_form_section_period": "Period i tip puta",
   "assignment_end_date_hint": "Ostavite prazno za neodređeno trajanje",
   "trip_km_confirm_hint": "Da li se ovo slaže sa stanjem na brzinomeru?",
-  "assignment_unassign_notes_ph": "Napomena o razduženju..."
+  "assignment_unassign_notes_ph": "Napomena o razduženju...",
+  "trip_km_too_low": "Uneta kilometraža ne može biti manja od trenutno važeće",
+  "trip_history_title": "Istorija vožnji",
+  "incident_no_assignment_notice": "Nemate aktivno zaduženje vozila — prijava je moguća samo dok vam je vozilo dodeljeno.",
+  "vehicle_tab_incidents": "Prijave",
+  "incident_schedule_service_btn": "Zakaži servis"
 }

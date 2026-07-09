@@ -251,6 +251,7 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech") {
     { key: "tech",        label: t("vehicle_tab_tech") },
     { key: "finance",     label: t("vehicle_tab_finance") },
     { key: "service",     label: t("vehicle_tab_service") },
+    { key: "incidents",   label: t("vehicle_tab_incidents") },
     { key: "assignments", label: t("vehicle_tab_assignments") },
     { key: "notes",       label: t("vehicle_tab_notes") },
   ];
@@ -318,6 +319,7 @@ function renderVehicleTab(tab, vehicle) {
     case "tech":     content.innerHTML = renderTechTab(vehicle); break;
     case "finance":  content.innerHTML = renderFinanceTab(vehicle); break;
     case "service":    loadServiceTab(content, vehicle); break;
+    case "incidents":  loadIncidentsTab(content, vehicle); break;
     case "assignments": loadAssignmentsTab(content, vehicle); break;
     case "notes":    content.innerHTML = renderNotesTab(vehicle); break;
   }
@@ -432,6 +434,93 @@ async function loadServiceTab(container, vehicle) {
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
+}
+
+// ── TAB "PRIJAVE" (kvarovi/oštećenja/nezgode za ovo vozilo) ────
+async function loadIncidentsTab(container, vehicle) {
+  container.innerHTML = `<div class="loading">${t("loading")}</div>`;
+  const canEdit = S.profile?.role !== "driver" && !vehicle.archived;
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, "companies", S.companyId, "incidents"),
+        where("vehicleId", "==", vehicle.id),
+        orderBy("createdAt", "desc")
+      )
+    );
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    container.innerHTML = items.length === 0
+      ? `<div class="empty-state"><div class="empty-state__icon">⚠️</div><p>${t("no_data")}</p></div>`
+      : `<div class="service-list">${items.map(i => vehicleIncidentItem(i, canEdit)).join("")}</div>`;
+
+    if (canEdit) {
+      container.querySelectorAll(".btn-schedule-service").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const inc = items.find(x => x.id === btn.dataset.id);
+          if (inc) openServiceForm(vehicle, null, incidentToServicePrefill(inc));
+        });
+      });
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
+  }
+}
+
+// Priprema početnih vrednosti za formu "Dodaj servis" na osnovu prijave
+// (ne tretira se kao edit — samo predpopunjava polja nove forme).
+function incidentToServicePrefill(inc) {
+  const typeLabels = {
+    fault:    t("incident_fault"),
+    damage:   t("incident_damage"),
+    accident: t("incident_accident"),
+    other:    t("incident_other"),
+  };
+  const prefix = typeLabels[inc.type] || inc.type;
+  return {
+    serviceType: inc.type === "other" ? "other" : "repair",
+    km:          inc.currentKm ?? null,
+    description: `${prefix}${inc.description ? ": " + inc.description : ""}`,
+  };
+}
+
+function vehicleIncidentItem(i, canEdit) {
+  const typeConfig = {
+    fault:    { icon: "🔧", label: t("incident_fault"),    color: "service" },
+    damage:   { icon: "💥", label: t("incident_damage"),   color: "broken" },
+    accident: { icon: "🚨", label: t("incident_accident"), color: "broken" },
+    other:    { icon: "📋", label: t("incident_other"),    color: "inactive" },
+  };
+  const cfg = typeConfig[i.type] || { icon: "📋", label: i.type, color: "inactive" };
+
+  const statusBadge = i.status === "open"
+    ? `<span class="badge badge--broken">🔴 ${t("incident_status_open")}</span>`
+    : i.status === "in_progress"
+      ? `<span class="badge badge--service">🟡 ${t("incident_status_in_progress")}</span>`
+      : `<span class="badge badge--active">🟢 ${t("incident_status_closed")}</span>`;
+
+  return `
+    <div class="service-item">
+      <div class="service-item__header">
+        <div class="service-item__badges">
+          <span class="badge badge--${cfg.color}">${cfg.icon} ${cfg.label}</span>
+          ${statusBadge}
+        </div>
+        <span class="service-item__date">${formatDate(i.createdAt)}</span>
+      </div>
+      ${i.description ? `<div class="service-item__desc">${i.description}</div>` : ""}
+      <div class="service-item__meta">
+        ${i.driverName ? `<span>👤 ${i.driverName}</span>` : ""}
+        ${i.currentKm ? `<span>🛣️ ${i.currentKm.toLocaleString()} km</span>` : ""}
+        ${i.location ? `<span>📍 ${i.location}</span>` : ""}
+      </div>
+      ${canEdit && i.status !== "closed" ? `
+        <div class="service-item__actions">
+          <button class="btn btn--secondary btn--sm btn-schedule-service" data-id="${i.id}">🔧 ${t("incident_schedule_service_btn")}</button>
+        </div>
+      ` : ""}
+    </div>
+  `;
 }
 
 async function loadAssignmentsTab(container, vehicle) {
@@ -801,9 +890,9 @@ function confirmHardDeleteVehicle(vehicle) {
 }
 
 // ── SERVIS FORMA (dodavanje / editovanje) ────────────────────
-async function openServiceForm(vehicle, service = null) {
+async function openServiceForm(vehicle, service = null, prefill = null) {
   const isEdit = !!service;
-  const s = service || {};
+  const s = service || prefill || {};
   const servicers = await getServiceProviders();
 
   const bodyHTML = `

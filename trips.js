@@ -11,11 +11,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
+import { openIncidentForm } from "./incidents.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let activeAssignment = null;
 let activeVehicle    = null;
 let tripEntries      = []; // svi unosi tokom zaduženja
+let pastAssignments  = []; // istorija zatvorenih zaduženja (vozač)
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderTrips(container) {
@@ -27,10 +29,10 @@ export async function renderTrips(container) {
     return;
   }
 
-  // Vozač vidi samo svoje aktivno zaduženje
-  await loadActiveAssignment();
+  // Vozač vidi svoje aktivno zaduženje + istoriju prošlih
+  await Promise.all([loadActiveAssignment(), loadPastAssignments()]);
 
-  if (!activeAssignment) {
+  if (!activeAssignment && pastAssignments.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state__icon">🚗</div>
@@ -46,6 +48,10 @@ export async function renderTrips(container) {
 
 // ── UČITAJ AKTIVNO ZADUŽENJE ──────────────────────────────────
 async function loadActiveAssignment() {
+  activeAssignment = null;
+  activeVehicle    = null;
+  tripEntries      = [];
+
   try {
     const snap = await getDocs(query(
       collection(db, "companies", S.companyId, "assignments"),
@@ -93,19 +99,62 @@ async function loadActiveAssignment() {
   }
 }
 
+// ── UČITAJ ISTORIJU (ZATVORENA ZADUŽENJA) ─────────────────────
+// Sortirano od najmlađe ka najstarijoj (endDate desc)
+async function loadPastAssignments() {
+  pastAssignments = [];
+
+  try {
+    let items = [];
+
+    try {
+      const snap = await getDocs(query(
+        collection(db, "companies", S.companyId, "assignments"),
+        where("driverUid", "==", S.user.uid),
+        where("status", "==", "closed"),
+        orderBy("endDate", "desc")
+      ));
+      items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      // Ako composite index za (driverUid, status, endDate) ne postoji,
+      // Firestore baca grešku umesto praznog rezultata — obavesti u konzoli.
+      console.error("loadPastAssignments (driverUid) error:", e);
+    }
+
+    // Fallback po driverId, za starije zapise bez driverUid
+    if (items.length === 0 && S.profile?.driverId) {
+      try {
+        const snap2 = await getDocs(query(
+          collection(db, "companies", S.companyId, "assignments"),
+          where("driverId", "==", S.profile.driverId),
+          where("status", "==", "closed"),
+          orderBy("endDate", "desc")
+        ));
+        items = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.error("loadPastAssignments (driverId) error:", e);
+      }
+    }
+
+    pastAssignments = items;
+  } catch (e) {
+    console.error("loadPastAssignments error:", e);
+  }
+}
+
 // ── VOZAČKI PRIKAZ ────────────────────────────────────────────
 function renderDriverView(container) {
   const a = activeAssignment;
   const v = activeVehicle;
 
-  // Sumarne statistike
+  // Sumarne statistike (samo za aktivno zaduženje)
   const totalFuel    = tripEntries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelAmount || 0), 0);
   const totalFuelCost= tripEntries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelCost || 0), 0);
   const totalTolls   = tripEntries.filter(e => e.type === "toll").reduce((s, e) => s + (e.amount || 0), 0);
   const totalOther   = tripEntries.filter(e => e.type === "other_cost").reduce((s, e) => s + (e.amount || 0), 0);
   const incidents    = tripEntries.filter(e => ["fault","damage","accident"].includes(e.type));
 
-  container.innerHTML = `
+  const activeSectionHTML = a ? `
     <!-- HEADER VOZILA -->
     <div class="trip-vehicle-card">
       <div class="trip-vehicle-card__header">
@@ -143,25 +192,7 @@ function renderDriverView(container) {
 
       <!-- KM POTVRDA -->
       <div class="km-confirm-box" id="km-confirm-box">
-        <div class="km-confirm-box__label">${t("trip_km_system")}</div>
-        <div class="km-confirm-box__value">${v?.currentKm?.toLocaleString() || a.startKm?.toLocaleString() || "—"} km</div>
-        <div class="km-confirm-box__hint">${t("trip_km_confirm_hint")}</div>
-        <div class="km-confirm-box__actions">
-          <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ ${t("trip_km_confirm")}</button>
-          <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ ${t("trip_km_enter_actual")}</button>
-        </div>
-        <div id="km-correct-form" class="hidden" style="margin-top:10px">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">${t("trip_km_actual_ph")}</label>
-              <input id="input-actual-km" class="form-input" type="number"
-                placeholder="${v?.currentKm || a.startKm || ""}" />
-            </div>
-            <div style="display:flex;align-items:flex-end">
-              <button class="btn btn--primary btn--sm" id="btn-submit-km">${t("trip_km_confirm")}</button>
-            </div>
-          </div>
-        </div>
+        ${kmConfirmBoxContent(a, v)}
       </div>
     </div>
 
@@ -203,21 +234,153 @@ function renderDriverView(container) {
         : tripEntries.map(e => tripEntryCard(e)).join("")
       }
     </div>
+  ` : `
+    <div class="empty-state">
+      <div class="empty-state__icon">🚗</div>
+      <h3>${t("trip_no_assignment")}</h3>
+      <p>${t("trip_no_assignment_sub")}</p>
+    </div>
   `;
 
-  // ── Bind events ───────────────────────────────────────────
-  bindKmConfirm();
-  document.getElementById("btn-add-fuel")?.addEventListener("click", () => openFuelForm());
-  document.getElementById("btn-add-toll")?.addEventListener("click", () => openCostForm());
-  document.getElementById("btn-add-incident")?.addEventListener("click", () => openIncidentForm());
-  document.getElementById("btn-unassign")?.addEventListener("click", () => openDriverUnassignForm());
+  // ── ISTORIJA (zatvorena zaduženja), od najmlađe ka najstarijoj ──
+  const historySectionHTML = pastAssignments.length > 0 ? `
+    <div class="trip-history-header" style="margin-top:28px">
+      <h3>${t("trip_history_title")}</h3>
+    </div>
+    <div class="trip-history-list">
+      ${pastAssignments.map(pa => pastAssignmentCard(pa)).join("")}
+    </div>
+  ` : "";
+
+  container.innerHTML = activeSectionHTML + historySectionHTML;
+
+  // ── Bind events (samo ako postoji aktivno zaduženje) ──────
+  if (a) {
+    bindKmConfirm();
+    document.getElementById("btn-add-fuel")?.addEventListener("click", () => openFuelForm());
+    document.getElementById("btn-add-toll")?.addEventListener("click", () => openCostForm());
+    document.getElementById("btn-add-incident")?.addEventListener("click", () => openIncidentForm(null, refreshEntries));
+    document.getElementById("btn-unassign")?.addEventListener("click", () => openDriverUnassignForm());
+  }
+}
+
+// ── ISTORIJA — KARTICA ZATVORENOG ZADUŽENJA ───────────────────
+function pastAssignmentCard(a) {
+  const km = (a.endKm != null && a.startKm != null) ? (a.endKm - a.startKm) : null;
+  return `
+    <div class="trip-history-card">
+      <div class="trip-history-card__header">
+        <div class="trip-history-card__vehicle">
+          🚗 <strong>${a.vehicleBrand || ""} ${a.vehicleModel || ""}</strong> — ${a.vehiclePlate || ""}
+        </div>
+        <span class="badge badge--inactive">${t("assignment_status_closed")}</span>
+      </div>
+      <div class="trip-history-card__dates">
+        📅 ${formatDate(a.startDate)} → ${formatDate(a.endDate)}
+      </div>
+      <div class="trip-history-card__km">
+        🛣️ ${a.startKm?.toLocaleString() ?? "—"} → ${a.endKm?.toLocaleString() ?? "—"} km
+        ${km != null ? `<strong> (${km.toLocaleString()} km)</strong>` : ""}
+      </div>
+      ${a.tripType === "intercity" && a.destination ? `
+        <div class="trip-history-card__dest">📍 ${a.destination}</div>
+      ` : ""}
+      ${a.reason ? `<div class="trip-history-card__reason">${a.reason}</div>` : ""}
+      ${a.unassignNotes ? `<div class="trip-history-card__notes">${a.unassignNotes}</div>` : ""}
+    </div>
+  `;
+}
+
+// ── KM POTVRDA — sadržaj boksa (potvrđeno vs. forma) ───────────
+function kmConfirmBoxContent(a, v) {
+  const systemKm = v?.currentKm ?? a.startKm;
+
+  if (a.kmConfirmed) {
+    const val = a.kmConfirmedValue ?? systemKm;
+    return `
+      <div class="km-confirmed">
+        ✅ ${t("trip_km_confirmed")}: <strong>${val?.toLocaleString()} km</strong>
+        ${a.kmMismatch ? `<span class="km-mismatch-note">${t("trip_km_mismatch_reported")}</span>` : ""}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="km-confirm-box__label">${t("trip_km_system")}</div>
+    <div class="km-confirm-box__value">${systemKm?.toLocaleString() || "—"} km</div>
+    <div class="km-confirm-box__hint">${t("trip_km_confirm_hint")}</div>
+    <div class="km-confirm-box__actions">
+      <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ ${t("trip_km_confirm")}</button>
+      <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ ${t("trip_km_enter_actual")}</button>
+    </div>
+    <div id="km-correct-form" class="hidden" style="margin-top:10px">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">${t("trip_km_actual_ph")}</label>
+          <input id="input-actual-km" class="form-input" type="number"
+            placeholder="${systemKm || ""}" />
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn btn--primary btn--sm" id="btn-submit-km">${t("trip_km_confirm")}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── POSLEDNJA VAŽEĆA KILOMETRAŽA (referenca za validaciju) ─────
+// Sve od ovog trenutka nadalje (gorivo, troškovi, prijave, razduženje)
+// mora biti >= od ove vrednosti. Ažurira se na vehicle.currentKm
+// posle svakog unosa koji sadrži km.
+function getLastKnownKm() {
+  return activeVehicle?.currentKm ?? activeAssignment?.startKm ?? 0;
+}
+
+// Validira uneti km string: obavezan je i mora biti >= poslednje važeće.
+// Vraća broj ili null (i ispisuje grešku) ako validacija ne prođe.
+function validateKmInput(rawValue, errorElId) {
+  const km = parseFloat(rawValue);
+  if (!rawValue || isNaN(km) || km <= 0) {
+    showEntryError(errorElId, t("required_field") + ": " + t("trip_current_km"));
+    return null;
+  }
+  const lastKm = getLastKnownKm();
+  if (km < lastKm) {
+    showEntryError(errorElId, `${t("trip_km_too_low")}: ${lastKm.toLocaleString()} km`);
+    return null;
+  }
+  return km;
+}
+
+// Upisuje novu km na vozilo (Firestore) i ažurira lokalno stanje.
+async function bumpVehicleKm(newKm) {
+  await updateDoc(doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId), {
+    currentKm: newKm,
+    updatedAt: serverTimestamp(),
+  });
+  if (activeVehicle) activeVehicle.currentKm = newKm;
+  else activeVehicle = { id: activeAssignment.vehicleId, currentKm: newKm };
 }
 
 // ── KM POTVRDA ────────────────────────────────────────────────
 function bindKmConfirm() {
-  const systemKm = activeVehicle?.currentKm || activeAssignment?.startKm;
+  const systemKm = activeVehicle?.currentKm ?? activeAssignment?.startKm;
 
   document.getElementById("btn-confirm-km")?.addEventListener("click", async () => {
+    try {
+      await updateDoc(doc(db, "companies", S.companyId, "assignments", activeAssignment.id), {
+        kmConfirmed:      true,
+        kmConfirmedValue: systemKm,
+        kmConfirmedAt:    serverTimestamp(),
+        updatedAt:        serverTimestamp(),
+      });
+      activeAssignment.kmConfirmed      = true;
+      activeAssignment.kmConfirmedValue = systemKm;
+    } catch (e) {
+      showToast(`${t("error")}: ${e.message}`, "error");
+      return;
+    }
+
     document.getElementById("km-confirm-box").innerHTML = `
       <div class="km-confirmed">✅ ${t("trip_km_confirmed")}: <strong>${systemKm?.toLocaleString()} km</strong></div>
     `;
@@ -231,36 +394,52 @@ function bindKmConfirm() {
     const actualKm = Number(document.getElementById("input-actual-km")?.value);
     if (!actualKm || actualKm <= 0) return;
 
-    if (actualKm !== systemKm) {
-      // Snimi neslaganje i pošalji notifikaciju fleet adminu
-      await addDoc(collection(db, "companies", S.companyId, "notifications"), {
-        type:         "km_mismatch",
-        assignmentId: activeAssignment.id,
-        vehicleId:    activeAssignment.vehicleId,
-        vehiclePlate: activeAssignment.vehiclePlate,
-        driverId:     S.profile.driverId,
-        driverName:   activeAssignment.driverName,
-        systemKm,
-        driverKm:     actualKm,
-        status:       "unread",
-        createdAt:    serverTimestamp(),
-      });
+    const mismatch = actualKm !== systemKm;
 
-      // Ažuriraj assignment sa flagom
-      await updateDoc(doc(db, "companies", S.companyId, "assignments", activeAssignment.id), {
-        kmMismatch:    true,
-        driverStartKm: actualKm,
-        updatedAt:     serverTimestamp(),
-      });
+    try {
+      const updateData = {
+        kmConfirmed:      true,
+        kmConfirmedValue: actualKm,
+        kmConfirmedAt:    serverTimestamp(),
+        updatedAt:        serverTimestamp(),
+      };
 
-      showToast(t("trip_km_mismatch_reported"), "warning");
+      if (mismatch) {
+        updateData.kmMismatch    = true;
+        updateData.driverStartKm = actualKm;
+
+        // Snimi neslaganje i pošalji notifikaciju fleet adminu
+        await addDoc(collection(db, "companies", S.companyId, "notifications"), {
+          type:         "km_mismatch",
+          assignmentId: activeAssignment.id,
+          vehicleId:    activeAssignment.vehicleId,
+          vehiclePlate: activeAssignment.vehiclePlate,
+          driverId:     S.profile.driverId,
+          driverName:   activeAssignment.driverName,
+          systemKm,
+          driverKm:     actualKm,
+          status:       "unread",
+          createdAt:    serverTimestamp(),
+        });
+      }
+
+      await updateDoc(doc(db, "companies", S.companyId, "assignments", activeAssignment.id), updateData);
+
+      activeAssignment.kmConfirmed      = true;
+      activeAssignment.kmConfirmedValue = actualKm;
+      if (mismatch) activeAssignment.kmMismatch = true;
+
+      if (mismatch) showToast(t("trip_km_mismatch_reported"), "warning");
+    } catch (e) {
+      showToast(`${t("error")}: ${e.message}`, "error");
+      return;
     }
 
     // Ažuriraj prikaz
     document.getElementById("km-confirm-box").innerHTML = `
       <div class="km-confirmed">
         ✅ Unesena km: <strong>${actualKm.toLocaleString()} km</strong>
-        ${actualKm !== systemKm ? `<span class="km-mismatch-note">(razlika: ${(actualKm - systemKm).toLocaleString()} km)</span>` : ""}
+        ${mismatch ? `<span class="km-mismatch-note">(razlika: ${(actualKm - systemKm).toLocaleString()} km)</span>` : ""}
       </div>
     `;
   });
@@ -307,7 +486,7 @@ function openFuelForm() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">${t("trip_current_km")}</label>
+      <label class="form-label">${t("trip_current_km")} *</label>
       <input id="tf-currentKm" class="form-input" type="number"
         value="${activeVehicle?.currentKm || ""}"
         placeholder="${t('trip_current_km')}" />
@@ -345,7 +524,8 @@ async function saveFuelEntry() {
     return;
   }
 
-  const currentKm = parseFloat(document.getElementById("tf-currentKm")?.value) || null;
+  const currentKm = validateKmInput(document.getElementById("tf-currentKm")?.value, "fuel-form-error");
+  if (currentKm === null) return;
 
   try {
     await addDoc(collection(db, "companies", S.companyId, "tripEntries"), {
@@ -367,13 +547,7 @@ async function saveFuelEntry() {
       createdAt:    serverTimestamp(),
     });
 
-    // Ažuriraj currentKm na vozilu ako je unesena
-    if (currentKm && activeVehicle) {
-      await updateDoc(doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId), {
-        currentKm, updatedAt: serverTimestamp()
-      });
-      if (activeVehicle) activeVehicle.currentKm = currentKm;
-    }
+    await bumpVehicleKm(currentKm);
 
     showToast(t("success"), "success");
     await refreshEntries();
@@ -410,6 +584,12 @@ function openCostForm() {
       <input id="tc-location" class="form-input" type="text" placeholder="${t("trip_cost_location_ph")}" />
     </div>
     <div class="form-group">
+      <label class="form-label">${t("trip_current_km")} *</label>
+      <input id="tc-currentKm" class="form-input" type="number"
+        value="${activeVehicle?.currentKm || ""}"
+        placeholder="${t('trip_current_km')}" />
+    </div>
+    <div class="form-group">
       <label class="form-label">${t("notes")}</label>
       <textarea id="tc-notes" class="form-textarea" rows="2"></textarea>
     </div>
@@ -426,6 +606,9 @@ async function saveCostEntry() {
     return;
   }
 
+  const currentKm = validateKmInput(document.getElementById("tc-currentKm")?.value, "cost-form-error");
+  if (currentKm === null) return;
+
   try {
     await addDoc(collection(db, "companies", S.companyId, "tripEntries"), {
       type:         document.getElementById("tc-type")?.value || "other_cost",
@@ -438,107 +621,17 @@ async function saveCostEntry() {
       amount,
       receiptNo:    document.getElementById("tc-receiptNo")?.value.trim() || null,
       location:     document.getElementById("tc-location")?.value.trim() || null,
+      currentKm,
       notes:        document.getElementById("tc-notes")?.value.trim() || null,
       createdAt:    serverTimestamp(),
     });
+
+    await bumpVehicleKm(currentKm);
 
     showToast(t("success"), "success");
     await refreshEntries();
   } catch (e) {
     showEntryError("cost-form-error", `${t("error")}: ${e.message}`);
-  }
-}
-
-// ── FORMA ZA PRIJAVU ──────────────────────────────────────────
-function openIncidentForm() {
-  const bodyHTML = `
-    <div class="form-section-title">Prijava</div>
-    <div class="form-group">
-      <label class="form-label">${t("incident_type")} *</label>
-      <div class="radio-group" style="flex-direction:column;gap:8px">
-        <label class="radio-label">
-          <input type="radio" name="ti-type" value="fault" checked />
-          🔧 ${t("incident_fault")}
-        </label>
-        <label class="radio-label">
-          <input type="radio" name="ti-type" value="damage" />
-          💥 ${t("incident_damage")}
-        </label>
-        <label class="radio-label">
-          <input type="radio" name="ti-type" value="accident" />
-          🚨 ${t("incident_accident")}
-        </label>
-        <label class="radio-label">
-          <input type="radio" name="ti-type" value="other" />
-          📋 ${t("incident_other")}
-        </label>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">${t("incident_description")} *</label>
-      <textarea id="ti-description" class="form-textarea"></textarea>
-    </div>
-    <div class="form-group">
-      <label class="form-label">${t("incident_location")}</label>
-      <input id="ti-location" class="form-input" type="text" placeholder="Gde se dogodilo?" />
-    </div>
-    <div class="form-group">
-      <label class="form-label">${t("trip_current_km")}</label>
-      <input id="ti-currentKm" class="form-input" type="number"
-        value="${activeVehicle?.currentKm || ""}" />
-    </div>
-    <p id="incident-form-error" class="login-error hidden"></p>
-  `;
-
-  openModal(t("incident_add"), bodyHTML, () => saveIncidentEntry());
-}
-
-async function saveIncidentEntry() {
-  const description = document.getElementById("ti-description")?.value.trim();
-  const type = document.querySelector("input[name='ti-type']:checked")?.value || "fault";
-
-  if (!description) {
-    showEntryError("incident-form-error", t("required_field") + ": " + t("incident_description"));
-    return;
-  }
-
-  try {
-    // Snimamo i u tripEntries i u incidents kolekciju
-    const incidentData = {
-      type,
-      assignmentId: activeAssignment.id,
-      vehicleId:    activeAssignment.vehicleId,
-      vehiclePlate: activeAssignment.vehiclePlate,
-      driverId:     S.profile?.driverId || null,
-      driverUid:    S.user.uid,
-      driverName:   activeAssignment.driverName,
-      description,
-      location:     document.getElementById("ti-location")?.value.trim() || null,
-      currentKm:    parseFloat(document.getElementById("ti-currentKm")?.value) || null,
-      status:       "open",
-      createdAt:    serverTimestamp(),
-    };
-
-    await Promise.all([
-      addDoc(collection(db, "companies", S.companyId, "tripEntries"), incidentData),
-      addDoc(collection(db, "companies", S.companyId, "incidents"), incidentData),
-    ]);
-
-    // Notifikacija fleet adminu
-    await addDoc(collection(db, "companies", S.companyId, "notifications"), {
-      type:         "incident",
-      incidentType: type,
-      vehiclePlate: activeAssignment.vehiclePlate,
-      driverName:   activeAssignment.driverName,
-      description,
-      status:       "unread",
-      createdAt:    serverTimestamp(),
-    });
-
-    showToast(t("trip_incident_reported"), "warning");
-    await refreshEntries();
-  } catch (e) {
-    showEntryError("incident-form-error", `${t("error")}: ${e.message}`);
   }
 }
 
@@ -594,9 +687,9 @@ async function processDriverUnassign() {
     return;
   }
 
-  const startKm = activeAssignment.startKm || 0;
-  if (endKm < startKm) {
-    showEntryError("unassign-form-error", `${t("assignment_end_km")}: ${endKm.toLocaleString()} < ${startKm.toLocaleString()}`);
+  const lastKm = getLastKnownKm();
+  if (endKm < lastKm) {
+    showEntryError("unassign-form-error", `${t("trip_km_too_low")}: ${lastKm.toLocaleString()} km`);
     return;
   }
 
@@ -674,6 +767,7 @@ function tripEntryCard(entry) {
           </div>
           ${entry.location ? `<div class="trip-entry-card__sub">📍 ${entry.location}</div>` : ""}
           ${entry.receiptNo ? `<div class="trip-entry-card__sub">${t("trip_fuel_receipt")}: ${entry.receiptNo}</div>` : ""}
+          ${entry.currentKm ? `<div class="trip-entry-card__sub">🛣️ ${entry.currentKm.toLocaleString()} km</div>` : ""}
         ` : `
           <div class="trip-entry-card__main">${entry.description || ""}</div>
           ${entry.location ? `<div class="trip-entry-card__sub">📍 ${entry.location}</div>` : ""}
