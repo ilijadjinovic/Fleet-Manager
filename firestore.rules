@@ -70,10 +70,13 @@ service cloud.firestore {
       match /vehicles/{vehicleId} {
         allow read: if isCompanyMember(companyId);
         allow create, update, delete: if isMasterAdmin() || isFleetAdmin(companyId);
-        // Vozač može da update-uje currentKm (pri točenju)
+        // Vozač može da update-uje currentKm (pri točenju) i da očisti
+        // assignedDriverName pri sopstvenom razduženju (samo na null)
         allow update: if isDriver(companyId)
           && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['currentKm', 'updatedAt']);
+              .hasOnly(['currentKm', 'updatedAt', 'assignedDriverName'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['assignedDriverName'])
+              || request.resource.data.assignedDriverName == null);
       }
 
       // ── VOZAČI ────────────────────────────────────────────
@@ -91,7 +94,8 @@ service cloud.firestore {
           && resource.data.driverUid == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['status', 'endDate', 'endKm', 'kmMismatch',
-                        'driverStartKm', 'unassignNotes', 'closedByDriver', 'updatedAt']);
+                        'driverStartKm', 'unassignNotes', 'closedByDriver', 'updatedAt',
+                        'kmConfirmed', 'kmConfirmedValue', 'kmConfirmedAt']);
       }
 
       // ── TRIP ENTRIES (gorivo, putarine, prijave) ──────────
