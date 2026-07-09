@@ -17,7 +17,6 @@ import { openIncidentForm } from "./incidents.js";
 let activeAssignment = null;
 let activeVehicle    = null;
 let tripEntries      = []; // svi unosi tokom zaduženja
-let pastAssignments  = []; // istorija zatvorenih zaduženja (vozač)
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderTrips(container) {
@@ -29,10 +28,10 @@ export async function renderTrips(container) {
     return;
   }
 
-  // Vozač vidi svoje aktivno zaduženje + istoriju prošlih
-  await Promise.all([loadActiveAssignment(), loadPastAssignments()]);
+  // Vozač vidi samo svoje aktivno zaduženje (istorija je na tabu "Pregled")
+  await loadActiveAssignment();
 
-  if (!activeAssignment && pastAssignments.length === 0) {
+  if (!activeAssignment) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state__icon">🚗</div>
@@ -96,49 +95,6 @@ async function loadActiveAssignment() {
 
   } catch (e) {
     console.error("loadActiveAssignment error:", e);
-  }
-}
-
-// ── UČITAJ ISTORIJU (ZATVORENA ZADUŽENJA) ─────────────────────
-// Sortirano od najmlađe ka najstarijoj (endDate desc)
-async function loadPastAssignments() {
-  pastAssignments = [];
-
-  try {
-    let items = [];
-
-    try {
-      const snap = await getDocs(query(
-        collection(db, "companies", S.companyId, "assignments"),
-        where("driverUid", "==", S.user.uid),
-        where("status", "==", "closed"),
-        orderBy("endDate", "desc")
-      ));
-      items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (e) {
-      // Ako composite index za (driverUid, status, endDate) ne postoji,
-      // Firestore baca grešku umesto praznog rezultata — obavesti u konzoli.
-      console.error("loadPastAssignments (driverUid) error:", e);
-    }
-
-    // Fallback po driverId, za starije zapise bez driverUid
-    if (items.length === 0 && S.profile?.driverId) {
-      try {
-        const snap2 = await getDocs(query(
-          collection(db, "companies", S.companyId, "assignments"),
-          where("driverId", "==", S.profile.driverId),
-          where("status", "==", "closed"),
-          orderBy("endDate", "desc")
-        ));
-        items = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
-      } catch (e) {
-        console.error("loadPastAssignments (driverId) error:", e);
-      }
-    }
-
-    pastAssignments = items;
-  } catch (e) {
-    console.error("loadPastAssignments error:", e);
   }
 }
 
@@ -242,17 +198,7 @@ function renderDriverView(container) {
     </div>
   `;
 
-  // ── ISTORIJA (zatvorena zaduženja), od najmlađe ka najstarijoj ──
-  const historySectionHTML = pastAssignments.length > 0 ? `
-    <div class="trip-history-header" style="margin-top:28px">
-      <h3>${t("trip_history_title")}</h3>
-    </div>
-    <div class="trip-history-list">
-      ${pastAssignments.map(pa => pastAssignmentCard(pa)).join("")}
-    </div>
-  ` : "";
-
-  container.innerHTML = activeSectionHTML + historySectionHTML;
+  container.innerHTML = activeSectionHTML;
 
   // ── Bind events (samo ako postoji aktivno zaduženje) ──────
   if (a) {
@@ -262,33 +208,6 @@ function renderDriverView(container) {
     document.getElementById("btn-add-incident")?.addEventListener("click", () => openIncidentForm(null, refreshEntries));
     document.getElementById("btn-unassign")?.addEventListener("click", () => openDriverUnassignForm());
   }
-}
-
-// ── ISTORIJA — KARTICA ZATVORENOG ZADUŽENJA ───────────────────
-function pastAssignmentCard(a) {
-  const km = (a.endKm != null && a.startKm != null) ? (a.endKm - a.startKm) : null;
-  return `
-    <div class="trip-history-card">
-      <div class="trip-history-card__header">
-        <div class="trip-history-card__vehicle">
-          🚗 <strong>${a.vehicleBrand || ""} ${a.vehicleModel || ""}</strong> — ${a.vehiclePlate || ""}
-        </div>
-        <span class="badge badge--inactive">${t("assignment_status_closed")}</span>
-      </div>
-      <div class="trip-history-card__dates">
-        📅 ${formatDate(a.startDate)} → ${formatDate(a.endDate)}
-      </div>
-      <div class="trip-history-card__km">
-        🛣️ ${a.startKm?.toLocaleString() ?? "—"} → ${a.endKm?.toLocaleString() ?? "—"} km
-        ${km != null ? `<strong> (${km.toLocaleString()} km)</strong>` : ""}
-      </div>
-      ${a.tripType === "intercity" && a.destination ? `
-        <div class="trip-history-card__dest">📍 ${a.destination}</div>
-      ` : ""}
-      ${a.reason ? `<div class="trip-history-card__reason">${a.reason}</div>` : ""}
-      ${a.unassignNotes ? `<div class="trip-history-card__notes">${a.unassignNotes}</div>` : ""}
-    </div>
-  `;
 }
 
 // ── KM POTVRDA — sadržaj boksa (potvrđeno vs. forma) ───────────
