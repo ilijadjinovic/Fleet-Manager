@@ -193,7 +193,8 @@ function historyEntryItem(entry) {
   if (entry.type === "fuel") {
     return `
       <div class="trip-history-entry">
-        <span>⛽ ${entry.fuelAmount ?? "—"} L${entry.fuelCost ? ` / ${entry.fuelCost.toLocaleString()} RSD` : ""}</span>
+        <span>⛽ ${t("trip_entry_fuel")}</span>
+        <span>${entry.fuelAmount ?? "—"} L${entry.fuelCost ? ` / ${entry.fuelCost.toLocaleString()} RSD` : ""}</span>
         ${entry.fuelStation ? `<span>🏪 ${entry.fuelStation}</span>` : ""}
         ${entry.currentKm ? `<span>🛣️ ${entry.currentKm.toLocaleString()} km</span>` : ""}
         <span class="trip-history-entry__date">${formatDate(entry.createdAt)}</span>
@@ -201,8 +202,11 @@ function historyEntryItem(entry) {
     `;
   }
   if (["toll", "parking", "washing", "other_cost"].includes(entry.type)) {
+    const costIcons  = { toll: "🛣️", parking: "🅿️", washing: "🚿", other_cost: "📋" };
+    const costLabels = { toll: t("trip_entry_toll"), parking: t("trip_entry_parking"), washing: t("trip_entry_washing"), other_cost: t("trip_entry_cost") };
     return `
       <div class="trip-history-entry">
+        <span>${costIcons[entry.type] || "📋"} ${costLabels[entry.type] || entry.type}</span>
         <span><strong>${entry.amount?.toLocaleString() ?? "—"} RSD</strong></span>
         ${entry.location ? `<span>📍 ${entry.location}</span>` : ""}
         ${entry.currentKm ? `<span>🛣️ ${entry.currentKm.toLocaleString()} km</span>` : ""}
