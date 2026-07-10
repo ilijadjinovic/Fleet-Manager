@@ -164,7 +164,7 @@ async function loadDashboardData() {
           where("driverUid", "==", S.user.uid),
           orderBy("startDate", "desc")
         )
-      ).catch(e => { console.error("[dashboard] assignments(driverUid) query error:", e); return { docs: [] }; });
+      ).catch(() => ({ docs: [] }));
 
       if (allAssignmentsSnap.docs.length === 0 && S.profile?.driverId) {
         allAssignmentsSnap = await getDocs(
@@ -173,7 +173,7 @@ async function loadDashboardData() {
             where("driverId", "==", S.profile.driverId),
             orderBy("startDate", "desc")
           )
-        ).catch(e => { console.error("[dashboard] assignments(driverId) query error:", e); return { docs: [] }; });
+        ).catch(() => ({ docs: [] }));
       }
 
       allEntriesSnap = await getDocs(
@@ -182,16 +182,7 @@ async function loadDashboardData() {
           where("driverUid", "==", S.user.uid),
           orderBy("createdAt", "asc")
         )
-      ).catch(e => { console.error("[dashboard] tripEntries(driverUid) query error:", e); return { docs: [] }; });
-
-      console.log("[dashboard] driver history debug:", {
-        userUid: S.user?.uid,
-        profileDriverId: S.profile?.driverId,
-        assignmentsFound: allAssignmentsSnap.docs.length,
-        entriesFound: allEntriesSnap.docs.length,
-        assignments: allAssignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        entries: allEntriesSnap.docs.map(d => ({ id: d.id, assignmentId: d.data().assignmentId, type: d.data().type, driverUid: d.data().driverUid })),
-      });
+      ).catch(() => ({ docs: [] }));
     }
 
     // Zakazani servisi = unosi u "Servisna istorija" koji još nisu rešeni
