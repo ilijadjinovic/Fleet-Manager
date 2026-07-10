@@ -146,24 +146,52 @@ async function loadDashboardData() {
     // Vozač: SVA njegova zaduženja (za istoriju) + SVI njegovi unosi
     // (gorivo/troškovi/prijave) — jedan upit za sve, grupiše se lokalno
     // po zaduženju umesto da se pita baza posebno za svaku vožnju.
+    //
+    // Zaduženja: driverUid je primarni ključ (uvek pouzdan — direktan Auth
+    // UID), sa driverId fallback-om (isti obrazac kao u trips.js) za
+    // slučaj da driverUid na starijim zapisima nije popunjen (npr. Google
+    // login vozači kod kojih se driverUid ne postavlja automatski).
+    //
+    // tripEntries: ovde je driverUid UVEK pouzdano popunjen (postavlja se
+    // direktno iz trenutno ulogovanog korisnika pri svakom unosu, ne
+    // zavisi od profila), pa driverId fallback ovde uopšte nije potreban.
     let allAssignmentsSnap = { docs: [] };
     let allEntriesSnap     = { docs: [] };
-    if (role === "driver" && S.profile?.driverId) {
+    if (role === "driver") {
       allAssignmentsSnap = await getDocs(
         query(
           collection(db, "companies", cid, "assignments"),
-          where("driverId", "==", S.profile.driverId),
+          where("driverUid", "==", S.user.uid),
           orderBy("startDate", "desc")
         )
-      ).catch(() => ({ docs: [] }));
+      ).catch(e => { console.error("[dashboard] assignments(driverUid) query error:", e); return { docs: [] }; });
+
+      if (allAssignmentsSnap.docs.length === 0 && S.profile?.driverId) {
+        allAssignmentsSnap = await getDocs(
+          query(
+            collection(db, "companies", cid, "assignments"),
+            where("driverId", "==", S.profile.driverId),
+            orderBy("startDate", "desc")
+          )
+        ).catch(e => { console.error("[dashboard] assignments(driverId) query error:", e); return { docs: [] }; });
+      }
 
       allEntriesSnap = await getDocs(
         query(
           collection(db, "companies", cid, "tripEntries"),
-          where("driverId", "==", S.profile.driverId),
+          where("driverUid", "==", S.user.uid),
           orderBy("createdAt", "asc")
         )
-      ).catch(() => ({ docs: [] }));
+      ).catch(e => { console.error("[dashboard] tripEntries(driverUid) query error:", e); return { docs: [] }; });
+
+      console.log("[dashboard] driver history debug:", {
+        userUid: S.user?.uid,
+        profileDriverId: S.profile?.driverId,
+        assignmentsFound: allAssignmentsSnap.docs.length,
+        entriesFound: allEntriesSnap.docs.length,
+        assignments: allAssignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+        entries: allEntriesSnap.docs.map(d => ({ id: d.id, assignmentId: d.data().assignmentId, type: d.data().type, driverUid: d.data().driverUid })),
+      });
     }
 
     // Zakazani servisi = unosi u "Servisna istorija" koji još nisu rešeni
