@@ -197,6 +197,13 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
     .reduce((s, e) => s + (e.amount || 0), 0);
   const incidentCount = assignmentEntries.filter(e => ["fault", "damage", "accident"].includes(e.type)).length;
 
+  // Ukupna km od-do za CELO zaduženje: početna km prve vožnje i krajnja
+  // km poslednje (trips je već hronološki sortiran gore).
+  const firstTrip = trips[0];
+  const lastTrip   = trips[trips.length - 1];
+  const assignmentStartKm = firstTrip?.startKm ?? a.startKm ?? null;
+  const assignmentEndKm   = lastTrip?.endKm ?? a.endKm ?? null;
+
   return `
     <div class="assignment-history-card">
       <div class="assignment-history-card__header" data-toggle-assignment>
@@ -205,6 +212,9 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
             🚗 <strong>${a.vehicleBrand || ""} ${a.vehicleModel || ""}</strong> — ${a.vehiclePlate || ""}
           </div>
           <div class="trip-history-card__dates">📅 ${formatDate(a.startDate)} → ${formatDate(a.endDate)}</div>
+          <div class="trip-history-card__km-range">
+            🛣️ ${assignmentStartKm?.toLocaleString() ?? "—"} → ${assignmentEndKm != null ? assignmentEndKm.toLocaleString() : t("assignment_status_active")} km
+          </div>
         </div>
         <div class="trip-history-card__summary">
           <span class="trip-history-badge">🔑 ${trips.length} ${t("driver_trips_count")}</span>
@@ -264,6 +274,9 @@ function tripHistoryCard(trip, entries, index) {
         <div>
           <div class="trip-history-card__vehicle">🔑 ${t("driver_trip_label")} ${index}</div>
           <div class="trip-history-card__dates">📅 ${formatDate(trip.startDate)} → ${trip.endDate ? formatDate(trip.endDate) : t("assignment_status_active")}</div>
+          <div class="trip-history-card__km-range">
+            🛣️ ${trip.startKm?.toLocaleString() ?? "—"} → ${trip.endKm != null ? trip.endKm.toLocaleString() : t("assignment_status_active")} km
+          </div>
         </div>
         <div class="trip-history-card__summary">
           ${badges}

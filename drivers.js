@@ -18,6 +18,7 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { usernameToEmail, getSecondaryAuth } from "./firebase.js";
 import { historyAssignmentCard, attachAssignmentHistoryEvents, loadDriverAssignmentHistory } from "./trips.js";
+import { incidentCard } from "./incidents.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allDrivers = [];
@@ -413,7 +414,7 @@ async function loadDriverIncidents(container, driver) {
                   return `
                     <div class="incident-item-wrap">
                       ${tripLabel ? `<div class="incident-item__trip-label">🔑 ${t("driver_trip_label")}: ${tripLabel}</div>` : ""}
-                      ${incidentItem(i)}
+                      ${incidentCard(i, false)}
                     </div>
                   `;
                 }).join("")}
@@ -854,25 +855,6 @@ function assignmentItem(a) {
   `;
 }
 
-function incidentItem(inc) {
-  const typeIcons = { fault: "🔧", damage: "💥", accident: "🚨", other: "📋" };
-  return `
-    <div class="incident-item">
-      <div class="incident-item__header">
-        <span>${typeIcons[inc.type] || "⚠️"} ${t("incident_" + inc.type) || inc.type}</span>
-        <span class="badge badge--${inc.status === "closed" ? "inactive" : inc.status === "in_progress" ? "service" : "broken"}">
-          ${t("incident_status_" + inc.status) || inc.status}
-        </span>
-      </div>
-      <div class="incident-item__desc">${inc.description || ""}</div>
-      <div class="incident-item__meta">
-        ${inc.vehiclePlate ? `<span>🚗 ${inc.vehiclePlate}</span>` : ""}
-        ${inc.location ? `<span>📍 ${inc.location}</span>` : ""}
-        <span class="incident-item__date">${formatDate(inc.createdAt)}</span>
-      </div>
-    </div>
-  `;
-}
 
 // ── UTILS ─────────────────────────────────────────────────────
 function formatDate(val) {

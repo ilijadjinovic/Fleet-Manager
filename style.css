@@ -1813,6 +1813,9 @@ tbody td {
 .trip-history-card__dates {
   font-size: 12px; color: var(--color-text-muted); margin-top: 3px;
 }
+.trip-history-card__km-range {
+  font-size: 12px; color: var(--color-text-muted); margin-top: 2px;
+}
 .trip-history-card__summary {
   display: flex; align-items: center; gap: 6px; flex-shrink: 0;
 }

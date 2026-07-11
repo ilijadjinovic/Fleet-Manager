@@ -178,7 +178,10 @@ function renderList() {
 }
 
 // ── INCIDENT CARD ─────────────────────────────────────────────
-function incidentCard(inc, canEdit) {
+// Eksportovano — koristi ga i drivers.js (admin prikaz prijava
+// konkretnog vozača), da bi prikaz bio identičan onome što vozač
+// sam vidi (km, status, admin napomena, rešenje).
+export function incidentCard(inc, canEdit) {
   const typeConfig = {
     fault:    { icon: "🔧", label: t("incident_fault"),    color: "service" },
     damage:   { icon: "💥", label: t("incident_damage"),   color: "broken"  },
