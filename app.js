@@ -259,8 +259,14 @@ export function openModal(title, bodyHTML, onConfirm = null) {
     confirmBtn.disabled = true;
     let success = false;
     try {
-      await onConfirm();
-      success = true;
+      // onConfirm treba da vrati `true` (ili ništa) za uspeh, a `false`
+      // kada je sam prekinuo izvršavanje zbog validacione greške (u tom
+      // slučaju je već prikazao poruku korisniku i modal NE SME da se zatvori).
+      const result = await onConfirm();
+      success = result !== false;
+    } catch (e) {
+      success = false;
+      console.error("Modal onConfirm error:", e);
     } finally {
       confirmBtn.disabled = false;
     }

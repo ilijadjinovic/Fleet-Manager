@@ -456,12 +456,12 @@ async function saveAssignment(assignmentId, existing) {
   const reason    = document.getElementById("af-reason")?.value.trim();
 
   // Validacija
-  if (!vehicleId) { showAssignError(t("assignment_no_vehicle")); return; }
-  if (!driverId)  { showAssignError(t("assignment_no_driver")); return; }
-  if (!startDate) { showAssignError(t("assignment_no_date")); return; }
+  if (!vehicleId) { showAssignError(t("assignment_no_vehicle")); return false; }
+  if (!driverId)  { showAssignError(t("assignment_no_driver")); return false; }
+  if (!startDate) { showAssignError(t("assignment_no_date")); return false; }
   if (tripType === "intercity" && !destination) {
     showAssignError(t("assignment_no_destination"));
-    return;
+    return false;
   }
 
   const vehicle = allVehicles.find(v => v.id === vehicleId);
@@ -470,11 +470,11 @@ async function saveAssignment(assignmentId, existing) {
   const startDateObj = parseDMY(startDate);
   const endDateObj   = endDate ? parseDMY(endDate) : null;
 
-  if (!startDateObj) { showAssignError(t("assignment_no_date")); return; }
-  if (endDate && !endDateObj) { showAssignError(t("required_field")); return; }
+  if (!startDateObj) { showAssignError(t("assignment_no_date")); return false; }
+  if (endDate && !endDateObj) { showAssignError(t("required_field")); return false; }
   if (endDateObj && endDateObj <= startDateObj) {
     showAssignError(t("required_field"));
-    return;
+    return false;
   }
 
   try {
@@ -496,11 +496,11 @@ async function saveAssignment(assignmentId, existing) {
       // Ako postojeće zaduženje nema kraj (neodređeno) — mora se oročiti
       if (!eaEnd) {
         // Automatski zatvori staro zaduženje sa datumom = početak novog
-        const closeDate = new Date(startDate);
+        const closeDate = new Date(startDateObj);
 
         // Prikaži dialog pre snimanja
         const confirmed = await showConflictDialog(ea, driver, closeDate);
-        if (!confirmed) return; // korisnik otkazao
+        if (!confirmed) return false; // korisnik otkazao
 
         // Zatvori staro zaduženje
         await updateDoc(doc(db, "companies", S.companyId, "assignments", ea.id), {
@@ -525,7 +525,7 @@ async function saveAssignment(assignmentId, existing) {
           `${formatDate(ea.startDate)} → ${formatDate(ea.endDate)}. ` +
           `${t("assignment_km_mismatch").split(".")[0]}.`
         );
-        return;
+        return false;
       }
     }
 
@@ -574,10 +574,12 @@ async function saveAssignment(assignmentId, existing) {
 
     showToast(t("success"), "success");
     await loadData();
+    return true;
 
   } catch (e) {
     console.error("saveAssignment error:", e);
     showAssignError(`${t("error")}: ${e.message}`);
+    return false;
   }
 }
 
@@ -686,14 +688,14 @@ async function processUnassign(assignment) {
   if (!endDate) {
     const err = document.getElementById("unassign-error");
     if (err) { err.textContent = t("assignment_unassign_date_required"); err.classList.remove("hidden"); }
-    return;
+    return false;
   }
 
   const endDateObj = parseDMY(endDate);
   if (!endDateObj) {
     const err = document.getElementById("unassign-error");
     if (err) { err.textContent = t("assignment_unassign_date_required"); err.classList.remove("hidden"); }
-    return;
+    return false;
   }
   const startDate  = assignment.startDate?.toDate
     ? assignment.startDate.toDate()
@@ -702,7 +704,7 @@ async function processUnassign(assignment) {
   if (endDateObj < startDate) {
     const err = document.getElementById("unassign-error");
     if (err) { err.textContent = t("assignment_unassign_date_error"); err.classList.remove("hidden"); }
-    return;
+    return false;
   }
 
   try {
@@ -731,9 +733,11 @@ async function processUnassign(assignment) {
 
     showToast(t("success"), "success");
     await loadData();
+    return true;
 
   } catch (e) {
     showToast(`${t("error")}: ${e.message}`, "error");
+    return false;
   }
 }
 
