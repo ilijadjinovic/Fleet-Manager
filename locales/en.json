@@ -146,6 +146,7 @@
   "vehicle_purchase_type": "Acquisition type",
   "vehicle_purchase_value": "Purchase value",
   "vehicle_tab_tech": "Technical data",
+  "vehicle_tab_safety": "Safety",
   "vehicle_section_safety": "Safety",
   "vehicle_required_equipment": "Required equipment",
   "equipment_triangle": "Warning triangle",

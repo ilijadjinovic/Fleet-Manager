@@ -284,6 +284,7 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech") {
 
   const TABS = [
     { key: "tech",        label: t("vehicle_tab_tech") },
+    { key: "safety",      label: t("vehicle_tab_safety") },
     { key: "finance",     label: t("vehicle_tab_finance") },
     { key: "service",     label: t("vehicle_tab_service") },
     { key: "incidents",   label: t("vehicle_tab_incidents") },
@@ -352,6 +353,7 @@ function renderVehicleTab(tab, vehicle) {
 
   switch (tab) {
     case "tech":     content.innerHTML = renderTechTab(vehicle); break;
+    case "safety":   content.innerHTML = renderSafetyTab(vehicle); break;
     case "finance":  content.innerHTML = renderFinanceTab(vehicle); break;
     case "service":    loadServiceTab(content, vehicle); break;
     case "incidents":  loadIncidentsTab(content, vehicle); break;
@@ -383,23 +385,51 @@ function renderTechTab(v) {
     [t("vehicle_insurance_policy"),  v.insurancePolicy],
     [t("vehicle_insurance_expiry"),  formatDate(v.insuranceExpiry)],
   ];
+  return detailTable(rows);
+}
 
-  const safetyRows = [
-    [t("vehicle_tires_type"),       tireTypeLabel(v.tires?.type)],
-    [t("vehicle_tires_dimensions"), v.tires?.dimensions],
-    [t("vehicle_required_equipment"),
-      (v.requiredEquipment && v.requiredEquipment.length)
-        ? v.requiredEquipment.map(eq => equipmentLabel(eq)).join(", ")
-        : null],
-  ];
-  const hasSafetyData = safetyRows.some(([, val]) => val !== null && val !== undefined && val !== "");
+// ── OČEKIVANA SEZONA PNEUMATIKA ───────────────────────────────
+// Zimske gume moraju biti na vozilu od 01.11. do 31.03. (meseci 11,12,1,2,3),
+// letnje od 01.04. do 31.10. (meseci 4–10) tekuće godine. Pošto se period
+// uvek poklapa sa punim mesecima (počinje 1., završava se poslednjim danom
+// meseca), dovoljno je porediti samo mesec — bez potrebe za danom u mesecu.
+function expectedTireSeason(date = new Date()) {
+  const m = date.getMonth() + 1; // 1–12
+  return (m === 11 || m === 12 || m <= 3) ? "winter" : "summer";
+}
+
+function renderSafetyTab(v) {
+  const tireType = v.tires?.type || null;
+  const tireDimensions = v.tires?.dimensions || null;
+
+  // all_season je uvek "u redu"; za zimske/letnje poredi se sa tekućim periodom
+  const tireOk = !tireType ? null : (tireType === "all_season" || tireType === expectedTireSeason());
+  const tireBadgeClass = tireType ? (tireOk ? "badge--active" : "badge--broken") : "badge--inactive";
+
+  const equipmentHTML = REQUIRED_EQUIPMENT_ITEMS.map(eq => {
+    const has = (v.requiredEquipment || []).includes(eq);
+    return `<span class="badge ${has ? "badge--active" : "badge--broken"}">${has ? "✓" : "✕"} ${equipmentLabel(eq)}</span>`;
+  }).join("");
 
   return `
-    ${detailTable(rows)}
-    ${hasSafetyData ? `
-      <div class="form-section-title" style="margin-top:16px">${t("vehicle_section_safety")}</div>
-      ${detailTable(safetyRows)}
-    ` : ""}
+    <div class="form-section-title">${t("vehicle_tires")}</div>
+    <div class="detail-table">
+      <div class="detail-row">
+        <div class="detail-row__label">${t("vehicle_tires_type")}</div>
+        <div class="detail-row__value">
+          ${tireType ? `<span class="badge ${tireBadgeClass}">${tireTypeLabel(tireType)}</span>` : "—"}
+        </div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-row__label">${t("vehicle_tires_dimensions")}</div>
+        <div class="detail-row__value">${tireDimensions || "—"}</div>
+      </div>
+    </div>
+
+    <div class="form-section-title" style="margin-top:16px">${t("vehicle_required_equipment")}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      ${equipmentHTML}
+    </div>
   `;
 }
 
