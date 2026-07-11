@@ -406,9 +406,15 @@ function renderSafetyTab(v) {
   const tireOk = !tireType ? null : (tireType === "all_season" || tireType === expectedTireSeason());
   const tireBadgeClass = tireType ? (tireOk ? "badge--active" : "badge--broken") : "badge--inactive";
 
-  const equipmentHTML = REQUIRED_EQUIPMENT_ITEMS.map(eq => {
+  const equipmentRows = REQUIRED_EQUIPMENT_ITEMS.map(eq => {
     const has = (v.requiredEquipment || []).includes(eq);
-    return `<span class="badge ${has ? "badge--active" : "badge--broken"}">${has ? "✓" : "✕"} ${equipmentLabel(eq)}</span>`;
+    const color = has ? "var(--color-success)" : "var(--color-danger)";
+    return `
+      <div class="detail-row">
+        <div class="detail-row__label">${equipmentLabel(eq)}</div>
+        <div class="detail-row__value" style="color:${color};font-weight:700">${has ? "✓ " + t("yes") : "✕ " + t("no")}</div>
+      </div>
+    `;
   }).join("");
 
   return `
@@ -427,8 +433,8 @@ function renderSafetyTab(v) {
     </div>
 
     <div class="form-section-title" style="margin-top:16px">${t("vehicle_required_equipment")}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">
-      ${equipmentHTML}
+    <div class="detail-table">
+      ${equipmentRows}
     </div>
   `;
 }
