@@ -38,7 +38,7 @@ function vehicleTypeLabel(code) {
 }
 
 // ── KATEGORIJA VOZILA (zvanična klasifikacija iz saobraćajne) ─
-const VEHICLE_CATEGORIES = ["m1", "m2", "m3", "n1", "n2", "n3", "l", "o1", "o2", "o3", "o4"];
+const VEHICLE_CATEGORIES = ["passenger", "van", "truck", "work_machine", "bus", "motorcycle", "trailer", "other"];
 
 function vehicleCategoryLabel(code) {
   if (!code) return null;
