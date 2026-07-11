@@ -25,6 +25,41 @@ function colorLabel(code) {
   return VEHICLE_COLORS.includes(code) ? t("color_" + code) : code;
 }
 
+// ── TIP VOZILA (prema obliku karoserije) ─────────────────────
+const VEHICLE_TYPES = [
+  "sedan", "hatchback", "wagon", "suv", "mpv", "coupe", "cabrio",
+  "pickup", "van", "tipper", "platform", "tanker", "reefer", "curtain",
+  "car_transporter", "bus", "motorcycle", "other"
+];
+
+function vehicleTypeLabel(code) {
+  if (!code) return null;
+  return VEHICLE_TYPES.includes(code) ? t("vehicle_type_" + code) : code;
+}
+
+// ── KATEGORIJA VOZILA (zvanična klasifikacija iz saobraćajne) ─
+const VEHICLE_CATEGORIES = ["m1", "m2", "m3", "n1", "n2", "n3", "l", "o1", "o2", "o3", "o4"];
+
+function vehicleCategoryLabel(code) {
+  if (!code) return null;
+  return VEHICLE_CATEGORIES.includes(code) ? t("vehicle_category_" + code) : code;
+}
+
+// ── OBAVEZNA OPREMA (bezbednost) ──────────────────────────────
+const REQUIRED_EQUIPMENT_ITEMS = ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "accident_report"];
+
+function equipmentLabel(code) {
+  return REQUIRED_EQUIPMENT_ITEMS.includes(code) ? t("equipment_" + code) : code;
+}
+
+// ── PNEUMATICI ─────────────────────────────────────────────────
+const TIRE_TYPES = ["winter", "summer", "all_season"];
+
+function tireTypeLabel(code) {
+  if (!code) return null;
+  return TIRE_TYPES.includes(code) ? t("tire_" + code) : code;
+}
+
 // ── STATUS REGISTRACIJE (automatski, na osnovu datuma isteka) ───
 // Nezavisno od polja "status" (koje opisuje opšte stanje vozila:
 // u funkciji / servis / kvar / van upotrebe). Ne čuva se u bazi —
@@ -329,8 +364,8 @@ function renderTechTab(v) {
   const rows = [
     [t("vehicle_brand"),      v.brand],
     [t("vehicle_model"),      v.model],
-    [t("vehicle_type"),       v.vehicleType],
-    [t("vehicle_category"),   v.category],
+    [t("vehicle_type"),       vehicleTypeLabel(v.vehicleType)],
+    [t("vehicle_category"),   vehicleCategoryLabel(v.category)],
     [t("vehicle_plate"),      v.plate],
     [t("vehicle_vin"),        v.vin],
     [t("vehicle_year"),       v.year],
@@ -348,7 +383,24 @@ function renderTechTab(v) {
     [t("vehicle_insurance_policy"),  v.insurancePolicy],
     [t("vehicle_insurance_expiry"),  formatDate(v.insuranceExpiry)],
   ];
-  return detailTable(rows);
+
+  const safetyRows = [
+    [t("vehicle_tires_type"),       tireTypeLabel(v.tires?.type)],
+    [t("vehicle_tires_dimensions"), v.tires?.dimensions],
+    [t("vehicle_required_equipment"),
+      (v.requiredEquipment && v.requiredEquipment.length)
+        ? v.requiredEquipment.map(eq => equipmentLabel(eq)).join(", ")
+        : null],
+  ];
+  const hasSafetyData = safetyRows.some(([, val]) => val !== null && val !== undefined && val !== "");
+
+  return `
+    ${detailTable(rows)}
+    ${hasSafetyData ? `
+      <div class="form-section-title" style="margin-top:16px">${t("vehicle_section_safety")}</div>
+      ${detailTable(safetyRows)}
+    ` : ""}
+  `;
 }
 
 function renderFinanceTab(v) {
@@ -563,11 +615,27 @@ function openVehicleForm(vehicle = null) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("vehicle_type")}</label>
-        <input id="f-vehicleType" class="form-input" type="text" value="${v.vehicleType || ""}" />
+        <select id="f-vehicleType" class="form-select">
+          <option value="">—</option>
+          ${VEHICLE_TYPES.map(vt =>
+            `<option value="${vt}" ${v.vehicleType === vt ? "selected" : ""}>${t("vehicle_type_" + vt)}</option>`
+          ).join("")}
+          ${v.vehicleType && !VEHICLE_TYPES.includes(v.vehicleType)
+            ? `<option value="${v.vehicleType}" selected>${v.vehicleType}</option>`
+            : ""}
+        </select>
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_category")}</label>
-        <input id="f-category" class="form-input" type="text" value="${v.category || ""}" />
+        <select id="f-category" class="form-select">
+          <option value="">—</option>
+          ${VEHICLE_CATEGORIES.map(c =>
+            `<option value="${c}" ${v.category === c ? "selected" : ""}>${t("vehicle_category_" + c)}</option>`
+          ).join("")}
+          ${v.category && !VEHICLE_CATEGORIES.includes(v.category)
+            ? `<option value="${v.category}" selected>${v.category}</option>`
+            : ""}
+        </select>
       </div>
     </div>
     <div class="form-row">
@@ -684,6 +752,34 @@ function openVehicleForm(vehicle = null) {
       </div>
     </div>
 
+    <div class="form-section-title" style="margin-top:8px">${t("vehicle_section_safety")}</div>
+    <div class="form-group">
+      <label class="form-label">${t("vehicle_required_equipment")}</label>
+      ${REQUIRED_EQUIPMENT_ITEMS.map(eq => `
+        <div class="form-group form-group--checkbox">
+          <label class="form-checkbox-label">
+            <input type="checkbox" class="f-equipment" value="${eq}" ${(v.requiredEquipment || []).includes(eq) ? "checked" : ""} />
+            ${t("equipment_" + eq)}
+          </label>
+        </div>
+      `).join("")}
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">${t("vehicle_tires_type")}</label>
+        <select id="f-tiresType" class="form-select">
+          <option value="">—</option>
+          ${TIRE_TYPES.map(tt =>
+            `<option value="${tt}" ${v.tires?.type === tt ? "selected" : ""}>${t("tire_" + tt)}</option>`
+          ).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("vehicle_tires_dimensions")}</label>
+        <input id="f-tiresDimensions" class="form-input" type="text" placeholder="205/55/16" value="${v.tires?.dimensions || ""}" />
+      </div>
+    </div>
+
     <div class="form-section-title" style="margin-top:8px">${t("vehicle_tab_finance")}</div>
     <div class="form-row">
       <div class="form-group">
@@ -791,10 +887,14 @@ async function saveVehicle(vehicleId) {
       }
     }
 
+    const tiresType = document.getElementById("f-tiresType")?.value || null;
+    const tiresDimensions = document.getElementById("f-tiresDimensions")?.value.trim() || null;
+    const requiredEquipment = Array.from(document.querySelectorAll(".f-equipment:checked")).map(el => el.value);
+
     const data = {
       brand, model, plate, vin,
-      vehicleType:      document.getElementById("f-vehicleType")?.value.trim() || null,
-      category:         document.getElementById("f-category")?.value.trim() || null,
+      vehicleType:      document.getElementById("f-vehicleType")?.value || null,
+      category:         document.getElementById("f-category")?.value || null,
       year:             numOrNull("f-year"),
       firstRegDate:     dateOrNull("f-firstRegDate"),
       engineCc:         numOrNull("f-engineCc"),
@@ -810,6 +910,8 @@ async function saveVehicle(vehicleId) {
       insuranceExpiry:  dateOrNull("f-insuranceExpiry"),
       insuranceCompany: document.getElementById("f-insuranceCompany")?.value.trim() || null,
       insurancePolicy:  document.getElementById("f-insurancePolicy")?.value.trim() || null,
+      requiredEquipment,
+      tires: (tiresType || tiresDimensions) ? { type: tiresType, dimensions: tiresDimensions } : null,
       purchaseDate:     dateOrNull("f-purchaseDate"),
       purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
       purchaseValue:    numOrNull("f-purchaseValue"),
