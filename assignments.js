@@ -557,10 +557,36 @@ async function saveAssignment(assignmentId, existing) {
         { ...data, updatedAt: serverTimestamp() }
       );
     } else {
-      await addDoc(
+      const newAssignmentRef = await addDoc(
         collection(db, "companies", S.companyId, "assignments"),
         { ...data, createdAt: serverTimestamp(), createdBy: S.user.uid }
       );
+
+      // Automatski otvori prvu vožnju za novo zaduženje — vozač je od
+      // sada u okviru jedne konkretne vožnje, ne samo "zaduženja" uopšte.
+      await addDoc(collection(db, "companies", S.companyId, "trips"), {
+        assignmentId: newAssignmentRef.id,
+        vehicleId:    data.vehicleId,
+        vehicleBrand: data.vehicleBrand,
+        vehicleModel: data.vehicleModel,
+        vehiclePlate: data.vehiclePlate,
+        vehicleVin:   data.vehicleVin,
+        driverId:     data.driverId,
+        driverName:   data.driverName,
+        driverUid:    data.driverUid,
+        startDate:    data.startDate,
+        endDate:      null,
+        startKm:      data.startKm,
+        endKm:        null,
+        tripType:     data.tripType,
+        destination:  data.destination,
+        route:        data.route,
+        reason:       data.reason,
+        status:       "active",
+        notes:        null,
+        createdAt:    serverTimestamp(),
+        createdBy:    S.user.uid,
+      });
     }
 
     // Ažuriraj currentKm na vozilu ako je unesena startKm
@@ -729,6 +755,27 @@ async function processUnassign(assignment) {
           updatedAt:          serverTimestamp(),
         }
       );
+    }
+
+    // Zatvori i trenutno aktivnu vožnju unutar ovog zaduženja (ako postoji)
+    try {
+      const activeTripSnap = await getDocs(query(
+        collection(db, "companies", S.companyId, "trips"),
+        where("assignmentId", "==", assignment.id),
+        where("status", "==", "active")
+      ));
+      await Promise.all(activeTripSnap.docs.map(tDoc => updateDoc(
+        doc(db, "companies", S.companyId, "trips", tDoc.id),
+        {
+          status:    "closed",
+          endDate:   endDateObj,
+          endKm:     endKm ? Number(endKm) : null,
+          notes:     notes || null,
+          updatedAt: serverTimestamp(),
+        }
+      )));
+    } catch (e) {
+      console.error("processUnassign: close active trip error:", e);
     }
 
     showToast(t("success"), "success");

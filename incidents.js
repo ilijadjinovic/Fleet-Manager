@@ -391,7 +391,8 @@ async function saveIncident() {
   }
 
   // Dohvati aktivno zaduženje vozača (i vozilo, radi validacije km)
-  let vehiclePlate = null, vehicleId = null, assignmentId = null, driverId = null, vehicleCurrentKm = null, assignmentStartKm = null;
+  let vehiclePlate = null, vehicleId = null, assignmentId = null, tripId = null,
+      driverId = null, vehicleCurrentKm = null, assignmentStartKm = null;
 
   if (S.profile?.role === "driver") {
     try {
@@ -406,6 +407,17 @@ async function saveIncident() {
         vehicleId        = a.vehicleId;
         assignmentId     = assignSnap.docs[0].id;
         assignmentStartKm = a.startKm ?? null;
+
+        // Pronađi trenutno aktivnu vožnju unutar ovog zaduženja — prijava
+        // se vezuje i za konkretnu vožnju, ne samo za zaduženje uopšte.
+        try {
+          const tripSnap = await getDocs(query(
+            collection(db, "companies", S.companyId, "trips"),
+            where("assignmentId", "==", assignmentId),
+            where("status", "==", "active")
+          ));
+          if (!tripSnap.empty) tripId = tripSnap.docs[0].id;
+        } catch (e) { /* ignoriši */ }
 
         if (vehicleId) {
           const vehSnap = await getDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId));
@@ -445,6 +457,7 @@ async function saveIncident() {
     vehicleId,
     vehiclePlate,
     assignmentId,
+    tripId,
     driverId,
     driverUid:    S.user.uid,
     driverName:   S.profile?.displayName || `${S.profile?.firstName || ""} ${S.profile?.lastName || ""}`.trim(),
