@@ -46,7 +46,7 @@ function vehicleCategoryLabel(code) {
 }
 
 // ── OBAVEZNA OPREMA (bezbednost) ──────────────────────────────
-const REQUIRED_EQUIPMENT_ITEMS = ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "accident_report"];
+const REQUIRED_EQUIPMENT_ITEMS = ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "accident_report", "fire_extinguisher", "wheel_chocks"];
 
 function equipmentLabel(code) {
   return REQUIRED_EQUIPMENT_ITEMS.includes(code) ? t("equipment_" + code) : code;
@@ -755,14 +755,14 @@ function openVehicleForm(vehicle = null) {
     <div class="form-section-title" style="margin-top:8px">${t("vehicle_section_safety")}</div>
     <div class="form-group">
       <label class="form-label">${t("vehicle_required_equipment")}</label>
-      ${REQUIRED_EQUIPMENT_ITEMS.map(eq => `
-        <div class="form-group form-group--checkbox">
+      <div class="checkbox-grid">
+        ${REQUIRED_EQUIPMENT_ITEMS.map(eq => `
           <label class="form-checkbox-label">
             <input type="checkbox" class="f-equipment" value="${eq}" ${(v.requiredEquipment || []).includes(eq) ? "checked" : ""} />
             ${t("equipment_" + eq)}
           </label>
-        </div>
-      `).join("")}
+        `).join("")}
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">

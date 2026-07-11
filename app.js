@@ -247,7 +247,9 @@ export function showToast(message, type = "info", duration = 3500) {
 // ── MODAL ─────────────────────────────────────────────────────
 export function openModal(title, bodyHTML, onConfirm = null) {
   document.getElementById("modal-title").textContent = title;
-  document.getElementById("modal-body").innerHTML = bodyHTML;
+  const modalBody = document.getElementById("modal-body");
+  modalBody.innerHTML = bodyHTML;
+  modalBody.scrollTop = 0;
   const confirmBtn = document.getElementById("modal-confirm");
   const cancelBtn  = document.getElementById("modal-cancel");
   confirmBtn.style.display = onConfirm ? "inline-flex" : "none";
