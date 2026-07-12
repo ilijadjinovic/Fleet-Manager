@@ -604,8 +604,8 @@ function drawHeader(pdf, company, from, to) {
   return y;
 }
 
-function drawSectionTitle(pdf, title, y) {
-  y = checkPageBreak(pdf, y, 12);
+function drawSectionTitle(pdf, title, y, minFollow = 0) {
+  y = checkPageBreak(pdf, y, 12 + minFollow);
   pdf.setFillColor(240, 244, 255);
   pdf.rect(M, y - 4, PW, 8, "F");
   pdf.setFont(REPORT_FONT, "bold");
@@ -773,7 +773,7 @@ function drawVehicleSection(pdf, v, y) {
 }
 
 function drawAssignmentsSection(pdf, assignments, y) {
-  y = drawSectionTitle(pdf, `${t("report_pdf_section_assignments")} (${assignments.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_assignments")} (${assignments.length})`, y, 15);
   if (assignments.length === 0) {
     y = drawEmptyRow(pdf, y);
     return y;
@@ -815,7 +815,7 @@ function drawAssignmentsSection(pdf, assignments, y) {
 }
 
 function drawServicesSection(pdf, services, y) {
-  y = drawSectionTitle(pdf, `${t("report_pdf_section_services")} (${services.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_services")} (${services.length})`, y, 15);
   if (services.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
@@ -860,7 +860,7 @@ function drawServicesSection(pdf, services, y) {
 }
 
 function drawFuelingsSection(pdf, fuelings, y) {
-  y = drawSectionTitle(pdf, `${t("report_pdf_section_fuelings")} (${fuelings.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_fuelings")} (${fuelings.length})`, y, 15);
   if (fuelings.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
@@ -903,7 +903,7 @@ function drawFuelingsSection(pdf, fuelings, y) {
 
 function drawCostsSection(pdf, costs, y) {
   if (costs.length === 0) return y;
-  y = drawSectionTitle(pdf, `${t("report_pdf_section_costs")} (${costs.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_costs")} (${costs.length})`, y, 15);
 
   const cols = [
     [t("report_pdf_col_date"),           25],
@@ -939,7 +939,7 @@ function drawCostsSection(pdf, costs, y) {
 
 function drawIncidentsSection(pdf, incidents, y) {
   if (incidents.length === 0) return y;
-  y = drawSectionTitle(pdf, `${t("report_pdf_section_incidents")} (${incidents.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_incidents")} (${incidents.length})`, y, 25);
 
   incidents.forEach((inc, i) => {
     y = checkPageBreak(pdf, y, 25);
@@ -1017,7 +1017,7 @@ function drawDriverSection(pdf, d, y) {
 }
 
 function drawDriverAssignmentsSection(pdf, assignments, y) {
-  y = drawSectionTitle(pdf, `${t("report_pdf_section_driver_assignments")} (${assignments.length})`, y);
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_driver_assignments")} (${assignments.length})`, y, 15);
   if (assignments.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
