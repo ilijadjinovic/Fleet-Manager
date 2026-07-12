@@ -13,6 +13,7 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
 import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
+import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
 const VEHICLE_COLORS = [
@@ -525,6 +526,8 @@ async function loadServiceTab(container, vehicle) {
 }
 
 // ── TAB "PRIJAVE" (kvarovi/oštećenja/nezgode za ovo vozilo) ────
+// Isti vizuelni prikaz i logika kao u drivers.js (tab "Prijave" kod
+// konkretnog vozača) — koristi se ista incidentCard komponenta.
 async function loadIncidentsTab(container, vehicle) {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   const canEdit = S.profile?.role !== "driver" && !vehicle.archived;
@@ -540,13 +543,13 @@ async function loadIncidentsTab(container, vehicle) {
 
     container.innerHTML = items.length === 0
       ? `<div class="empty-state"><div class="empty-state__icon">⚠️</div><p>${t("no_data")}</p></div>`
-      : `<div class="service-list">${items.map(i => vehicleIncidentItem(i, canEdit)).join("")}</div>`;
+      : `<div class="incidents-list">${items.map(i => incidentCard(i, false, canEdit)).join("")}</div>`;
 
     if (canEdit) {
-      container.querySelectorAll(".btn-schedule-service").forEach(btn => {
+      container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
         btn.addEventListener("click", () => {
           const inc = items.find(x => x.id === btn.dataset.id);
-          if (inc) openServiceForm(vehicle, null, incidentToServicePrefill(inc), { linkedIncidentId: inc.id });
+          if (inc) scheduleServiceForIncident(inc, () => loadIncidentsTab(container, vehicle));
         });
       });
     }
@@ -571,45 +574,6 @@ export function incidentToServicePrefill(inc) {
     km:          inc.currentKm ?? null,
     description: `${prefix}${inc.description ? ": " + inc.description : ""}`,
   };
-}
-
-function vehicleIncidentItem(i, canEdit) {
-  const typeConfig = {
-    fault:    { icon: "🔧", label: t("incident_fault"),    color: "service" },
-    damage:   { icon: "💥", label: t("incident_damage"),   color: "broken" },
-    accident: { icon: "🚨", label: t("incident_accident"), color: "broken" },
-    other:    { icon: "📋", label: t("incident_other"),    color: "inactive" },
-  };
-  const cfg = typeConfig[i.type] || { icon: "📋", label: i.type, color: "inactive" };
-
-  const statusBadge = i.status === "open"
-    ? `<span class="badge badge--broken">🔴 ${t("incident_status_open")}</span>`
-    : i.status === "in_progress"
-      ? `<span class="badge badge--service">🟡 ${t("incident_status_in_progress")}</span>`
-      : `<span class="badge badge--active">🟢 ${t("incident_status_closed")}</span>`;
-
-  return `
-    <div class="service-item">
-      <div class="service-item__header">
-        <div class="service-item__badges">
-          <span class="badge badge--${cfg.color}">${cfg.icon} ${cfg.label}</span>
-          ${statusBadge}
-        </div>
-        <span class="service-item__date">${formatDate(i.createdAt)}</span>
-      </div>
-      ${i.description ? `<div class="service-item__desc">${i.description}</div>` : ""}
-      <div class="service-item__meta">
-        ${i.driverName ? `<span>👤 ${i.driverName}</span>` : ""}
-        ${i.currentKm ? `<span>🛣️ ${i.currentKm.toLocaleString()} km</span>` : ""}
-        ${i.location ? `<span>📍 ${i.location}</span>` : ""}
-      </div>
-      ${canEdit && i.status !== "closed" ? `
-        <div class="service-item__actions">
-          <button class="btn btn--secondary btn--sm btn-schedule-service" data-id="${i.id}">🔧 ${t("incident_schedule_service_btn")}</button>
-        </div>
-      ` : ""}
-    </div>
-  `;
 }
 
 async function loadAssignmentsTab(container, vehicle) {
