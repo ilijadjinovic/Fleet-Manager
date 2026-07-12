@@ -603,7 +603,7 @@ function drawHeader(pdf, company, from, to) {
 }
 
 function drawSectionTitle(pdf, title, y) {
-  checkPageBreak(pdf, y, 12);
+  y = checkPageBreak(pdf, y, 12);
   pdf.setFillColor(240, 244, 255);
   pdf.rect(M, y - 4, PW, 8, "F");
   pdf.setFont(REPORT_FONT, "bold");
@@ -615,7 +615,7 @@ function drawSectionTitle(pdf, title, y) {
 
 function drawRow(pdf, label, value, y, highlight = false) {
   if (!value && value !== 0) return y;
-  checkPageBreak(pdf, y, 7);
+  y = checkPageBreak(pdf, y, 7);
   if (highlight) {
     pdf.setFillColor(248, 250, 255);
     pdf.rect(M, y - 3, PW, 6, "F");
@@ -631,7 +631,7 @@ function drawRow(pdf, label, value, y, highlight = false) {
 }
 
 function drawTableHeader(pdf, cols, y) {
-  checkPageBreak(pdf, y, 8);
+  y = checkPageBreak(pdf, y, 8);
   pdf.setFillColor(26, 39, 68);
   pdf.rect(M, y - 4, PW, 7, "F");
   pdf.setFont(REPORT_FONT, "bold");
@@ -646,7 +646,7 @@ function drawTableHeader(pdf, cols, y) {
 }
 
 function drawTableRow(pdf, cols, values, y, shade = false) {
-  checkPageBreak(pdf, y, 7);
+  y = checkPageBreak(pdf, y, 7);
   if (shade) {
     pdf.setFillColor(248, 250, 255);
     pdf.rect(M, y - 4, PW, 6, "F");
@@ -835,7 +835,7 @@ function drawServicesSection(pdf, services, y) {
     ], y, i % 2 === 0);
 
     if (s.description) {
-      checkPageBreak(pdf, y, 6);
+      y = checkPageBreak(pdf, y, 6);
       pdf.setFont(REPORT_FONT, "italic");
       pdf.setFontSize(7.5);
       pdf.setTextColor(100);
@@ -936,7 +936,7 @@ function drawIncidentsSection(pdf, incidents, y) {
   y = drawSectionTitle(pdf, `${t("report_pdf_section_incidents")} (${incidents.length})`, y);
 
   incidents.forEach((inc, i) => {
-    checkPageBreak(pdf, y, 20);
+    y = checkPageBreak(pdf, y, 20);
     const typeLabels = {
       fault: t("incident_fault"), damage: t("incident_damage"),
       accident: t("incident_accident"), other: t("incident_other"),
@@ -1027,7 +1027,7 @@ function drawDriverAssignmentsSection(pdf, assignments, y) {
     ], y, i % 2 === 0);
 
     if (a.tripType === "intercity" && a.destination) {
-      checkPageBreak(pdf, y, 5);
+      y = checkPageBreak(pdf, y, 5);
       pdf.setFont(REPORT_FONT, "italic");
       pdf.setFontSize(7.5);
       pdf.setTextColor(100);
