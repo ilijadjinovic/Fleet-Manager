@@ -12,6 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
+import { openServiceForm, incidentToServicePrefill } from "./vehicles.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allIncidents  = [];
@@ -175,13 +176,23 @@ function renderList() {
       });
     });
   }
+
+  list.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const incident = allIncidents.find(i => i.id === btn.dataset.id);
+      if (incident) scheduleServiceForIncident(incident, () => loadIncidents());
+    });
+  });
 }
 
 // ── INCIDENT CARD ─────────────────────────────────────────────
 // Eksportovano — koristi ga i drivers.js (admin prikaz prijava
 // konkretnog vozača), da bi prikaz bio identičan onome što vozač
 // sam vidi (km, status, admin napomena, rešenje).
-export function incidentCard(inc, canEdit) {
+// canSchedule kontroliše dugme "Zakaži servis" nezavisno od canEdit
+// (npr. drivers.js želi ovo dugme, ali ne i promenu statusa/napomenu).
+export function incidentCard(inc, canEdit, canSchedule = canEdit) {
   const typeConfig = {
     fault:    { icon: "🔧", label: t("incident_fault"),    color: "service" },
     damage:   { icon: "💥", label: t("incident_damage"),   color: "broken"  },
@@ -205,7 +216,14 @@ export function incidentCard(inc, canEdit) {
           <span class="incident-card__type-icon">${tc.icon}</span>
           <span class="badge badge--${tc.color}">${tc.label}</span>
         </div>
-        <span class="badge badge--${sc.color}">${sc.dot} ${sc.label}</span>
+        <div class="incident-card__header-right">
+          <span class="badge badge--${sc.color}">${sc.dot} ${sc.label}</span>
+          ${canSchedule && inc.status === "open" ? `
+            <button class="btn btn--secondary btn--sm btn-incident-schedule-service" data-id="${inc.id}">
+              🔧 ${t("incident_schedule_service_btn")}
+            </button>
+          ` : ""}
+        </div>
       </div>
 
       <div class="incident-card__desc">${inc.description}</div>
@@ -244,6 +262,22 @@ export function incidentCard(inc, canEdit) {
       ` : ""}
     </div>
   `;
+}
+
+// Otvara formu za zakazivanje servisa na osnovu prijave (predpopunjeno
+// tipom/opisom/km), i po uspešnom čuvanju automatski prebacuje prijavu
+// u status "u obradi". Koriste ga i incidents.js (glavni tab) i
+// drivers.js (prijave konkretnog vozača) — onSaved je caller-ov refresh.
+export function scheduleServiceForIncident(inc, onSaved) {
+  const vehicleStub = {
+    id:        inc.vehicleId,
+    plate:     inc.vehiclePlate,
+    currentKm: inc.currentKm ?? null,
+  };
+  openServiceForm(vehicleStub, null, incidentToServicePrefill(inc), {
+    linkedIncidentId: inc.id,
+    onSaved,
+  });
 }
 
 // ── DA LI VOZAČ IMA AKTIVNO ZADUŽENJE ──────────────────────────

@@ -18,7 +18,7 @@ import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { usernameToEmail, getSecondaryAuth } from "./firebase.js";
 import { historyAssignmentCard, attachAssignmentHistoryEvents, loadDriverAssignmentHistory } from "./trips.js";
-import { incidentCard } from "./incidents.js";
+import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allDrivers = [];
@@ -414,7 +414,7 @@ async function loadDriverIncidents(container, driver) {
                   return `
                     <div class="incident-item-wrap">
                       ${tripLabel ? `<div class="incident-item__trip-label">🔑 ${t("driver_trip_label")}: ${tripLabel}</div>` : ""}
-                      ${incidentCard(i, false)}
+                      ${incidentCard(i, false, true)}
                     </div>
                   `;
                 }).join("")}
@@ -424,6 +424,14 @@ async function loadDriverIncidents(container, driver) {
         }).join("")}
       </div>
     `;
+
+    container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const incident = items.find(i => i.id === btn.dataset.id);
+        if (incident) scheduleServiceForIncident(incident, () => loadDriverIncidents(container, driver));
+      });
+    });
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }

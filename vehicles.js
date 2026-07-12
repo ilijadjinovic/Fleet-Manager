@@ -546,7 +546,7 @@ async function loadIncidentsTab(container, vehicle) {
       container.querySelectorAll(".btn-schedule-service").forEach(btn => {
         btn.addEventListener("click", () => {
           const inc = items.find(x => x.id === btn.dataset.id);
-          if (inc) openServiceForm(vehicle, null, incidentToServicePrefill(inc));
+          if (inc) openServiceForm(vehicle, null, incidentToServicePrefill(inc), { linkedIncidentId: inc.id });
         });
       });
     }
@@ -557,7 +557,8 @@ async function loadIncidentsTab(container, vehicle) {
 
 // Priprema početnih vrednosti za formu "Dodaj servis" na osnovu prijave
 // (ne tretira se kao edit — samo predpopunjava polja nove forme).
-function incidentToServicePrefill(inc) {
+// Eksportovano — koristi ga i incidents.js/drivers.js.
+export function incidentToServicePrefill(inc) {
   const typeLabels = {
     fault:    t("incident_fault"),
     damage:   t("incident_damage"),
@@ -1028,7 +1029,14 @@ function confirmHardDeleteVehicle(vehicle) {
 }
 
 // ── SERVIS FORMA (dodavanje / editovanje) ────────────────────
-async function openServiceForm(vehicle, service = null, prefill = null) {
+// Eksportovano — koristi ga i incidents.js/drivers.js za zakazivanje
+// servisa direktno iz prijave (dugme "Zakaži servis").
+// options.linkedIncidentId: ako je zadat, po uspešnom čuvanju NOVOG
+//   servisa prijava se automatski prebacuje u status "u obradi".
+// options.onSaved: ako je zadat, poziva se posle uspešnog čuvanja
+//   umesto podrazumevanog osvežavanja taba "Servisi" na kartici vozila
+//   (taj tab ne postoji kad se forma otvara iz prijave).
+export async function openServiceForm(vehicle, service = null, prefill = null, options = {}) {
   const isEdit = !!service;
   const s = service || prefill || {};
   const servicers = await getServiceProviders();
@@ -1140,11 +1148,24 @@ async function openServiceForm(vehicle, service = null, prefill = null) {
         await addDoc(collection(db, "companies", S.companyId, "services"), {
           ...data, createdBy: S.user.uid, createdAt: serverTimestamp(),
         });
+
+        // Servis zakazan iz prijave — prijava prelazi u status "u obradi"
+        if (options.linkedIncidentId) {
+          await updateDoc(doc(db, "companies", S.companyId, "incidents", options.linkedIncidentId), {
+            status:    "in_progress",
+            updatedAt: serverTimestamp(),
+            updatedBy: S.user.uid,
+          });
+        }
       }
 
       showToast(t("success"), "success");
-      const content = document.getElementById("vehicle-tab-content");
-      if (content) loadServiceTab(content, vehicle);
+      if (options.onSaved) {
+        options.onSaved();
+      } else {
+        const content = document.getElementById("vehicle-tab-content");
+        if (content) loadServiceTab(content, vehicle);
+      }
     } catch (e) {
       showToast(`${t("error")}: ${e.message}`, "error");
     }

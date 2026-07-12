@@ -2009,10 +2009,13 @@ tbody td {
 .incident-card--closed      { border-left: 3px solid var(--color-success); opacity: 0.85; }
 
 .incident-card__header {
-  display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap;
 }
 .incident-card__type { display: flex; align-items: center; gap: 8px; }
 .incident-card__type-icon { font-size: 20px; }
+.incident-card__header-right {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
 .incident-card__desc { font-size: 14px; line-height: 1.5; }
 .incident-card__meta {
   display: flex; flex-wrap: wrap; gap: 12px;
