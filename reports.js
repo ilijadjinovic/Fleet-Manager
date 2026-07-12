@@ -881,7 +881,7 @@ function drawFuelingsSection(pdf, fuelings, y) {
       f.fuelAmount ? f.fuelAmount.toFixed(2) + " L" : "—",
       f.fuelCost ? f.fuelCost.toLocaleString() + " RSD" : "—",
       f.pricePerL ? f.pricePerL.toFixed(2) + " RSD" : "—",
-      f.km ? f.km.toLocaleString() : "—",
+      f.currentKm ? f.currentKm.toLocaleString() : "—",
       f.fuelStation || "—",
     ], y, i % 2 === 0);
   });
@@ -923,7 +923,7 @@ function drawCostsSection(pdf, costs, y) {
       formatDateSr(c.createdAt),
       typeLabels[c.type] || c.type,
       c.amount ? c.amount.toLocaleString() + " RSD" : "—",
-      c.km ? c.km.toLocaleString() : "—",
+      c.currentKm ? c.currentKm.toLocaleString() : "—",
       c.location || "—",
     ], y, i % 2 === 0);
   });
@@ -966,13 +966,13 @@ function drawIncidentsSection(pdf, incidents, y) {
     );
     y += 5;
 
-    if (inc.driverName || inc.km) {
+    if (inc.driverName || inc.currentKm) {
       pdf.setFont(REPORT_FONT, "normal");
       pdf.setFontSize(8);
       pdf.setTextColor(100);
       const metaParts = [];
       if (inc.driverName) metaParts.push(inc.driverName);
-      if (inc.km) metaParts.push(`${Number(inc.km).toLocaleString()} km`);
+      if (inc.currentKm) metaParts.push(`${Number(inc.currentKm).toLocaleString()} km`);
       pdf.text(metaParts.join("  |  "), M + 2, y);
       y += 4.5;
     }
