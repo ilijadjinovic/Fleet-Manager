@@ -290,7 +290,7 @@ async function generateVehicleReport(allVehicles) {
       firstPage = false;
 
       // Dohvati podatke za vozilo u periodu
-      const [assignments, services, entries] = await Promise.all([
+      const [assignments, services, entries, incidents] = await Promise.all([
         getDocsInPeriod("assignments", "startDate", from, to, [
           where("vehicleId", "==", vehicle.id)
         ]),
@@ -300,9 +300,11 @@ async function generateVehicleReport(allVehicles) {
         getDocsInPeriod("tripEntries", "createdAt", from, to, [
           where("vehicleId", "==", vehicle.id)
         ]),
+        getDocsInPeriod("incidents", "createdAt", from, to, [
+          where("vehicleId", "==", vehicle.id)
+        ]),
       ]);
 
-      const incidents = entries.filter(e => ["fault","damage","accident","other"].includes(e.type));
       const fuelings  = entries.filter(e => e.type === "fuel");
       const costs     = entries.filter(e => ["toll","parking","washing","other_cost"].includes(e.type));
 
@@ -862,12 +864,13 @@ function drawFuelingsSection(pdf, fuelings, y) {
   if (fuelings.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
-    [t("report_pdf_col_date"),        28],
-    [t("report_pdf_col_fuel"),        25],
-    [t("report_pdf_col_amount"),      25],
-    [t("report_pdf_col_price"),       28],
-    [t("report_pdf_col_price_per_l"), 25],
-    [t("report_pdf_col_station"),     55],
+    [t("report_pdf_col_date"),        25],
+    [t("report_pdf_col_fuel"),        20],
+    [t("report_pdf_col_amount"),      20],
+    [t("report_pdf_col_price"),       25],
+    [t("report_pdf_col_price_per_l"), 22],
+    [t("report_pdf_col_km"),          20],
+    [t("report_pdf_col_station"),     48],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -878,6 +881,7 @@ function drawFuelingsSection(pdf, fuelings, y) {
       f.fuelAmount ? f.fuelAmount.toFixed(2) + " L" : "—",
       f.fuelCost ? f.fuelCost.toLocaleString() + " RSD" : "—",
       f.pricePerL ? f.pricePerL.toFixed(2) + " RSD" : "—",
+      f.km ? f.km.toLocaleString() : "—",
       f.fuelStation || "—",
     ], y, i % 2 === 0);
   });
@@ -902,10 +906,11 @@ function drawCostsSection(pdf, costs, y) {
   y = drawSectionTitle(pdf, `${t("report_pdf_section_costs")} (${costs.length})`, y);
 
   const cols = [
-    [t("report_pdf_col_date"),           28],
-    [t("report_pdf_col_kind"),           40],
-    [t("report_pdf_col_price"),          28],
-    [t("report_pdf_location_label"),     90],
+    [t("report_pdf_col_date"),           25],
+    [t("report_pdf_col_kind"),           30],
+    [t("report_pdf_col_price"),          25],
+    [t("report_pdf_col_km"),             20],
+    [t("report_pdf_location_label"),     80],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -918,6 +923,7 @@ function drawCostsSection(pdf, costs, y) {
       formatDateSr(c.createdAt),
       typeLabels[c.type] || c.type,
       c.amount ? c.amount.toLocaleString() + " RSD" : "—",
+      c.km ? c.km.toLocaleString() : "—",
       c.location || "—",
     ], y, i % 2 === 0);
   });
@@ -936,7 +942,7 @@ function drawIncidentsSection(pdf, incidents, y) {
   y = drawSectionTitle(pdf, `${t("report_pdf_section_incidents")} (${incidents.length})`, y);
 
   incidents.forEach((inc, i) => {
-    y = checkPageBreak(pdf, y, 20);
+    y = checkPageBreak(pdf, y, 25);
     const typeLabels = {
       fault: t("incident_fault"), damage: t("incident_damage"),
       accident: t("incident_accident"), other: t("incident_other"),
@@ -948,7 +954,7 @@ function drawIncidentsSection(pdf, incidents, y) {
 
     if (i % 2 === 0) {
       pdf.setFillColor(248, 250, 255);
-      pdf.rect(M, y - 3, PW, 16, "F");
+      pdf.rect(M, y - 3, PW, 20, "F");
     }
 
     pdf.setFont(REPORT_FONT, "bold");
@@ -959,6 +965,17 @@ function drawIncidentsSection(pdf, incidents, y) {
       M + 2, y
     );
     y += 5;
+
+    if (inc.driverName || inc.km) {
+      pdf.setFont(REPORT_FONT, "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(100);
+      const metaParts = [];
+      if (inc.driverName) metaParts.push(inc.driverName);
+      if (inc.km) metaParts.push(`${Number(inc.km).toLocaleString()} km`);
+      pdf.text(metaParts.join("  |  "), M + 2, y);
+      y += 4.5;
+    }
 
     pdf.setFont(REPORT_FONT, "normal");
     pdf.setFontSize(8);
