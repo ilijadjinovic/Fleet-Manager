@@ -11,7 +11,7 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
 import { getCompanies } from "./firebase.js";
-import { isVehicleRegistered, openVehicleDetail } from "./vehicles.js";
+import { isVehicleRegistered, needsTachograph, openVehicleDetail } from "./vehicles.js";
 import { mountPendingBanner } from "./pending-requests.js";
 import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
@@ -116,20 +116,22 @@ async function loadDashboardData() {
     const broken = activeVehicles.filter(v => v.status === "broken").length;
     const inactive = activeVehicles.filter(v => v.status === "inactive").length;
 
-    // Nadolazeće registracije (u sledećih 30 dana)
+    // Nadolazeće registracije i tahografi (u sledećih 30 dana) — spajamo oba
+    // roka u istu listu/karticu, svaka stavka nosi oznaku o kom se roku radi.
     const today = new Date();
     const in30 = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const upcomingReg = activeVehicles
-      .filter(v => {
-        if (!v.regExpiry) return false;
+    const upcomingReg = [];
+    activeVehicles.forEach(v => {
+      if (v.regExpiry) {
         const d = v.regExpiry.toDate ? v.regExpiry.toDate() : new Date(v.regExpiry);
-        return d >= today && d <= in30;
-      })
-      .sort((a, b) => {
-        const da = a.regExpiry.toDate ? a.regExpiry.toDate() : new Date(a.regExpiry);
-        const db2 = b.regExpiry.toDate ? b.regExpiry.toDate() : new Date(b.regExpiry);
-        return da - db2;
-      });
+        if (d >= today && d <= in30) upcomingReg.push({ vehicle: v, date: d, kind: "reg" });
+      }
+      if (needsTachograph(v) && v.tachographExpiry) {
+        const d = v.tachographExpiry.toDate ? v.tachographExpiry.toDate() : new Date(v.tachographExpiry);
+        if (d >= today && d <= in30) upcomingReg.push({ vehicle: v, date: d, kind: "tachograph" });
+      }
+    });
+    upcomingReg.sort((a, b) => a.date - b.date);
 
     // Danas — početak dana u lokalnom vremenu (ponoć)
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -325,15 +327,18 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
         <h3 class="panel-title" data-i18n="dashboard_upcoming_reg">${t("dashboard_upcoming_reg")}</h3>
         ${upcomingReg.length === 0
           ? `<p class="empty-text" data-i18n="dashboard_no_upcoming">${t("dashboard_no_upcoming")}</p>`
-          : upcomingReg.map(v => {
-              const d = v.regExpiry.toDate ? v.regExpiry.toDate() : new Date(v.regExpiry);
+          : upcomingReg.map(item => {
+              const v = item.vehicle;
+              const d = item.date;
               const daysLeft = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
               const urgency = daysLeft <= 7 ? "urgent" : daysLeft <= 14 ? "warning" : "ok";
+              const kindLabel = item.kind === "tachograph" ? t("dashboard_kind_tachograph") : t("dashboard_kind_reg");
               return `
                 <div class="upcoming-item upcoming-item--${urgency}">
                   <div class="upcoming-item__main">
                     <span class="upcoming-item__name">${v.brand} ${v.model}</span>
                     <span class="upcoming-item__plate">${v.plate}</span>
+                    <span class="upcoming-item__kind">${kindLabel}</span>
                   </div>
                   <div class="upcoming-item__right">
                     <span class="upcoming-item__date">${formatDate(d)}</span>

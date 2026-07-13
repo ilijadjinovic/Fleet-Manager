@@ -61,6 +61,51 @@ function tireTypeLabel(code) {
   return TIRE_TYPES.includes(code) ? t("tire_" + code) : code;
 }
 
+// ── NIVO GORIVA U REZERVOARU ───────────────────────────────────
+const FUEL_LEVELS = ["full", "3_4", "1_2", "1_4", "reserve"];
+
+function fuelLevelLabel(code) {
+  if (!code) return null;
+  return FUEL_LEVELS.includes(code) ? t("fuel_level_" + code) : code;
+}
+
+// 1/1 i 3/4 → zeleno, 1/2 → žuto, 1/4 i rezerva → crveno (isti sistem kao gume/oprema)
+function fuelLevelColorClass(code) {
+  if (code === "full" || code === "3_4") return "green";
+  if (code === "1_2") return "yellow";
+  if (code === "1_4" || code === "reserve") return "red";
+  return "";
+}
+
+// ── OBAVEZNOST TAHOGRAFA ────────────────────────────────────────
+// Teretna vozila preko 3,5t (mase), svi autobusi, i sva vozila koja
+// prevoze preko 9 putnika (npr. kombi/van registrovan za >9 mesta)
+// moraju imati tahograf i važeće uverenje o overi tahografa.
+export function needsTachograph(v) {
+  if (!v) return false;
+  const mass = Number(v.mass) || 0;
+  const seats = Number(v.seats) || 0;
+  return v.category === "bus" || (v.category === "truck" && mass > 3500) || seats > 9;
+}
+
+export function isTachographValid(v) {
+  if (!v || !v.tachographExpiry) return null; // nema unetog datuma — nepoznato
+  const d = v.tachographExpiry.toDate ? v.tachographExpiry.toDate() : new Date(v.tachographExpiry);
+  if (isNaN(d)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() >= today.getTime();
+}
+
+function tachographBadge(v) {
+  const valid = isTachographValid(v);
+  if (valid === null) return "";
+  const label = valid ? t("vehicle_tachograph_valid") : t("vehicle_tachograph_expired");
+  const cls = valid ? "badge--active" : "badge--danger";
+  return `<span class="badge ${cls} badge--inline">${label}</span>`;
+}
+
 // ── STATUS REGISTRACIJE (automatski, na osnovu datuma isteka) ───
 // Nezavisno od polja "status" (koje opisuje opšte stanje vozila:
 // u funkciji / servis / kvar / van upotrebe). Ne čuva se u bazi —
@@ -80,10 +125,8 @@ function regBadge(v) {
   const reg = isVehicleRegistered(v);
   if (reg === null) return "";
   const label = reg ? t("vehicle_registered") : t("vehicle_status_unregistered");
-  const style = reg
-    ? "background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.4);"
-    : "background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);";
-  return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-left:6px;white-space:nowrap;${style}">${label}</span>`;
+  const cls = reg ? "badge--active" : "badge--danger";
+  return `<span class="badge ${cls} badge--inline">${label}</span>`;
 }
 
 // ── STANJE MODULA ─────────────────────────────────────────────
@@ -379,13 +422,19 @@ function renderTechTab(v) {
     [t("vehicle_payload"),    v.payload ? v.payload + " kg" : null],
     [t("vehicle_mass"),       v.mass ? v.mass + " kg" : null],
     [t("vehicle_fuel_type"),  v.fuelType ? t("fuel_" + v.fuelType) : null],
+    [t("vehicle_fuel_level"), v.fuelLevel
+      ? `<span class="fuel-level-text--${fuelLevelColorClass(v.fuelLevel)}">${fuelLevelLabel(v.fuelLevel)}</span>`
+      : null],
     [t("vehicle_color"),      colorLabel(v.color)],
     [t("vehicle_current_km"), v.currentKm ? v.currentKm.toLocaleString() + " km" : null],
     [t("vehicle_reg_expiry"), `${formatDate(v.regExpiry)}${regBadge(v)}`],
     [t("vehicle_insurance_company"), v.insuranceCompany],
     [t("vehicle_insurance_policy"),  v.insurancePolicy],
     [t("vehicle_insurance_expiry"),  formatDate(v.insuranceExpiry)],
-  ];
+    (needsTachograph(v) || v.tachographExpiry)
+      ? [t("vehicle_tachograph_expiry"), `${formatDate(v.tachographExpiry)}${tachographBadge(v)}`]
+      : null,
+  ].filter(Boolean);
   return detailTable(rows);
 }
 
@@ -708,7 +757,19 @@ function openVehicleForm(vehicle = null) {
             : ""}
         </select>
       </div>
-      <div class="form-group"></div>
+      <div class="form-group">
+        <label class="form-label">${t("vehicle_fuel_level")}</label>
+        <input type="hidden" id="f-fuelLevel" value="${v.fuelLevel || ""}" />
+        <div id="f-fuelLevel-scale" class="fuel-level-scale">
+          ${FUEL_LEVELS.map(fl => {
+            const active = (v.fuelLevel || "") === fl;
+            const colorClass = fuelLevelColorClass(fl);
+            return `<button type="button"
+              class="fuel-level-btn fuel-level-btn--${colorClass}${active ? " fuel-level-btn--active" : ""}"
+              data-value="${fl}">${fuelLevelLabel(fl)}</button>`;
+          }).join("")}
+        </div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -751,6 +812,15 @@ function openVehicleForm(vehicle = null) {
         <label class="form-label">${t("vehicle_insurance_policy")}</label>
         <input id="f-insurancePolicy" class="form-input" type="text" value="${v.insurancePolicy || ""}" />
       </div>
+    </div>
+    <div class="form-row" id="f-tachograph-wrap" style="display:${needsTachograph(v) ? "flex" : "none"}">
+      <div class="form-group">
+        <label class="form-label">${t("vehicle_tachograph_expiry")}</label>
+        <input id="f-tachographExpiry" class="form-input" type="text" inputmode="numeric" maxlength="10"
+          placeholder="${datePlaceholder()}" value="${toDMY(v.tachographExpiry)}" />
+        <div id="f-tachograph-badge" style="margin-top:6px">${tachographBadge(v)}</div>
+      </div>
+      <div class="form-group"></div>
     </div>
 
     <div class="form-section-title" style="margin-top:8px">${t("vehicle_section_safety")}</div>
@@ -812,7 +882,7 @@ function openVehicleForm(vehicle = null) {
 
   // Datum isteka registracije se kod nas poklapa sa datumom isteka osiguranja —
   // automatski se prepisuje, ali ostaje editabilno po potrebi.
-  ["f-firstRegDate", "f-regExpiry", "f-insuranceExpiry", "f-purchaseDate"].forEach(attachDateMask);
+  ["f-firstRegDate", "f-regExpiry", "f-insuranceExpiry", "f-purchaseDate", "f-tachographExpiry"].forEach(attachDateMask);
 
   document.getElementById("f-regExpiry")?.addEventListener("change", (e) => {
     const insuranceInput = document.getElementById("f-insuranceExpiry");
@@ -820,6 +890,40 @@ function openVehicleForm(vehicle = null) {
 
     const badgeDiv = document.getElementById("f-reg-badge");
     if (badgeDiv) badgeDiv.innerHTML = regBadge({ regExpiry: parseDMY(e.target.value) });
+  });
+
+  document.getElementById("f-tachographExpiry")?.addEventListener("change", (e) => {
+    const badgeDiv = document.getElementById("f-tachograph-badge");
+    if (badgeDiv) badgeDiv.innerHTML = tachographBadge({ tachographExpiry: parseDMY(e.target.value) });
+  });
+
+  // Polje za tahograf se prikazuje/sakriva automatski dok korisnik menja
+  // kategoriju, masu ili broj sedišta — po istom pravilu kao needsTachograph().
+  function refreshTachographVisibility() {
+    const wrap = document.getElementById("f-tachograph-wrap");
+    if (!wrap) return;
+    const fakeVehicle = {
+      category: document.getElementById("f-category")?.value || null,
+      mass: numOrNull("f-mass"),
+      seats: numOrNull("f-seats"),
+    };
+    wrap.style.display = needsTachograph(fakeVehicle) ? "flex" : "none";
+  }
+  ["f-category", "f-mass", "f-seats"].forEach(id => {
+    document.getElementById(id)?.addEventListener("change", refreshTachographVisibility);
+    document.getElementById(id)?.addEventListener("input", refreshTachographVisibility);
+  });
+
+  // Segmentirana skala za nivo goriva — klik bira vrednost i oboji dugme.
+  document.getElementById("f-fuelLevel-scale")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".fuel-level-btn");
+    if (!btn) return;
+    const value = btn.dataset.value;
+    const hidden = document.getElementById("f-fuelLevel");
+    if (hidden) hidden.value = value;
+    document.querySelectorAll("#f-fuelLevel-scale .fuel-level-btn").forEach(b => {
+      b.classList.toggle("fuel-level-btn--active", b === btn);
+    });
   });
 }
 
@@ -904,6 +1008,7 @@ async function saveVehicle(vehicleId) {
       payload:          numOrNull("f-payload"),
       mass:             numOrNull("f-mass"),
       fuelType:         document.getElementById("f-fuelType")?.value || null,
+      fuelLevel:        document.getElementById("f-fuelLevel")?.value || null,
       color:            document.getElementById("f-color")?.value || null,
       status:           document.getElementById("f-status")?.value || "active",
       currentKm:        numOrNull("f-currentKm"),
@@ -911,6 +1016,7 @@ async function saveVehicle(vehicleId) {
       insuranceExpiry:  dateOrNull("f-insuranceExpiry"),
       insuranceCompany: document.getElementById("f-insuranceCompany")?.value.trim() || null,
       insurancePolicy:  document.getElementById("f-insurancePolicy")?.value.trim() || null,
+      tachographExpiry: dateOrNull("f-tachographExpiry"),
       requiredEquipment,
       tires: (tiresType || tiresDimensions) ? { type: tiresType, dimensions: tiresDimensions } : null,
       purchaseDate:     dateOrNull("f-purchaseDate"),
