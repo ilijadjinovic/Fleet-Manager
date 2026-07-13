@@ -237,6 +237,7 @@ async function openDriverDetail(driverId) {
       <button class="tab-strip__btn tab-strip__btn--active" data-dtab="info">${t("driver_tab_info")}</button>
       <button class="tab-strip__btn" data-dtab="assignments">${t("driver_tab_assignments")}</button>
       <button class="tab-strip__btn" data-dtab="incidents">${t("driver_tab_incidents")}</button>
+      <button class="tab-strip__btn" data-dtab="notes">${t("driver_tab_notes")}</button>
     </div>
 
     ${activeAssignment ? `
@@ -279,6 +280,7 @@ function renderDriverTab(tab, driver) {
     case "info":        content.innerHTML = renderInfoTab(driver); break;
     case "assignments": loadDriverAssignments(content, driver); break;
     case "incidents":   loadDriverIncidents(content, driver); break;
+    case "notes":       content.innerHTML = renderDriverNotesTab(driver); break;
   }
 }
 
@@ -311,6 +313,13 @@ function renderInfoTab(d) {
       : detailTable(loginRows)
     }
   `;
+}
+
+function renderDriverNotesTab(d) {
+  if (!d.notes) {
+    return `<div class="empty-state">${t("no_data")}</div>`;
+  }
+  return `<div class="vehicle-notes-box">${d.notes}</div>`;
 }
 
 async function loadDriverAssignments(container, driver) {
