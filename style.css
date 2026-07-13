@@ -90,9 +90,11 @@ body {
 }
 
 .login-card__logo-icon {
-  font-size: 48px;
+  width: 64px;
+  height: 64px;
   display: block;
-  margin-bottom: 8px;
+  margin: 0 auto 8px;
+  border-radius: 14px;
 }
 
 .login-card__title {
