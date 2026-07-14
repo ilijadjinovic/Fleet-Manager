@@ -12,6 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang } from "./i18n.js";
 import { S } from "./app.js";
+import { fuelLevelLabel, fuelLevelColorClass } from "./vehicles.js";
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderTrips(container) {
@@ -177,7 +178,7 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
     trips = [{
       id: `legacy-${a.id}`, _legacy: true,
       startDate: a.startDate, endDate: a.endDate,
-      startKm: a.startKm, endKm: a.endKm,
+      startKm: a.startKm, endKm: a.endKm, fuelLevel: a.fuelLevel || null,
       tripType: a.tripType, destination: a.destination, route: a.route,
       reason: a.reason, notes: a.unassignNotes || null, status: a.status,
     }];
@@ -289,6 +290,7 @@ function tripHistoryCard(trip, entries, index) {
           🛣️ ${trip.startKm?.toLocaleString() ?? "—"} → ${trip.endKm?.toLocaleString() ?? "—"} km
           ${km != null ? `<strong> (${km.toLocaleString()} km)</strong>` : ""}
         </div>
+        ${trip.fuelLevel ? `<div class="trip-history-card__fuel">⛽ <span class="fuel-level-text--${fuelLevelColorClass(trip.fuelLevel)}">${fuelLevelLabel(trip.fuelLevel)}</span></div>` : ""}
         ${trip.tripType === "intercity" && trip.destination ? `<div class="trip-history-card__dest">📍 ${trip.destination}</div>` : ""}
         ${trip.reason ? `<div class="trip-history-card__reason">${trip.reason}</div>` : ""}
         ${trip.notes ? `<div class="trip-history-card__notes">${trip.notes}</div>` : ""}

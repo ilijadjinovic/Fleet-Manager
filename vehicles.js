@@ -62,19 +62,55 @@ function tireTypeLabel(code) {
 }
 
 // ── NIVO GORIVA U REZERVOARU ───────────────────────────────────
-const FUEL_LEVELS = ["full", "3_4", "1_2", "1_4", "reserve"];
+export const FUEL_LEVELS = ["full", "3_4", "1_2", "1_4", "reserve"];
 
-function fuelLevelLabel(code) {
+export function fuelLevelLabel(code) {
   if (!code) return null;
   return FUEL_LEVELS.includes(code) ? t("fuel_level_" + code) : code;
 }
 
 // 1/1 i 3/4 → zeleno, 1/2 → žuto, 1/4 i rezerva → crveno (isti sistem kao gume/oprema)
-function fuelLevelColorClass(code) {
+export function fuelLevelColorClass(code) {
   if (code === "full" || code === "3_4") return "green";
   if (code === "1_2") return "yellow";
   if (code === "1_4" || code === "reserve") return "red";
   return "";
+}
+
+// ── SEGMENTIRANA SKALA ZA NIVO GORIVA (reuse) ──────────────────
+// Koristi se u formi za dodavanje/izmenu vozila, kao i svuda gde
+// vozač unosi nivo goriva pri zatvaranju vožnje/zaduženja.
+// hiddenId  — id skrivenog inputa koji čuva izabranu vrednost
+// scaleId   — id kontejnera sa dugmićima
+// currentValue — trenutno izabrana vrednost (ili null/"")
+export function fuelLevelScaleHTML(hiddenId, scaleId, currentValue) {
+  return `
+    <input type="hidden" id="${hiddenId}" value="${currentValue || ""}" />
+    <div id="${scaleId}" class="fuel-level-scale">
+      ${FUEL_LEVELS.map(fl => {
+        const active = (currentValue || "") === fl;
+        const colorClass = fuelLevelColorClass(fl);
+        return `<button type="button"
+          class="fuel-level-btn fuel-level-btn--${colorClass}${active ? " fuel-level-btn--active" : ""}"
+          data-value="${fl}">${fuelLevelLabel(fl)}</button>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+// Vezuje klik-handler na skalu iz fuelLevelScaleHTML(). Pozvati posle
+// ubacivanja HTML-a u DOM (npr. posle openModal()).
+export function bindFuelLevelScale(hiddenId, scaleId) {
+  document.getElementById(scaleId)?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".fuel-level-btn");
+    if (!btn) return;
+    const value = btn.dataset.value;
+    const hidden = document.getElementById(hiddenId);
+    if (hidden) hidden.value = value;
+    document.querySelectorAll(`#${scaleId} .fuel-level-btn`).forEach(b => {
+      b.classList.toggle("fuel-level-btn--active", b === btn);
+    });
+  });
 }
 
 // ── OBAVEZNOST TAHOGRAFA ────────────────────────────────────────
@@ -759,16 +795,7 @@ function openVehicleForm(vehicle = null) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("vehicle_fuel_level")}</label>
-        <input type="hidden" id="f-fuelLevel" value="${v.fuelLevel || ""}" />
-        <div id="f-fuelLevel-scale" class="fuel-level-scale">
-          ${FUEL_LEVELS.map(fl => {
-            const active = (v.fuelLevel || "") === fl;
-            const colorClass = fuelLevelColorClass(fl);
-            return `<button type="button"
-              class="fuel-level-btn fuel-level-btn--${colorClass}${active ? " fuel-level-btn--active" : ""}"
-              data-value="${fl}">${fuelLevelLabel(fl)}</button>`;
-          }).join("")}
-        </div>
+        ${fuelLevelScaleHTML("f-fuelLevel", "f-fuelLevel-scale", v.fuelLevel)}
       </div>
     </div>
     <div class="form-row">
@@ -915,16 +942,7 @@ function openVehicleForm(vehicle = null) {
   });
 
   // Segmentirana skala za nivo goriva — klik bira vrednost i oboji dugme.
-  document.getElementById("f-fuelLevel-scale")?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".fuel-level-btn");
-    if (!btn) return;
-    const value = btn.dataset.value;
-    const hidden = document.getElementById("f-fuelLevel");
-    if (hidden) hidden.value = value;
-    document.querySelectorAll("#f-fuelLevel-scale .fuel-level-btn").forEach(b => {
-      b.classList.toggle("fuel-level-btn--active", b === btn);
-    });
-  });
+  bindFuelLevelScale("f-fuelLevel", "f-fuelLevel-scale");
 }
 
 // ── FIELD ERROR HELPER ───────────────────────────────────────

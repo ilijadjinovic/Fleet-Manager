@@ -11,7 +11,7 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
 import { getCompanies } from "./firebase.js";
-import { isVehicleRegistered, needsTachograph, openVehicleDetail } from "./vehicles.js";
+import { isVehicleRegistered, needsTachograph, openVehicleDetail, fuelLevelScaleHTML, bindFuelLevelScale } from "./vehicles.js";
 import { mountPendingBanner } from "./pending-requests.js";
 import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
@@ -649,14 +649,24 @@ function validateKmInput(rawValue, errorElId) {
   return km;
 }
 
-// Upisuje novu km na vozilo (Firestore) i ažurira lokalno stanje.
-async function bumpVehicleKm(newKm) {
-  await updateDoc(doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId), {
+// Upisuje novu km (i, opciono, nivo goriva) na vozilo (Firestore) i
+// ažurira lokalno stanje. fuelLevel je opcioni — ako vozač nije izabrao
+// vrednost pri zatvaranju vožnje/zaduženja, postojeći nivo se ne menja.
+async function bumpVehicleKm(newKm, fuelLevel = null) {
+  const update = {
     currentKm: newKm,
     updatedAt: serverTimestamp(),
-  });
-  if (activeVehicle) activeVehicle.currentKm = newKm;
-  else activeVehicle = { id: activeAssignment.vehicleId, currentKm: newKm };
+  };
+  if (fuelLevel) update.fuelLevel = fuelLevel;
+
+  await updateDoc(doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId), update);
+
+  if (activeVehicle) {
+    activeVehicle.currentKm = newKm;
+    if (fuelLevel) activeVehicle.fuelLevel = fuelLevel;
+  } else {
+    activeVehicle = { id: activeAssignment.vehicleId, currentKm: newKm, fuelLevel: fuelLevel || null };
+  }
 }
 
 // ── KM POTVRDA ────────────────────────────────────────────────
@@ -758,6 +768,10 @@ function openCloseTripForm() {
         value="${activeVehicle?.currentKm || ""}" />
     </div>
     <div class="form-group">
+      <label class="form-label">${t("vehicle_fuel_level")}</label>
+      ${fuelLevelScaleHTML("ct-fuelLevel", "ct-fuelLevel-scale", activeVehicle?.fuelLevel)}
+    </div>
+    <div class="form-group">
       <label class="form-label">${t("notes")}</label>
       <textarea id="ct-notes" class="form-textarea" rows="2"></textarea>
     </div>
@@ -765,6 +779,7 @@ function openCloseTripForm() {
   `;
 
   openModal(t("trip_close_trip_btn"), bodyHTML, () => closeCurrentTrip());
+  bindFuelLevelScale("ct-fuelLevel", "ct-fuelLevel-scale");
 }
 
 async function closeCurrentTrip() {
@@ -773,16 +788,18 @@ async function closeCurrentTrip() {
   const endKm = validateKmInput(document.getElementById("ct-endKm")?.value, "close-trip-error");
   if (endKm === null) return false;
   const notes = document.getElementById("ct-notes")?.value.trim() || null;
+  const fuelLevel = document.getElementById("ct-fuelLevel")?.value || null;
 
   try {
     await updateDoc(doc(db, "companies", S.companyId, "trips", activeTrip.id), {
       status:    "closed",
       endDate:   serverTimestamp(),
       endKm,
+      fuelLevel,
       notes,
       updatedAt: serverTimestamp(),
     });
-    await bumpVehicleKm(endKm);
+    await bumpVehicleKm(endKm, fuelLevel);
 
     showToast(t("trip_closed_success"), "success");
 
@@ -1117,6 +1134,10 @@ function openDriverUnassignForm() {
       </div>
     </div>
     <div class="form-group">
+      <label class="form-label">${t("vehicle_fuel_level")}</label>
+      ${fuelLevelScaleHTML("du-fuelLevel", "du-fuelLevel-scale", activeVehicle?.fuelLevel)}
+    </div>
+    <div class="form-group">
       <label class="form-label">${t("notes")}</label>
       <textarea id="du-notes" class="form-textarea" rows="2"></textarea>
     </div>
@@ -1125,12 +1146,14 @@ function openDriverUnassignForm() {
 
   openModal(t("assignment_unassign") + " " + t("assignment_vehicle").toLowerCase(), bodyHTML, () => processDriverUnassign());
   attachDateMask("du-endDate");
+  bindFuelLevelScale("du-fuelLevel", "du-fuelLevel-scale");
 }
 
 async function processDriverUnassign() {
-  const endDate = document.getElementById("du-endDate")?.value;
-  const endKm   = parseFloat(document.getElementById("du-endKm")?.value);
-  const notes   = document.getElementById("du-notes")?.value.trim();
+  const endDate   = document.getElementById("du-endDate")?.value;
+  const endKm     = parseFloat(document.getElementById("du-endKm")?.value);
+  const notes     = document.getElementById("du-notes")?.value.trim();
+  const fuelLevel = document.getElementById("du-fuelLevel")?.value || null;
 
   if (!endDate) {
     showEntryError("unassign-form-error", t("assignment_unassign_date_required"));
@@ -1159,19 +1182,23 @@ async function processDriverUnassign() {
         status:        "closed",
         endDate:       endDateObj,
         endKm,
+        fuelLevel,
         unassignNotes: notes || null,
         closedByDriver: true,
         updatedAt:     serverTimestamp(),
       }
     );
 
+    const vehicleUpdate = {
+      currentKm:          endKm,
+      assignedDriverName: null,
+      updatedAt:          serverTimestamp(),
+    };
+    if (fuelLevel) vehicleUpdate.fuelLevel = fuelLevel;
+
     await updateDoc(
       doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId),
-      {
-        currentKm:          endKm,
-        assignedDriverName: null,
-        updatedAt:          serverTimestamp(),
-      }
+      vehicleUpdate
     );
 
     // Zatvori i trenutno aktivnu vožnju — zaduženje se gasi u celini
@@ -1182,6 +1209,7 @@ async function processDriverUnassign() {
           status:    "closed",
           endDate:   endDateObj,
           endKm,
+          fuelLevel,
           notes:     notes || null,
           updatedAt: serverTimestamp(),
         }
