@@ -11,7 +11,7 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
 import { getCompanies } from "./firebase.js";
-import { isVehicleRegistered, needsTachograph, openVehicleDetail, fuelLevelScaleHTML, bindFuelLevelScale } from "./vehicles.js";
+import { isVehicleRegistered, needsTachograph, openVehicleDetail, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
 import { mountPendingBanner } from "./pending-requests.js";
 import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
@@ -594,11 +594,13 @@ function kmConfirmBoxContent(a, v) {
 
   if (a.kmConfirmed) {
     const val = a.kmConfirmedValue ?? systemKm;
+    const fuelVal = a.fuelLevelConfirmedValue ?? v?.fuelLevel;
     return `
       <div class="km-confirmed">
         ✅ ${t("trip_km_confirmed")}: <strong>${val?.toLocaleString()} km</strong>
         ${a.kmMismatch ? `<span class="km-mismatch-note">${t("trip_km_mismatch_reported")}</span>` : ""}
       </div>
+      ${fuelVal ? `<div class="km-confirmed">⛽ ${t("vehicle_fuel_level")}: <strong>${fuelLevelLabel(fuelVal)}</strong>${a.fuelLevelMismatch ? `<span class="km-mismatch-note">${t("trip_fuel_mismatch_reported")}</span>` : ""}</div>` : ""}
     `;
   }
 
@@ -606,6 +608,12 @@ function kmConfirmBoxContent(a, v) {
     <div class="km-confirm-box__label">${t("trip_km_system")}</div>
     <div class="km-confirm-box__value">${systemKm?.toLocaleString() || "—"} km</div>
     <div class="km-confirm-box__hint">${t("trip_km_confirm_hint")}</div>
+
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">${t("vehicle_fuel_level")}</label>
+      ${fuelLevelScaleHTML("km-confirm-fuelLevel", "km-confirm-fuelLevel-scale", v?.fuelLevel)}
+    </div>
+
     <div class="km-confirm-box__actions">
       <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ ${t("trip_km_confirm")}</button>
       <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ ${t("trip_km_enter_actual")}</button>
@@ -673,16 +681,57 @@ async function bumpVehicleKm(newKm, fuelLevel = null) {
 function bindKmConfirm() {
   const systemKm = activeVehicle?.currentKm ?? activeAssignment?.startKm;
 
+  bindFuelLevelScale("km-confirm-fuelLevel", "km-confirm-fuelLevel-scale");
+
   document.getElementById("btn-confirm-km")?.addEventListener("click", async () => {
+    const fuelLevel = document.getElementById("km-confirm-fuelLevel")?.value || null;
+
     try {
-      await updateDoc(doc(db, "companies", S.companyId, "assignments", activeAssignment.id), {
+      const updateData = {
         kmConfirmed:      true,
         kmConfirmedValue: systemKm,
         kmConfirmedAt:    serverTimestamp(),
         updatedAt:        serverTimestamp(),
-      });
+      };
+      if (fuelLevel) updateData.fuelLevelConfirmedValue = fuelLevel;
+
+      const fuelMismatch = !!(fuelLevel && activeVehicle?.fuelLevel && fuelLevel !== activeVehicle.fuelLevel);
+      if (fuelMismatch) {
+        updateData.fuelLevelMismatch = true;
+        updateData.systemFuelLevel   = activeVehicle?.fuelLevel || null;
+      }
+
+      await updateDoc(doc(db, "companies", S.companyId, "assignments", activeAssignment.id), updateData);
       activeAssignment.kmConfirmed      = true;
       activeAssignment.kmConfirmedValue = systemKm;
+      if (fuelLevel) activeAssignment.fuelLevelConfirmedValue = fuelLevel;
+
+      // Ako se vozač izjasnio o nivou goriva a razlikuje se od onog
+      // upisanog na vozilu, ažuriraj vozilo da odražava stvarno stanje
+      // i pošalji notifikaciju fleet adminu (isto kao km neslaganje).
+      if (fuelLevel && fuelLevel !== activeVehicle?.fuelLevel) {
+        await updateDoc(doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId), {
+          fuelLevel, updatedAt: serverTimestamp(),
+        });
+        const priorFuelLevel = activeVehicle?.fuelLevel || null;
+        if (activeVehicle) activeVehicle.fuelLevel = fuelLevel;
+
+        if (fuelMismatch) {
+          await addDoc(collection(db, "companies", S.companyId, "notifications"), {
+            type:             "fuel_mismatch",
+            assignmentId:     activeAssignment.id,
+            vehicleId:        activeAssignment.vehicleId,
+            vehiclePlate:     activeAssignment.vehiclePlate,
+            driverId:         S.profile.driverId,
+            driverName:       activeAssignment.driverName,
+            systemFuelLevel:  priorFuelLevel,
+            driverFuelLevel:  fuelLevel,
+            status:           "unread",
+            createdAt:        serverTimestamp(),
+          });
+        }
+      }
+      if (fuelMismatch) showToast(t("trip_fuel_mismatch_reported"), "warning");
     } catch (e) {
       showToast(`${t("error")}: ${e.message}`, "error");
       return;
@@ -690,6 +739,7 @@ function bindKmConfirm() {
 
     document.getElementById("km-confirm-box").innerHTML = `
       <div class="km-confirmed">✅ ${t("trip_km_confirmed")}: <strong>${systemKm?.toLocaleString()} km</strong></div>
+      ${fuelLevel ? `<div class="km-confirmed">⛽ ${t("vehicle_fuel_level")}: <strong>${fuelLevelLabel(fuelLevel)}</strong>${fuelMismatch ? `<span class="km-mismatch-note">${t("trip_fuel_mismatch_reported")}</span>` : ""}</div>` : ""}
     `;
   });
 
@@ -700,8 +750,11 @@ function bindKmConfirm() {
   document.getElementById("btn-submit-km")?.addEventListener("click", async () => {
     const actualKm = Number(document.getElementById("input-actual-km")?.value);
     if (!actualKm || actualKm <= 0) return;
+    const fuelLevel = document.getElementById("km-confirm-fuelLevel")?.value || null;
 
     const mismatch = actualKm !== systemKm;
+    const fuelMismatch = !!(fuelLevel && activeVehicle?.fuelLevel && fuelLevel !== activeVehicle.fuelLevel);
+    const priorFuelLevel = activeVehicle?.fuelLevel || null;
 
     try {
       const updateData = {
@@ -710,6 +763,11 @@ function bindKmConfirm() {
         kmConfirmedAt:    serverTimestamp(),
         updatedAt:        serverTimestamp(),
       };
+      if (fuelLevel) updateData.fuelLevelConfirmedValue = fuelLevel;
+      if (fuelMismatch) {
+        updateData.fuelLevelMismatch = true;
+        updateData.systemFuelLevel   = priorFuelLevel;
+      }
 
       if (mismatch) {
         updateData.kmMismatch    = true;
@@ -730,13 +788,39 @@ function bindKmConfirm() {
         });
       }
 
+      if (fuelMismatch) {
+        // Isti obrazac kao km_mismatch, samo za nivo goriva.
+        await addDoc(collection(db, "companies", S.companyId, "notifications"), {
+          type:            "fuel_mismatch",
+          assignmentId:    activeAssignment.id,
+          vehicleId:       activeAssignment.vehicleId,
+          vehiclePlate:    activeAssignment.vehiclePlate,
+          driverId:        S.profile.driverId,
+          driverName:      activeAssignment.driverName,
+          systemFuelLevel: priorFuelLevel,
+          driverFuelLevel: fuelLevel,
+          status:          "unread",
+          createdAt:       serverTimestamp(),
+        });
+      }
+
       await updateDoc(doc(db, "companies", S.companyId, "assignments", activeAssignment.id), updateData);
 
       activeAssignment.kmConfirmed      = true;
       activeAssignment.kmConfirmedValue = actualKm;
       if (mismatch) activeAssignment.kmMismatch = true;
+      if (fuelLevel) activeAssignment.fuelLevelConfirmedValue = fuelLevel;
+      if (fuelMismatch) activeAssignment.fuelLevelMismatch = true;
+
+      if (fuelLevel && fuelLevel !== activeVehicle?.fuelLevel) {
+        await updateDoc(doc(db, "companies", S.companyId, "vehicles", activeAssignment.vehicleId), {
+          fuelLevel, updatedAt: serverTimestamp(),
+        });
+        if (activeVehicle) activeVehicle.fuelLevel = fuelLevel;
+      }
 
       if (mismatch) showToast(t("trip_km_mismatch_reported"), "warning");
+      if (fuelMismatch) showToast(t("trip_fuel_mismatch_reported"), "warning");
     } catch (e) {
       showToast(`${t("error")}: ${e.message}`, "error");
       return;
@@ -748,6 +832,7 @@ function bindKmConfirm() {
         ✅ Unesena km: <strong>${actualKm.toLocaleString()} km</strong>
         ${mismatch ? `<span class="km-mismatch-note">(razlika: ${(actualKm - systemKm).toLocaleString()} km)</span>` : ""}
       </div>
+      ${fuelLevel ? `<div class="km-confirmed">⛽ ${t("vehicle_fuel_level")}: <strong>${fuelLevelLabel(fuelLevel)}</strong>${fuelMismatch ? `<span class="km-mismatch-note">${t("trip_fuel_mismatch_reported")}</span>` : ""}</div>` : ""}
     `;
   });
 }
