@@ -165,6 +165,15 @@ function regBadge(v) {
   return `<span class="badge ${cls} badge--inline">${label}</span>`;
 }
 
+// Mali bedž sa nivoom goriva za karticu vozila — isti sistem boja
+// (zeleno/žuto/crveno) kao segmentirana skala u formi za vozilo.
+function fuelBadge(v) {
+  if (!v.fuelLevel) return "";
+  const colorToBadge = { green: "badge--active", yellow: "badge--service", red: "badge--broken" };
+  const cls = colorToBadge[fuelLevelColorClass(v.fuelLevel)] || "badge--info";
+  return `<span class="badge ${cls} badge--inline">⛽ ${fuelLevelLabel(v.fuelLevel)}</span>`;
+}
+
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allVehicles = [];
 let currentFilter = "all";
@@ -323,7 +332,7 @@ function vehicleCard(v) {
         </div>
         <div class="vehicle-card__detail">
           <span class="vehicle-card__detail-label">${t("vehicle_year")}</span>
-          <span class="vehicle-card__detail-value">${v.year || "—"}</span>
+          <span class="vehicle-card__detail-value">${v.year || "—"} ${fuelBadge(v)}</span>
         </div>
       </div>
       ${v.assignedDriverName ? `
