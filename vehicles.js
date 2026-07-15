@@ -327,14 +327,19 @@ function vehicleCard(v) {
           <span class="vehicle-card__detail-value">
             ${regDate ? regDate.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS") : "—"}
             ${regWarning ? ` <span class="reg-warn">(${daysToReg}d)</span>` : ""}
-            ${regBadge(v)}
           </span>
         </div>
         <div class="vehicle-card__detail">
           <span class="vehicle-card__detail-label">${t("vehicle_year")}</span>
-          <span class="vehicle-card__detail-value">${v.year || "—"} ${fuelBadge(v)}</span>
+          <span class="vehicle-card__detail-value">${v.year || "—"}</span>
         </div>
       </div>
+      ${(regBadge(v) || fuelBadge(v)) ? `
+        <div class="vehicle-card__details" style="margin-top:6px">
+          <div>${regBadge(v)}</div>
+          <div style="text-align:right">${fuelBadge(v)}</div>
+        </div>
+      ` : ""}
       ${v.assignedDriverName ? `
         <div class="vehicle-card__driver">
           <span>👤</span> ${v.assignedDriverName}
