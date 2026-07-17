@@ -74,25 +74,42 @@ async function loadTripHistory() {
 
 // ── GENERALIZOVANI UČITAVAČ ISTORIJE (koristi ga i drivers.js za
 //    prikaz zaduženja/vožnji konkretnog vozača iz admin panela) ───
-// primaryField/primaryValue se pokušava prvo; ako ne vrati ništa i
-// fallbackValue je zadat, pokušava se i fallbackField (isti obrazac
-// koji je ranije korišćen samo za vozačev sopstveni prikaz).
+// Podaci su istorijski mešoviti — neki dokumenti imaju popunjen
+// driverUid, neki samo driverId (npr. prva vožnja koju admin auto-
+// matski kreira uz zaduženje, kod vozača bez lokalnog/Google naloga
+// u tom trenutku). Zato se OBA upita uvek pokreću i rezultati
+// spajaju (bez duplikata po id-ju) — raniji "sve ili ništa" fallback
+// (pokušaj fallbackField SAMO ako primaryField vrati 0 rezultata)
+// je tiho gubio dokumente koji su se poklapali samo po jednom od ta
+// dva polja, čim bi bar jedan dokument uspešno pogodio primaryField.
 export async function loadDriverAssignmentHistory({ primaryField, primaryValue, fallbackField, fallbackValue }) {
   async function fetchWithFallback(collName, orderField, orderDir) {
-    let snap = primaryValue ? await getDocs(query(
-      collection(db, "companies", S.companyId, collName),
-      where(primaryField, "==", primaryValue),
-      orderBy(orderField, orderDir)
-    )).catch(() => ({ docs: [] })) : { docs: [] };
+    const byId = new Map();
 
-    if (snap.docs.length === 0 && fallbackValue) {
-      snap = await getDocs(query(
-        collection(db, "companies", S.companyId, collName),
-        where(fallbackField, "==", fallbackValue),
-        orderBy(orderField, orderDir)
-      )).catch(() => ({ docs: [] }));
+    async function runQuery(field, value) {
+      if (!value) return;
+      try {
+        const snap = await getDocs(query(
+          collection(db, "companies", S.companyId, collName),
+          where(field, "==", value),
+          orderBy(orderField, orderDir)
+        ));
+        snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
+      } catch (e) {
+        console.error(`fetchWithFallback(${collName}, ${field}) failed:`, e);
+      }
     }
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    await runQuery(primaryField, primaryValue);
+    await runQuery(fallbackField, fallbackValue);
+
+    const list = [...byId.values()];
+    list.sort((a, b) => {
+      const ta = toMillis(a[orderField]);
+      const tb = toMillis(b[orderField]);
+      return orderDir === "desc" ? tb - ta : ta - tb;
+    });
+    return list;
   }
 
   let assignments = [], trips = [], entries = [];
@@ -381,6 +398,13 @@ function toJsDate(val) {
   if (!val) return null;
   const d = val.toDate ? val.toDate() : new Date(val);
   return isNaN(d) ? null : d;
+}
+
+function toMillis(val) {
+  if (!val) return 0;
+  if (val.toMillis) return val.toMillis();
+  const d = new Date(val);
+  return isNaN(d) ? 0 : d.getTime();
 }
 
 // ── ENTRY CARD ────────────────────────────────────────────────
