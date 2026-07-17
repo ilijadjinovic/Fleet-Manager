@@ -580,11 +580,21 @@ async function loadServiceTab(container, vehicle) {
       return aResolved ? (db_ - da) : (da - db_);
     });
 
+    const totalCost = services.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+
     container.innerHTML = `
       ${canEdit ? `<div style="margin-bottom:12px"><button class="btn btn--primary btn--sm" id="btn-add-service">+ ${t("service_add")}</button></div>` : ""}
       ${services.length === 0
         ? `<div class="empty-state"><div class="empty-state__icon">🔧</div><p>${t("no_data")}</p></div>`
-        : `<div class="service-list">${services.map(s => serviceItem(s, vehicle, canEdit)).join("")}</div>`
+        : `
+          ${totalCost > 0 ? `
+            <div class="service-total-bar">
+              <span>${t("service_total_cost")}:</span>
+              <strong>${totalCost.toLocaleString()} RSD</strong>
+            </div>
+          ` : ""}
+          <div class="service-list">${services.map(s => serviceItem(s, vehicle, canEdit)).join("")}</div>
+        `
       }
     `;
 

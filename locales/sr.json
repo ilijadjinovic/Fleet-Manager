@@ -241,6 +241,7 @@
   "incident_status_in_progress": "U obradi",
   "incident_status_closed": "Zatvoreno",
   "service_add": "Dodaj servis",
+  "service_total_cost": "Ukupni utrošak za servis",
   "service_type": "Vrsta servisa",
   "service_type_regular": "Redovni servis",
   "service_type_tech": "Tehnički pregled",

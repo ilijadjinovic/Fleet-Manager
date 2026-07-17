@@ -1545,6 +1545,18 @@ tbody td {
 .trip-stat__value { font-size: 20px; font-weight: 800; }
 .trip-stat__label { font-size: 11px; color: var(--color-text-muted); }
 
+.service-total-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.service-total-bar strong { color: var(--color-primary); font-size: 14px; }
+
 .trips-list, .incidents-list { display: flex; flex-direction: column; gap: 8px; }
 
 .trip-item {

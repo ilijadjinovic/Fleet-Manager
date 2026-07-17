@@ -241,6 +241,7 @@
   "incident_status_in_progress": "In progress",
   "incident_status_closed": "Closed",
   "service_add": "Add service",
+  "service_total_cost": "Total service cost",
   "service_type": "Service type",
   "service_type_regular": "Regular service",
   "service_type_tech": "Technical inspection",
