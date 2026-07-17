@@ -47,7 +47,8 @@ async function renderDriverHistoryView(container) {
   attachAssignmentHistoryEvents(container);
 }
 
-// ── UČITAJ ISTORIJU ZADUŽENJA (zatvorena) + VOŽNJE + SVE UNOSE ──
+// ── UČITAJ ISTORIJU ZADUŽENJA (zatvorena + aktivna sa bar jednom
+//    zatvorenom vožnjom) + VOŽNJE + SVE UNOSE ──────────────────
 async function loadTripHistory() {
   const { assignments, tripsByAssignment, entriesByTrip, entriesByAssignment } =
     await loadDriverAssignmentHistory({
@@ -55,7 +56,19 @@ async function loadTripHistory() {
       fallbackField: "driverId", fallbackValue: S.profile?.driverId,
     });
 
-  const pastAssignments = assignments.filter(a => a.status === "closed");
+  // Zaduženje se prikazuje ovde ako je zatvoreno, ILI ako je i dalje
+  // aktivno ali već ima bar jednu ZATVORENU vožnju unutar sebe — inače
+  // bi ta zatvorena vožnja ostala nevidljiva sve dok se ne zatvori celo
+  // zaduženje (npr. vozač zatvori vožnju da bi krenuo na sledeću, ali
+  // vozilo ostaje zaduženo). Zaduženje koje ima SAMO trenutnu, još
+  // otvorenu vožnju ostaje isključivo na tabu "Pregled" — ovde bi bilo
+  // prazno i zbunjujuće.
+  const pastAssignments = assignments.filter(a => {
+    if (a.status === "closed") return true;
+    const trips = tripsByAssignment[a.id] || [];
+    return trips.some(tr => tr.status === "closed");
+  });
+
   return { pastAssignments, tripsByAssignment, entriesByTrip, entriesByAssignment };
 }
 
@@ -206,18 +219,19 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
   const assignmentEndKm   = lastTrip?.endKm ?? a.endKm ?? null;
 
   return `
-    <div class="assignment-history-card">
+    <div class="assignment-history-card ${a.status !== "closed" ? "assignment-history-card--active" : ""}">
       <div class="assignment-history-card__header" data-toggle-assignment>
         <div>
           <div class="trip-history-card__vehicle">
             🚗 <strong>${a.vehicleBrand || ""} ${a.vehicleModel || ""}</strong> — ${a.vehiclePlate || ""}
           </div>
-          <div class="trip-history-card__dates">📅 ${formatDate(a.startDate)} → ${formatDate(a.endDate)}</div>
+          <div class="trip-history-card__dates">📅 ${formatDate(a.startDate)} → ${a.status === "closed" ? formatDate(a.endDate) : t("assignment_status_active")}</div>
           <div class="trip-history-card__km-range">
             🛣️ ${assignmentStartKm?.toLocaleString() ?? "—"} → ${assignmentEndKm != null ? assignmentEndKm.toLocaleString() : t("assignment_status_active")} km
           </div>
         </div>
         <div class="trip-history-card__summary">
+          ${a.status !== "closed" ? `<span class="trip-history-badge trip-history-badge--active">🟢 ${t("assignment_status_active")}</span>` : ""}
           <span class="trip-history-badge">🔑 ${trips.length} ${t("driver_trips_count")}</span>
           ${incidentCount > 0 ? `<span class="trip-history-badge trip-history-badge--warn">⚠️ ${incidentCount}</span>` : ""}
           <span class="trip-history-card__chevron">▾</span>
