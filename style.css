@@ -1750,6 +1750,14 @@ tbody td {
 }
 
 /* ── TRIPS ───────────────────────────────────────────────── */
+/* Vozač može imati više aktivnih zaduženja (vozila) istovremeno —
+   svaki blok dobija razmak i liniju iznad, izuzev prvog. */
+.trip-assignment-block + .trip-assignment-block {
+  margin-top: 12px;
+  padding-top: 24px;
+  border-top: 2px solid var(--color-border);
+}
+
 .trip-vehicle-card {
   padding: 16px;
   margin-bottom: 16px;

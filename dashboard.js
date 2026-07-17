@@ -18,12 +18,28 @@ import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
 
 // ── STANJE MODULA: aktivno zaduženje trenutnog vozača ─────────
-// (koristi se za akcije na tabu "Pregled" — dodavanje goriva/troška/
-// prijave, potvrdu kilometraže i razduženje)
+// Vozač može imati VIŠE aktivnih zaduženja istovremeno (npr. dva
+// vozila u isto vreme) — assignmentsState čuva podatke za svako od
+// njih. activeAssignment/activeVehicle/activeTrip/tripEntries su
+// "trenutno selektovani" pokazivači — postave se na konkretno
+// zaduženje neposredno pre bilo koje akcije (dugme, km potvrda...)
+// preko selectAssignment(), tako da sav postojeći kod ispod (forme,
+// čuvanje unosa, razduženje) ostaje nepromenjen i radi nad ispravnim
+// zaduženjem.
+let assignmentsState = new Map(); // assignmentId -> { assignment, vehicle, trip, entries }
 let activeAssignment = null;
 let activeVehicle    = null;
 let activeTrip        = null;
 let tripEntries       = [];
+
+function selectAssignment(assignmentId) {
+  const st = assignmentsState.get(assignmentId);
+  if (!st) return;
+  activeAssignment = st.assignment;
+  activeVehicle    = st.vehicle;
+  activeTrip       = st.trip;
+  tripEntries       = st.entries;
+}
 
 export async function renderDashboard(container) {
   const isMasterAdmin = S.profile?.role === "master_admin";
@@ -250,17 +266,19 @@ async function loadDashboardData() {
 
     const isDriver = role === "driver";
 
-    // Vozač: pronađi/otvori aktivnu vožnju u okviru aktivnog zaduženja
-    let resolvedActiveTrip = null;
+    // Vozač: pronađi/otvori aktivnu vožnju za SVAKO aktivno zaduženje
+    // (vozač može imati više vozila zaduženih istovremeno — svako od
+    // njih mora dobiti svoju aktivnu vožnju, ne samo prvo u nizu).
+    let resolvedActiveTrips = new Map(); // assignmentId -> trip
     if (isDriver) {
-      const candidate = assignmentsSnap?.docs?.[0];
-      if (candidate) {
-        resolvedActiveTrip = await loadActiveTrip({ id: candidate.id, ...candidate.data() });
+      const candidates = assignmentsSnap?.docs?.map(d => ({ id: d.id, ...d.data() })) || [];
+      for (const candidate of candidates) {
+        resolvedActiveTrips.set(candidate.id, await loadActiveTrip(candidate));
       }
     }
 
     content.innerHTML = `
-      ${isDriver ? renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrip) : renderAdminDashboard({
+      ${isDriver ? renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrips) : renderAdminDashboard({
         total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount
       })}
     `;
@@ -438,13 +456,12 @@ async function loadActiveTrip(assignment) {
   }
 }
 
-function renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrip) {
+function renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrips) {
   const activeAssignments = assignmentsSnap?.docs?.map(d => ({ id: d.id, ...d.data() })) || [];
   const allEntries        = allEntriesSnap?.docs?.map(d => ({ id: d.id, ...d.data() })) || [];
 
-  // Vozač u praksi ima najviše jedno aktivno zaduženje — koristimo prvo
-  // i pamtimo ga u stanju modula radi akcija (dodavanje unosa, km potvrda,
-  // razduženje) koje se vezuju na DOM elemente ovog bloka.
+  assignmentsState = new Map();
+
   if (activeAssignments.length === 0) {
     activeAssignment = null;
     activeVehicle    = null;
@@ -459,18 +476,38 @@ function renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSn
     `;
   }
 
-  activeAssignment = activeAssignments[0];
-  activeVehicle    = vehicles?.find(v => v.id === activeAssignment.vehicleId) || null;
-  activeTrip       = resolvedActiveTrip;
+  // Vozač može imati VIŠE aktivnih zaduženja istovremeno (npr. dva
+  // zadužena vozila) — svako dobija svoju karticu vozila, km potvrdu,
+  // akcije i listu unosa. Podaci za svako zaduženje čuvaju se u
+  // assignmentsState, a klik na dugme unutar konkretne kartice (vidi
+  // attachDriverActiveAssignmentEvents) selektuje to zaduženje pre
+  // pokretanja akcije.
+  const blocksHTML = activeAssignments.map(a => {
+    const vehicle = vehicles?.find(v => v.id === a.vehicleId) || null;
+    const trip    = resolvedActiveTrips?.get(a.id) || null;
 
-  // Unosi tokom TRENUTNE vožnje (po tripId). Stariji unosi bez tripId
-  // (nastali pre uvođenja vožnji) i dalje se prikazuju uz trenutnu
-  // vožnju, da se ne bi "izgubili" iz prikaza.
-  tripEntries = activeTrip
-    ? allEntries.filter(e => e.assignmentId === activeAssignment.id && (e.tripId === activeTrip.id || !e.tripId))
-    : allEntries.filter(e => e.assignmentId === activeAssignment.id);
+    // Unosi tokom TRENUTNE vožnje (po tripId). Stariji unosi bez tripId
+    // (nastali pre uvođenja vožnji) i dalje se prikazuju uz trenutnu
+    // vožnju, da se ne bi "izgubili" iz prikaza.
+    const entries = trip
+      ? allEntries.filter(e => e.assignmentId === a.id && (e.tripId === trip.id || !e.tripId))
+      : allEntries.filter(e => e.assignmentId === a.id);
 
-  return renderActiveAssignmentBlock(activeAssignment, activeTrip, tripEntries, activeVehicle);
+    assignmentsState.set(a.id, { assignment: a, vehicle, trip, entries });
+
+    return `
+      <div class="trip-assignment-block" data-assignment-id="${a.id}">
+        ${renderActiveAssignmentBlock(a, trip, entries, vehicle)}
+      </div>
+    `;
+  }).join("");
+
+  // Podrazumevano selektovano zaduženje — koristi se samo ako neka akcija
+  // krene pre bilo kog klika na konkretnu karticu; svaki klik na dugme
+  // unutar kartice ionako re-selektuje ispravno zaduženje.
+  selectAssignment(activeAssignments[0].id);
+
+  return blocksHTML;
 }
 
 // ── AKTIVNO ZADUŽENJE: kartica vozila, km potvrda, statistike,
@@ -528,13 +565,13 @@ function renderActiveAssignmentBlock(a, trip, entries, v) {
       </div>
 
       <!-- KM POTVRDA -->
-      <div class="km-confirm-box" id="km-confirm-box">
+      <div class="km-confirm-box" id="km-confirm-box-${a.id}" data-assignment-id="${a.id}">
         ${kmConfirmBoxContent(a, v)}
       </div>
     </div>
 
     <!-- STATISTIKE (za TRENUTNU vožnju) -->
-    <div class="trip-stats">
+    <div class="trip-stats" data-assignment-id="${a.id}">
       <div class="trip-stat-box">
         <div class="trip-stat-box__value">${totalFuel.toFixed(1)} L</div>
         <div class="trip-stat-box__label">${t("trip_stats_fuel")}</div>
@@ -555,18 +592,18 @@ function renderActiveAssignmentBlock(a, trip, entries, v) {
 
     <!-- AKCIJE -->
     <div class="trip-actions">
-      <button class="btn btn--primary" id="btn-add-fuel">⛽ ${t("trip_fuel_btn")}</button>
-      <button class="btn btn--secondary" id="btn-add-toll">🛣️ ${t("trip_cost_btn")}</button>
-      <button class="btn btn--warning" id="btn-add-incident">⚠️ ${t("trip_incident_btn")}</button>
-      <button class="btn btn--secondary" id="btn-close-trip">🔁 ${t("trip_close_trip_btn")}</button>
-      <button class="btn btn--danger" id="btn-close-assignment">🔓 ${t("trip_close_assignment_btn")}</button>
+      <button class="btn btn--primary" data-action="add-fuel" data-assignment-id="${a.id}">⛽ ${t("trip_fuel_btn")}</button>
+      <button class="btn btn--secondary" data-action="add-toll" data-assignment-id="${a.id}">🛣️ ${t("trip_cost_btn")}</button>
+      <button class="btn btn--warning" data-action="add-incident" data-assignment-id="${a.id}">⚠️ ${t("trip_incident_btn")}</button>
+      <button class="btn btn--secondary" data-action="close-trip" data-assignment-id="${a.id}">🔁 ${t("trip_close_trip_btn")}</button>
+      <button class="btn btn--danger" data-action="close-assignment" data-assignment-id="${a.id}">🔓 ${t("trip_close_assignment_btn")}</button>
     </div>
 
     <!-- LISTA UNOSA (tokom trenutne vožnje) -->
     <div class="trip-entries-header">
       <h3>${t("trip_entries_header")}</h3>
     </div>
-    <div id="trip-entries-list">
+    <div id="trip-entries-list-${a.id}">
       ${entries.length === 0
         ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>${t("trip_no_entries")}</p></div>`
         : entries.map(e => tripEntryCard(e)).join("")
@@ -575,21 +612,34 @@ function renderActiveAssignmentBlock(a, trip, entries, v) {
   `;
 }
 
-// Bind-uje akcije aktivnog zaduženja (km potvrda, dugmad za unos, zatvaranje
-// vožnje/zaduženja) — poziva se posle upisa u DOM, samo ako postoji
-// aktivno zaduženje.
+// Bind-uje akcije SVAKOG aktivnog zaduženja (km potvrda, dugmad za unos,
+// zatvaranje vožnje/zaduženja) — poziva se posle upisa u DOM. Svaki blok
+// zaduženja (data-assignment-id) dobija svoje listenere; klik unutar bloka
+// prvo selektuje to zaduženje (selectAssignment) pre pokretanja akcije, da
+// bi forme i čuvanje radili nad ispravnim vozilom/vožnjom.
 function attachDriverActiveAssignmentEvents() {
-  if (!activeAssignment) return;
-  bindKmConfirm();
-  document.getElementById("btn-add-fuel")?.addEventListener("click", () => openFuelForm());
-  document.getElementById("btn-add-toll")?.addEventListener("click", () => openCostForm());
-  document.getElementById("btn-add-incident")?.addEventListener("click", () => openIncidentForm(null, refreshEntries));
-  document.getElementById("btn-close-trip")?.addEventListener("click", () => openCloseTripForm());
-  document.getElementById("btn-close-assignment")?.addEventListener("click", () => openDriverUnassignForm());
+  if (assignmentsState.size === 0) return;
+
+  document.querySelectorAll(".trip-assignment-block[data-assignment-id]").forEach(block => {
+    const aid = block.dataset.assignmentId;
+    bindKmConfirm(aid);
+
+    block.querySelector('[data-action="add-fuel"]')
+      ?.addEventListener("click", () => { selectAssignment(aid); openFuelForm(); });
+    block.querySelector('[data-action="add-toll"]')
+      ?.addEventListener("click", () => { selectAssignment(aid); openCostForm(); });
+    block.querySelector('[data-action="add-incident"]')
+      ?.addEventListener("click", () => { selectAssignment(aid); openIncidentForm(null, refreshEntries, aid); });
+    block.querySelector('[data-action="close-trip"]')
+      ?.addEventListener("click", () => { selectAssignment(aid); openCloseTripForm(); });
+    block.querySelector('[data-action="close-assignment"]')
+      ?.addEventListener("click", () => { selectAssignment(aid); openDriverUnassignForm(); });
+  });
 }
 
 // ── KM POTVRDA — sadržaj boksa (potvrđeno vs. forma) ───────────
 function kmConfirmBoxContent(a, v) {
+  const suffix = a.id;
   const systemKm = v?.currentKm ?? a.startKm;
 
   if (a.kmConfirmed) {
@@ -611,22 +661,22 @@ function kmConfirmBoxContent(a, v) {
 
     <div class="form-group" style="margin-top:10px">
       <label class="form-label">${t("vehicle_fuel_level")}</label>
-      ${fuelLevelScaleHTML("km-confirm-fuelLevel", "km-confirm-fuelLevel-scale", v?.fuelLevel)}
+      ${fuelLevelScaleHTML(`km-confirm-fuelLevel-${suffix}`, `km-confirm-fuelLevel-scale-${suffix}`, v?.fuelLevel)}
     </div>
 
     <div class="km-confirm-box__actions">
-      <button class="btn btn--primary btn--sm" id="btn-confirm-km">✓ ${t("trip_km_confirm")}</button>
-      <button class="btn btn--secondary btn--sm" id="btn-correct-km">✏️ ${t("trip_km_enter_actual")}</button>
+      <button class="btn btn--primary btn--sm" data-action="confirm-km" data-assignment-id="${suffix}">✓ ${t("trip_km_confirm")}</button>
+      <button class="btn btn--secondary btn--sm" data-action="correct-km" data-assignment-id="${suffix}">✏️ ${t("trip_km_enter_actual")}</button>
     </div>
-    <div id="km-correct-form" class="hidden" style="margin-top:10px">
+    <div id="km-correct-form-${suffix}" class="hidden" style="margin-top:10px">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">${t("trip_km_actual_ph")}</label>
-          <input id="input-actual-km" class="form-input" type="number"
+          <input id="input-actual-km-${suffix}" class="form-input" type="number"
             placeholder="${systemKm || ""}" />
         </div>
         <div style="display:flex;align-items:flex-end">
-          <button class="btn btn--primary btn--sm" id="btn-submit-km">${t("trip_km_confirm")}</button>
+          <button class="btn btn--primary btn--sm" data-action="submit-km" data-assignment-id="${suffix}">${t("trip_km_confirm")}</button>
         </div>
       </div>
     </div>
@@ -678,13 +728,17 @@ async function bumpVehicleKm(newKm, fuelLevel = null) {
 }
 
 // ── KM POTVRDA ────────────────────────────────────────────────
-function bindKmConfirm() {
-  const systemKm = activeVehicle?.currentKm ?? activeAssignment?.startKm;
+function bindKmConfirm(aid) {
+  const suffix = aid;
+  const st = assignmentsState.get(aid);
+  if (!st) return;
+  const systemKm = st.vehicle?.currentKm ?? st.assignment?.startKm;
 
-  bindFuelLevelScale("km-confirm-fuelLevel", "km-confirm-fuelLevel-scale");
+  bindFuelLevelScale(`km-confirm-fuelLevel-${suffix}`, `km-confirm-fuelLevel-scale-${suffix}`);
 
-  document.getElementById("btn-confirm-km")?.addEventListener("click", async () => {
-    const fuelLevel = document.getElementById("km-confirm-fuelLevel")?.value || null;
+  document.querySelector(`[data-action="confirm-km"][data-assignment-id="${suffix}"]`)?.addEventListener("click", async () => {
+    selectAssignment(aid);
+    const fuelLevel = document.getElementById(`km-confirm-fuelLevel-${suffix}`)?.value || null;
 
     try {
       const updateData = {
@@ -737,20 +791,21 @@ function bindKmConfirm() {
       return;
     }
 
-    document.getElementById("km-confirm-box").innerHTML = `
+    document.getElementById(`km-confirm-box-${suffix}`).innerHTML = `
       <div class="km-confirmed">✅ ${t("trip_km_confirmed")}: <strong>${systemKm?.toLocaleString()} km</strong></div>
       ${fuelLevel ? `<div class="km-confirmed">⛽ ${t("vehicle_fuel_level")}: <strong>${fuelLevelLabel(fuelLevel)}</strong>${fuelMismatch ? `<span class="km-mismatch-note">${t("trip_fuel_mismatch_reported")}</span>` : ""}</div>` : ""}
     `;
   });
 
-  document.getElementById("btn-correct-km")?.addEventListener("click", () => {
-    document.getElementById("km-correct-form").classList.remove("hidden");
+  document.querySelector(`[data-action="correct-km"][data-assignment-id="${suffix}"]`)?.addEventListener("click", () => {
+    document.getElementById(`km-correct-form-${suffix}`).classList.remove("hidden");
   });
 
-  document.getElementById("btn-submit-km")?.addEventListener("click", async () => {
-    const actualKm = Number(document.getElementById("input-actual-km")?.value);
+  document.querySelector(`[data-action="submit-km"][data-assignment-id="${suffix}"]`)?.addEventListener("click", async () => {
+    selectAssignment(aid);
+    const actualKm = Number(document.getElementById(`input-actual-km-${suffix}`)?.value);
     if (!actualKm || actualKm <= 0) return;
-    const fuelLevel = document.getElementById("km-confirm-fuelLevel")?.value || null;
+    const fuelLevel = document.getElementById(`km-confirm-fuelLevel-${suffix}`)?.value || null;
 
     const mismatch = actualKm !== systemKm;
     const fuelMismatch = !!(fuelLevel && activeVehicle?.fuelLevel && fuelLevel !== activeVehicle.fuelLevel);
@@ -827,7 +882,7 @@ function bindKmConfirm() {
     }
 
     // Ažuriraj prikaz
-    document.getElementById("km-confirm-box").innerHTML = `
+    document.getElementById(`km-confirm-box-${suffix}`).innerHTML = `
       <div class="km-confirmed">
         ✅ Unesena km: <strong>${actualKm.toLocaleString()} km</strong>
         ${mismatch ? `<span class="km-mismatch-note">(razlika: ${(actualKm - systemKm).toLocaleString()} km)</span>` : ""}
@@ -1327,21 +1382,27 @@ async function refreshEntries() {
     ? allForAssignment.filter(e => e.tripId === activeTrip.id || !e.tripId)
     : allForAssignment;
 
-  const listEl = document.getElementById("trip-entries-list");
+  // Sinhronizuj keširano stanje za ovo zaduženje, da ostane tačno i bez
+  // punog ponovnog učitavanja dashboarda.
+  const st = assignmentsState.get(activeAssignment.id);
+  if (st) st.entries = tripEntries;
+
+  const listEl = document.getElementById(`trip-entries-list-${activeAssignment.id}`);
   if (listEl) {
     listEl.innerHTML = tripEntries.length === 0
       ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>${t("trip_no_entries")}</p></div>`
       : tripEntries.map(e => tripEntryCard(e)).join("");
   }
 
-  // Ažuriraj statistike
+  // Ažuriraj statistike (samo za blok ovog zaduženja)
   const totalFuel     = tripEntries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelAmount || 0), 0);
   const totalCost     = tripEntries.reduce((s, e) => s + (e.fuelCost || 0) + (e.amount || 0), 0);
   const incidentCount = tripEntries.filter(e => ["fault","damage","accident"].includes(e.type)).length;
 
-  document.querySelector(".trip-stats")?.replaceWith((() => {
+  document.querySelector(`.trip-stats[data-assignment-id="${activeAssignment.id}"]`)?.replaceWith((() => {
     const div = document.createElement("div");
     div.className = "trip-stats";
+    div.dataset.assignmentId = activeAssignment.id;
     div.innerHTML = `
       <div class="trip-stat-box"><div class="trip-stat-box__value">${totalFuel.toFixed(1)} L</div><div class="trip-stat-box__label">${t("trip_stats_fuel")}</div></div>
       <div class="trip-stat-box"><div class="trip-stat-box__value">${totalCost.toLocaleString()} RSD</div><div class="trip-stat-box__label">${t("trip_stats_cost")}</div></div>

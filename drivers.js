@@ -201,15 +201,16 @@ async function openDriverDetail(driverId) {
   const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
   const container = document.getElementById("content");
 
-  // Dohvati aktivno zaduženje
-  let activeAssignment = null;
+  // Dohvati aktivna zaduženja — vozač može imati više istovremeno
+  // (npr. dva zadužena vozila), pa uzimamo sva, ne samo prvo.
+  let activeAssignments = [];
   try {
     const snap = await getDocs(query(
       collection(db, "companies", S.companyId, "assignments"),
       where("driverId", "==", driverId),
       where("status", "==", "active")
     ));
-    if (!snap.empty) activeAssignment = { id: snap.docs[0].id, ...snap.docs[0].data() };
+    activeAssignments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (e) { /* ignoriši */ }
 
   container.innerHTML = `
@@ -240,13 +241,13 @@ async function openDriverDetail(driverId) {
       <button class="tab-strip__btn" data-dtab="notes">${t("driver_tab_notes")}</button>
     </div>
 
-    ${activeAssignment ? `
+    ${activeAssignments.map(a => `
       <div class="active-assignment-banner">
-        🔑 Trenutno zadužen: <strong>${activeAssignment.vehicleBrand} ${activeAssignment.vehicleModel}</strong>
-        — ${activeAssignment.vehiclePlate}
-        ${activeAssignment.tripType === "intercity" ? `📍 ${activeAssignment.destination || ""}` : ""}
+        🔑 Trenutno zadužen: <strong>${a.vehicleBrand} ${a.vehicleModel}</strong>
+        — ${a.vehiclePlate}
+        ${a.tripType === "intercity" ? `📍 ${a.destination || ""}` : ""}
       </div>
-    ` : ""}
+    `).join("")}
 
     <div id="driver-tab-content"></div>
   `;
