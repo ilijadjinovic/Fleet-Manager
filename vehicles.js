@@ -448,7 +448,7 @@ function renderVehicleTab(tab, vehicle) {
   switch (tab) {
     case "tech":     content.innerHTML = renderTechTab(vehicle); break;
     case "safety":   content.innerHTML = renderSafetyTab(vehicle); break;
-    case "finance":  content.innerHTML = renderFinanceTab(vehicle); break;
+    case "finance":  loadFinanceTab(content, vehicle); break;
     case "service":    loadServiceTab(content, vehicle); break;
     case "incidents":  loadIncidentsTab(content, vehicle); break;
     case "assignments": loadAssignmentsTab(content, vehicle); break;
@@ -539,13 +539,35 @@ function renderSafetyTab(v) {
   `;
 }
 
-function renderFinanceTab(v) {
-  const rows = [
-    [t("vehicle_purchase_date"),  formatDate(v.purchaseDate)],
-    [t("vehicle_purchase_type"),  v.purchaseType],
-    [t("vehicle_purchase_value"), v.purchaseValue ? Number(v.purchaseValue).toLocaleString() + " RSD" : null],
-  ];
-  return detailTable(rows);
+async function loadFinanceTab(container, v) {
+  container.innerHTML = `<div class="loading">${t("loading")}</div>`;
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, "companies", S.companyId, "services"),
+        where("vehicleId", "==", v.id)
+      )
+    );
+    const totalServiceCost = snap.docs.reduce((sum, d) => sum + (Number(d.data().cost) || 0), 0);
+
+    const rows = [
+      [t("vehicle_purchase_date"),  formatDate(v.purchaseDate)],
+      [t("vehicle_purchase_type"),  v.purchaseType],
+      [t("vehicle_purchase_value"), v.purchaseValue ? Number(v.purchaseValue).toLocaleString() + " RSD" : null],
+    ];
+
+    container.innerHTML = `
+      ${totalServiceCost > 0 ? `
+        <div class="service-total-bar">
+          <span>${t("service_total_cost")}:</span>
+          <strong>${totalServiceCost.toLocaleString()} RSD</strong>
+        </div>
+      ` : ""}
+      ${detailTable(rows)}
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
+  }
 }
 
 function renderNotesTab(v) {
@@ -580,21 +602,11 @@ async function loadServiceTab(container, vehicle) {
       return aResolved ? (db_ - da) : (da - db_);
     });
 
-    const totalCost = services.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
-
     container.innerHTML = `
       ${canEdit ? `<div style="margin-bottom:12px"><button class="btn btn--primary btn--sm" id="btn-add-service">+ ${t("service_add")}</button></div>` : ""}
       ${services.length === 0
         ? `<div class="empty-state"><div class="empty-state__icon">🔧</div><p>${t("no_data")}</p></div>`
-        : `
-          ${totalCost > 0 ? `
-            <div class="service-total-bar">
-              <span>${t("service_total_cost")}:</span>
-              <strong>${totalCost.toLocaleString()} RSD</strong>
-            </div>
-          ` : ""}
-          <div class="service-list">${services.map(s => serviceItem(s, vehicle, canEdit)).join("")}</div>
-        `
+        : `<div class="service-list">${services.map(s => serviceItem(s, vehicle, canEdit)).join("")}</div>`
       }
     `;
 
