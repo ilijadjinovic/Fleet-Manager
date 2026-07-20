@@ -739,6 +739,7 @@ function bindKmConfirm(aid) {
   document.querySelector(`[data-action="confirm-km"][data-assignment-id="${suffix}"]`)?.addEventListener("click", async () => {
     selectAssignment(aid);
     const fuelLevel = document.getElementById(`km-confirm-fuelLevel-${suffix}`)?.value || null;
+    const fuelMismatch = !!(fuelLevel && activeVehicle?.fuelLevel && fuelLevel !== activeVehicle.fuelLevel);
 
     try {
       const updateData = {
@@ -749,7 +750,6 @@ function bindKmConfirm(aid) {
       };
       if (fuelLevel) updateData.fuelLevelConfirmedValue = fuelLevel;
 
-      const fuelMismatch = !!(fuelLevel && activeVehicle?.fuelLevel && fuelLevel !== activeVehicle.fuelLevel);
       if (fuelMismatch) {
         updateData.fuelLevelMismatch = true;
         updateData.systemFuelLevel   = activeVehicle?.fuelLevel || null;
