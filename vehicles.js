@@ -283,70 +283,96 @@ function renderList() {
     return;
   }
 
+  // ── GRUPISANJE PO VLASNIKU ────────────────────────────────────
+  // Vozila se prikazuju grupisana po vlasniku (v.ownerName) — svaki
+  // vlasnik dobija svoju vizuelno odvojenu sekciju sa svojim vozilima.
+  // Vozila bez unetog vlasnika idu u zajedničku grupu na kraju.
+  const groupsMap = new Map();
+  filtered.forEach(v => {
+    const key = (v.ownerName || "").trim();
+    if (!groupsMap.has(key)) groupsMap.set(key, []);
+    groupsMap.get(key).push(v);
+  });
+
+  const ownerKeys = Array.from(groupsMap.keys())
+    .filter(k => k !== "")
+    .sort((a, b) => a.localeCompare(b, getCurrentLang() === "en" ? "en" : "sr"));
+  if (groupsMap.has("")) ownerKeys.push(""); // "bez vlasnika" uvek poslednje
+
   list.innerHTML = `
-    <div class="vehicle-grid">
-      ${filtered.map(v => vehicleCard(v)).join("")}
+    <div class="vehicle-table-wrap">
+      ${ownerKeys.map(key => `
+        <div class="vehicle-owner-group">
+          <div class="vehicle-owner-group__header">
+            <span class="vehicle-owner-group__icon">👤</span>
+            <span class="vehicle-owner-group__name">${key || t("vehicle_no_owner")}</span>
+            <span class="vehicle-owner-group__count">${groupsMap.get(key).length}</span>
+          </div>
+          <div class="vehicle-table">
+            ${groupsMap.get(key).map(v => vehicleRow(v)).join("")}
+          </div>
+        </div>
+      `).join("")}
     </div>
   `;
 
-  list.querySelectorAll(".vehicle-card").forEach(card => {
-    card.addEventListener("click", () => openVehicleDetail(card.dataset.id));
+  list.querySelectorAll(".vehicle-row").forEach(row => {
+    row.addEventListener("click", () => openVehicleDetail(row.dataset.id));
   });
 }
 
-// ── VEHICLE CARD (lista) ──────────────────────────────────────
-function vehicleCard(v) {
+// ── VEHICLE ROW (tabelarni prikaz liste) ────────────────────────
+function vehicleRow(v) {
   const today = new Date();
   const regDate = v.regExpiry ? (v.regExpiry.toDate ? v.regExpiry.toDate() : new Date(v.regExpiry)) : null;
   const daysToReg = regDate ? Math.ceil((regDate - today) / 86400000) : null;
   const regWarning = daysToReg !== null && daysToReg <= 30;
 
   return `
-    <div class="vehicle-card ${v.archived ? "vehicle-card--archived" : ""}" data-id="${v.id}">
-      <div class="vehicle-card__header">
-        <div class="vehicle-card__info">
-          <div class="vehicle-card__name">${v.brand} ${v.model}</div>
-          <div class="vehicle-card__plate">${v.plate}</div>
+    <div class="vehicle-row ${v.archived ? "vehicle-row--archived" : ""}" data-id="${v.id}">
+      <div class="vehicle-row__top">
+        <div class="vehicle-row__info">
+          <div class="vehicle-row__name">${v.brand} ${v.model}</div>
+          <div class="vehicle-row__plate">${v.plate}</div>
         </div>
-        ${v.archived
-          ? `<span class="badge badge--cancelled">${t("vehicle_status_archived")}</span>`
-          : `<span class="badge badge--${v.status || 'active'}">${t("vehicle_status_" + (v.status || "active"))}</span>`
-        }
+        <div class="vehicle-row__badges">
+          ${v.archived
+            ? `<span class="badge badge--cancelled">${t("vehicle_status_archived")}</span>`
+            : `<span class="badge badge--${v.status || 'active'}">${t("vehicle_status_" + (v.status || "active"))}</span>`
+          }
+          ${regBadge(v)}
+          ${fuelBadge(v)}
+        </div>
       </div>
-      <div class="vehicle-card__details">
-        <div class="vehicle-card__detail">
-          <span class="vehicle-card__detail-label">VIN</span>
-          <span class="vehicle-card__detail-value mono">${v.vin || "—"}</span>
+      <div class="vehicle-row__fields">
+        <div class="vehicle-row__field">
+          <span class="vehicle-row__field-label">VIN</span>
+          <span class="vehicle-row__field-value mono">${v.vin || "—"}</span>
         </div>
-        <div class="vehicle-card__detail">
-          <span class="vehicle-card__detail-label">${t("vehicle_current_km")}</span>
-          <span class="vehicle-card__detail-value">${v.currentKm ? v.currentKm.toLocaleString() + " km" : "—"}</span>
+        <div class="vehicle-row__field">
+          <span class="vehicle-row__field-label">${t("vehicle_current_km")}</span>
+          <span class="vehicle-row__field-value">${v.currentKm ? v.currentKm.toLocaleString() + " km" : "—"}</span>
         </div>
-        <div class="vehicle-card__detail ${regWarning ? "vehicle-card__detail--warn" : ""}">
-          <span class="vehicle-card__detail-label">${t("vehicle_reg_expiry")}</span>
-          <span class="vehicle-card__detail-value">
+        <div class="vehicle-row__field ${regWarning ? "vehicle-row__field--warn" : ""}">
+          <span class="vehicle-row__field-label">${t("vehicle_reg_expiry")}</span>
+          <span class="vehicle-row__field-value">
             ${regDate ? regDate.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS") : "—"}
             ${regWarning ? ` <span class="reg-warn">(${daysToReg}d)</span>` : ""}
           </span>
         </div>
-        <div class="vehicle-card__detail">
-          <span class="vehicle-card__detail-label">${t("vehicle_year")}</span>
-          <span class="vehicle-card__detail-value">${v.year || "—"}</span>
+        <div class="vehicle-row__field">
+          <span class="vehicle-row__field-label">${t("vehicle_year")}</span>
+          <span class="vehicle-row__field-value">${v.year || "—"}</span>
         </div>
+        ${v.assignedDriverName ? `
+          <div class="vehicle-row__field">
+            <span class="vehicle-row__field-label">👤</span>
+            <span class="vehicle-row__field-value">${v.assignedDriverName}</span>
+          </div>
+        ` : ""}
       </div>
-      ${(regBadge(v) || fuelBadge(v)) ? `
-        <div class="vehicle-card__details" style="margin-top:6px">
-          <div>${regBadge(v)}</div>
-          <div style="text-align:right">${fuelBadge(v)}</div>
-        </div>
-      ` : ""}
-      ${v.assignedDriverName ? `
-        <div class="vehicle-card__driver">
-          <span>👤</span> ${v.assignedDriverName}
-        </div>
-      ` : ""}
       ${v.notes ? `
-        <div class="vehicle-card__notes">
+        <div class="vehicle-row__notes">
           <span>📝</span> ${v.notes}
         </div>
       ` : ""}
@@ -464,6 +490,7 @@ function renderTechTab(v) {
     [t("vehicle_category"),   vehicleCategoryLabel(v.category)],
     [t("vehicle_plate"),      v.plate],
     [t("vehicle_vin"),        v.vin],
+    [t("vehicle_engine_code"), v.engineCode],
     [t("vehicle_year"),       v.year],
     [t("vehicle_first_reg"),  formatDate(v.firstRegDate)],
     [t("vehicle_engine_cc"),  v.engineCc ? v.engineCc + " cm³" : null],
@@ -551,6 +578,7 @@ async function loadFinanceTab(container, v) {
     const totalServiceCost = snap.docs.reduce((sum, d) => sum + (Number(d.data().cost) || 0), 0);
 
     const rows = [
+      [t("vehicle_owner"),          v.ownerName],
       [t("vehicle_purchase_date"),  formatDate(v.purchaseDate)],
       [t("vehicle_purchase_type"),  v.purchaseType],
       [t("vehicle_purchase_value"), v.purchaseValue ? Number(v.purchaseValue).toLocaleString() + " RSD" : null],
@@ -772,6 +800,13 @@ function openVehicleForm(vehicle = null) {
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label class="form-label">${t("vehicle_engine_code")}</label>
+        <input id="f-engineCode" class="form-input" type="text" value="${v.engineCode || ""}" style="text-transform:uppercase" />
+      </div>
+      <div class="form-group"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label class="form-label">${t("vehicle_year")}</label>
         <input id="f-year" class="form-input" type="number" min="1990" max="2030" value="${v.year || ""}" />
       </div>
@@ -917,6 +952,13 @@ function openVehicleForm(vehicle = null) {
     <div class="form-section-title" style="margin-top:8px">${t("vehicle_tab_finance")}</div>
     <div class="form-row">
       <div class="form-group">
+        <label class="form-label">${t("vehicle_owner")}</label>
+        <input id="f-ownerName" class="form-input" type="text" value="${v.ownerName || ""}" />
+      </div>
+      <div class="form-group"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label class="form-label">${t("vehicle_purchase_date")}</label>
         <input id="f-purchaseDate" class="form-input" type="text" inputmode="numeric" maxlength="10"
           placeholder="${datePlaceholder()}" value="${toDMY(v.purchaseDate)}" />
@@ -1010,6 +1052,7 @@ async function saveVehicle(vehicleId) {
   const model = document.getElementById("f-model")?.value.trim();
   const plate = document.getElementById("f-plate")?.value.trim().toUpperCase();
   const vin   = document.getElementById("f-vin")?.value.trim().toUpperCase() || null;
+  const engineCode = document.getElementById("f-engineCode")?.value.trim().toUpperCase() || null;
 
   // ── OSNOVNA VALIDACIJA ────────────────────────────────────────
   let valid = true;
@@ -1051,7 +1094,7 @@ async function saveVehicle(vehicleId) {
     const requiredEquipment = Array.from(document.querySelectorAll(".f-equipment:checked")).map(el => el.value);
 
     const data = {
-      brand, model, plate, vin,
+      brand, model, plate, vin, engineCode,
       vehicleType:      document.getElementById("f-vehicleType")?.value || null,
       category:         document.getElementById("f-category")?.value || null,
       year:             numOrNull("f-year"),
@@ -1076,6 +1119,7 @@ async function saveVehicle(vehicleId) {
       purchaseDate:     dateOrNull("f-purchaseDate"),
       purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
       purchaseValue:    numOrNull("f-purchaseValue"),
+      ownerName:        document.getElementById("f-ownerName")?.value.trim() || null,
       notes:            document.getElementById("f-notes")?.value.trim() || null,
     };
 
