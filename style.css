@@ -440,6 +440,24 @@ body {
   letter-spacing: -0.02em;
 }
 
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sort-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sort-control .form-input--sm {
+  width: auto;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 /* ── CARDS ──────────────────────────────────────────────── */
 /* Zajednička osnova za sve "surface" kartice u aplikaciji — pozadina,
    okvir i zaobljenje su identični na ~19 mesta u fajlu; svaka kartica
@@ -1298,14 +1316,16 @@ tbody td {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
+  padding: 12px 16px;
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-primary);
+  border-left: 4px solid var(--color-primary);
   border-bottom: none;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
 }
-.vehicle-owner-group__icon { font-size: 14px; opacity: 0.8; }
-.vehicle-owner-group__name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.vehicle-owner-group__icon { font-size: 15px; opacity: 0.95; color: var(--color-primary); }
+.vehicle-owner-group__name { font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text); }
 .vehicle-owner-group__count {
   margin-left: auto;
   font-size: 12px;

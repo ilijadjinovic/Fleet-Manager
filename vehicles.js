@@ -178,6 +178,7 @@ function fuelBadge(v) {
 let allVehicles = [];
 let currentFilter = "all";
 let searchTerm = "";
+let currentSort = "none";
 let currentVehicleId = null; // za detail pogled
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
@@ -194,7 +195,20 @@ export async function renderVehicles(container, initialFilter = null) {
   container.innerHTML = `
     <div class="page-header">
       <h2 class="page-title">${t("tab_vehicles")}</h2>
-      ${canEdit ? `<button id="btn-add-vehicle" class="btn btn--primary btn--sm">+ ${t("vehicle_add")}</button>` : ""}
+      <div class="page-header__actions">
+        <div class="sort-control">
+          <select id="vehicle-sort-select" class="form-input form-input--sm">
+            <option value="none">${t("vehicle_sort_none")}</option>
+            <option value="brand_asc">${t("vehicle_sort_brand")}</option>
+            <option value="year_desc">${t("vehicle_sort_year_desc")}</option>
+            <option value="year_asc">${t("vehicle_sort_year_asc")}</option>
+            <option value="km_desc">${t("vehicle_sort_km")}</option>
+            <option value="plate_asc">${t("vehicle_sort_plate")}</option>
+          </select>
+          <button id="btn-sort" class="btn btn--secondary btn--sm">${t("vehicle_sort_apply")}</button>
+        </div>
+        ${canEdit ? `<button id="btn-add-vehicle" class="btn btn--primary btn--sm">+ ${t("vehicle_add")}</button>` : ""}
+      </div>
     </div>
 
     <div class="filter-bar">
@@ -235,7 +249,40 @@ export async function renderVehicles(container, initialFilter = null) {
     renderList();
   });
 
+  const sortSelectEl = document.getElementById("vehicle-sort-select");
+  if (sortSelectEl) sortSelectEl.value = currentSort;
+  document.getElementById("btn-sort")?.addEventListener("click", () => {
+    currentSort = document.getElementById("vehicle-sort-select")?.value || "none";
+    renderList();
+  });
+
   await loadVehicles();
+}
+
+// ── SORTIRANJE ──────────────────────────────────────────────────
+function sortVehicles(arr) {
+  const sorted = arr.slice();
+  const lang = getCurrentLang() === "en" ? "en" : "sr";
+  switch (currentSort) {
+    case "brand_asc":
+      sorted.sort((a, b) => `${a.brand || ""} ${a.model || ""}`.localeCompare(`${b.brand || ""} ${b.model || ""}`, lang));
+      break;
+    case "year_desc":
+      sorted.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
+      break;
+    case "year_asc":
+      sorted.sort((a, b) => (Number(a.year) || 0) - (Number(b.year) || 0));
+      break;
+    case "km_desc":
+      sorted.sort((a, b) => (Number(b.currentKm) || 0) - (Number(a.currentKm) || 0));
+      break;
+    case "plate_asc":
+      sorted.sort((a, b) => (a.plate || "").localeCompare(b.plate || "", lang));
+      break;
+    default:
+      break; // "none" — zadržava se redosled iz baze (createdAt desc)
+  }
+  return sorted;
 }
 
 // ── UČITAJ VOZILA ─────────────────────────────────────────────
@@ -282,6 +329,8 @@ function renderList() {
     list.innerHTML = `<div class="empty-state"><div class="empty-state__icon">🚗</div><p>${t("no_data")}</p></div>`;
     return;
   }
+
+  filtered = sortVehicles(filtered);
 
   // ── GRUPISANJE PO VLASNIKU ────────────────────────────────────
   // Vozila se prikazuju grupisana po vlasniku (v.ownerName) — svaki
