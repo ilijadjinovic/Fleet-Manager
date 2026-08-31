@@ -122,15 +122,17 @@ function renderList() {
   const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
 
   list.innerHTML = `
-    <div class="drivers-grid">
-      ${filtered.map(d => driverCard(d, canEdit)).join("")}
+    <div class="driver-table-wrap">
+      <div class="driver-table">
+        ${filtered.map(d => driverRow(d, canEdit)).join("")}
+      </div>
     </div>
   `;
 
-  list.querySelectorAll(".driver-card").forEach(card => {
-    card.addEventListener("click", (e) => {
+  list.querySelectorAll(".driver-row").forEach(row => {
+    row.addEventListener("click", (e) => {
       if (e.target.closest(".btn")) return; // ne otvara detail ako se klikne dugme
-      openDriverDetail(card.dataset.id);
+      openDriverDetail(row.dataset.id);
     });
   });
 
@@ -152,43 +154,56 @@ function renderList() {
   }
 }
 
-// ── DRIVER CARD ───────────────────────────────────────────────
-function driverCard(d, canEdit) {
+// ── DRIVER ROW (tabelarni prikaz liste) ─────────────────────────
+function driverRow(d, canEdit) {
   const isActive = d.active !== false;
   const hasLogin = d.username || d.googleEmail;
-  const initials = `${(d.firstName || "?")[0]}${(d.lastName || "?")[0]}`.toUpperCase();
 
   return `
-    <div class="driver-card ${!isActive ? "driver-card--inactive" : ""}" data-id="${d.id}">
-      <div class="driver-card__avatar">${initials}</div>
-      <div class="driver-card__body">
-        <div class="driver-card__header">
-          <div class="driver-card__name">${d.firstName} ${d.lastName}</div>
+    <div class="driver-row ${!isActive ? "driver-row--inactive" : ""}" data-id="${d.id}">
+      <div class="driver-row__top">
+        <div class="driver-row__info">
+          <div class="driver-row__name">${d.firstName} ${d.lastName}</div>
+          ${d.position ? `<div class="driver-row__position">💼 ${d.position}</div>` : ""}
+        </div>
+        <div class="driver-row__badges">
           <span class="badge badge--${isActive ? "active" : "inactive"}">
             ${isActive ? t("driver_active") : t("driver_inactive")}
           </span>
-        </div>
-        ${d.position ? `<div class="driver-card__position">💼 ${d.position}</div>` : ""}
-        <div class="driver-card__details">
-          ${d.licenseCategories ? `<span class="driver-detail">🪪 ${d.licenseCategories}</span>` : ""}
-          ${d.phone ? `<span class="driver-detail">📞 ${d.phone}</span>` : ""}
-          ${d.birthYear ? `<span class="driver-detail">📅 ${d.birthYear}</span>` : ""}
-        </div>
-        <div class="driver-card__login">
           ${d.googleEmail ? `<span class="login-chip login-chip--google">G</span>` : ""}
           ${d.username ? `<span class="login-chip login-chip--local">UN</span>` : ""}
           ${!hasLogin ? `<span class="login-chip login-chip--none">${t("driver_no_access")}</span>` : ""}
+          ${canEdit ? `
+            <div class="driver-row__actions">
+              <button class="btn btn--ghost btn--sm btn-edit-driver" data-id="${d.id}" title="${t("edit")}">✏️</button>
+              <button class="btn btn--ghost btn--sm btn-toggle-driver" data-id="${d.id}"
+                title="${isActive ? t("driver_inactive") : t("driver_active")}">
+                ${isActive ? "⏸️" : "▶️"}
+              </button>
+            </div>
+          ` : ""}
         </div>
       </div>
-      ${canEdit ? `
-        <div class="driver-card__actions">
-          <button class="btn btn--ghost btn--sm btn-edit-driver" data-id="${d.id}" title="${t("edit")}">✏️</button>
-          <button class="btn btn--ghost btn--sm btn-toggle-driver" data-id="${d.id}"
-            title="${isActive ? t("driver_inactive") : t("driver_active")}">
-            ${isActive ? "⏸️" : "▶️"}
-          </button>
-        </div>
-      ` : ""}
+      <div class="driver-row__fields">
+        ${d.licenseCategories ? `
+          <div class="driver-row__field">
+            <span class="driver-row__field-label">🪪 ${t("driver_license_cat")}</span>
+            <span class="driver-row__field-value">${d.licenseCategories}</span>
+          </div>
+        ` : ""}
+        ${d.phone ? `
+          <div class="driver-row__field">
+            <span class="driver-row__field-label">📞 ${t("driver_phone")}</span>
+            <span class="driver-row__field-value">${d.phone}</span>
+          </div>
+        ` : ""}
+        ${d.birthYear ? `
+          <div class="driver-row__field">
+            <span class="driver-row__field-label">📅 ${t("driver_birth_year")}</span>
+            <span class="driver-row__field-value">${d.birthYear}</span>
+          </div>
+        ` : ""}
+      </div>
     </div>
   `;
 }
