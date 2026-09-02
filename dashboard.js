@@ -1070,6 +1070,7 @@ function openFuelForm() {
           <option value="diesel">${t("fuel_diesel")}</option>
           <option value="petrol">${t("fuel_petrol")}</option>
           <option value="lpg">${t("fuel_lpg")}</option>
+          <option value="cng">${t("fuel_cng")}</option>
           <option value="electric">${t("fuel_electric")}</option>
         </select>
       </div>

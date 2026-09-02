@@ -894,7 +894,7 @@ function openVehicleForm(vehicle = null) {
         <label class="form-label">${t("vehicle_fuel_type")}</label>
         <select id="f-fuelType" class="form-select">
           <option value="">—</option>
-          ${["petrol","diesel","lpg","electric","hybrid"].map(ft =>
+          ${["petrol","diesel","lpg","cng","electric","hybrid_petrol","hybrid_diesel","hybrid_tng_cng"].map(ft =>
             `<option value="${ft}" ${v.fuelType === ft ? "selected" : ""}>${t("fuel_" + ft)}</option>`
           ).join("")}
         </select>
