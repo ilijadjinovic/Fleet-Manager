@@ -12,7 +12,10 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
-import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
+import {
+  effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
+  getServiceSettings, getRegularServiceInfo, nextServiceSummary, shiftToWorkday, isWeekend
+} from "./service-status.js";
 import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
@@ -679,7 +682,29 @@ async function loadServiceTab(container, vehicle) {
       return aResolved ? (db_ - da) : (da - db_);
     });
 
+    // Informacija o sledećem redovnom servisu (uvek vidljiva, bez obzira
+    // na "odloži podsetnik" sa dashboarda).
+    let nextServiceBanner = "";
+    try {
+      const settings = await getServiceSettings(S.companyId);
+      const info = vehicle.archived ? null : getRegularServiceInfo(vehicle, services, settings);
+      if (info) {
+        if (info.hasOpen) {
+          nextServiceBanner = `<div class="next-service-banner">🔧 <strong>${t("svc_next_regular")}:</strong> ${t("svc_next_regular_booked")}</div>`;
+        } else {
+          const when = t("svc_next_regular_date", { date: formatDate(info.nextDate) });
+          const kmPart = info.nextKm != null ? " " + t("svc_next_regular_km", { km: info.nextKm.toLocaleString() }) : "";
+          nextServiceBanner = `
+            <div class="next-service-banner ${info.alarm ? "next-service-banner--alarm" : ""}">
+              ${info.alarm ? "⚠️" : "🔧"} <strong>${t("svc_next_regular")}:</strong> ${when}${kmPart}
+              <div class="next-service-banner__sub">${nextServiceSummary(info)}</div>
+            </div>`;
+        }
+      }
+    } catch (e) { /* banner je dodatak — greška ne sme da blokira tab */ }
+
     container.innerHTML = `
+      ${nextServiceBanner}
       ${canEdit ? `<div style="margin-bottom:12px"><button class="btn btn--primary btn--sm" id="btn-add-service">+ ${t("service_add")}</button></div>` : ""}
       ${services.length === 0
         ? `<div class="empty-state"><div class="empty-state__icon">🔧</div><p>${t("no_data")}</p></div>`
@@ -1321,9 +1346,21 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   `;
 
   openModal(isEdit ? `${t("edit")}: ${t("service_type_" + s.serviceType) || s.serviceType}` : t("service_add"), bodyHTML, async () => {
-    const serviceDateVal = dateOrNull("sf-date");
+    let serviceDateVal = dateOrNull("sf-date");
     if (!serviceDateVal) return;
     try {
+      // Servis se ne zakazuje vikendom (subota → petak, nedelja → ponedeljak).
+      // Ne važi za servis koji je već obavljen (unos unazad) — tu se upisuje
+      // stvarni datum.
+      let weekendShifted = false;
+      const isDoneRecord = isEdit
+        ? effectiveServiceStatus(service) === SERVICE_STATUS.DONE
+        : !!document.getElementById("sf-already-done")?.checked;
+      if (!isDoneRecord && isWeekend(serviceDateVal)) {
+        serviceDateVal = shiftToWorkday(serviceDateVal, new Date());
+        weekendShifted = true;
+      }
+
       const selectedId = document.getElementById("sf-workshop-select")?.value || "";
       let workshop = null;
       let servicerId = null;
@@ -1376,7 +1413,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
         }
       }
 
-      showToast(t("success"), "success");
+      showToast(weekendShifted ? t("svc_weekend_shifted") : t("success"), "success");
       if (options.onSaved) {
         options.onSaved();
       } else {

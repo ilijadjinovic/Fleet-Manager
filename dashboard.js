@@ -11,9 +11,12 @@ import {
 import { t, getCurrentLang } from "./i18n.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
 import { getCompanies } from "./firebase.js";
-import { isVehicleRegistered, needsTachograph, openVehicleDetail, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
+import { isVehicleRegistered, needsTachograph, openVehicleDetail, openServiceForm, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
 import { mountPendingBanner } from "./pending-requests.js";
-import { effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS } from "./service-status.js";
+import {
+  effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
+  getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText
+} from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
 
@@ -26,6 +29,7 @@ import { tripEntryCard } from "./trips.js";
 // preko selectAssignment(), tako da sav postojeći kod ispod (forme,
 // čuvanje unosa, razduženje) ostaje nepromenjen i radi nad ispravnim
 // zaduženjem.
+let dashboardVehicles = []; // vozila sa poslednjeg učitavanja (za "Zakaži sada")
 let assignmentsState = new Map(); // assignmentId -> { assignment, vehicle, trip, entries }
 let activeAssignment = null;
 let activeVehicle    = null;
@@ -264,6 +268,35 @@ async function loadDashboardData() {
         return veh?.archived !== true;
       });
 
+    // Podsetnici za redovni servis (samo administracija parka). Sledeći
+    // servis se računa iz poslednjeg završenog redovnog servisa svakog vozila.
+    dashboardVehicles = vehicles;
+    let serviceReminders = [];
+    if (role !== "driver") {
+      try {
+        const settings = await getServiceSettings(cid);
+        const regSnap = await getDocs(
+          query(collection(db, "companies", cid, "services"), where("serviceType", "==", "regular"))
+        );
+        const byVehicle = new Map();
+        regSnap.docs.forEach(d => {
+          const sv = { id: d.id, ...d.data() };
+          if (!byVehicle.has(sv.vehicleId)) byVehicle.set(sv.vehicleId, []);
+          byVehicle.get(sv.vehicleId).push(sv);
+        });
+        activeVehicles.forEach(v => {
+          const info = getRegularServiceInfo(v, byVehicle.get(v.id) || [], settings);
+          if (info && info.alarm && !info.hasOpen && !info.snoozed) {
+            serviceReminders.push({ ...info, vehicle: v });
+          }
+        });
+        // Najhitniji (najviše prekoračen / najbliži rok) prvi
+        serviceReminders.sort((a, b) => a.urgency - b.urgency);
+      } catch (e) {
+        console.error("Service reminders error:", e);
+      }
+    }
+
     const isDriver = role === "driver";
 
     // Vozač: pronađi/otvori aktivnu vožnju za SVAKO aktivno zaduženje
@@ -279,7 +312,7 @@ async function loadDashboardData() {
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrips) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount
+        total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders
       })}
     `;
 
@@ -294,7 +327,7 @@ async function loadDashboardData() {
   }
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders = [] }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // lokalna ponoć
 
@@ -370,7 +403,37 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
 
       <div class="dashboard-panel">
         <h3 class="panel-title" data-i18n="schedule_panel_title">📅 ${t("schedule_panel_title")}</h3>
-        ${!upcomingScheduled || upcomingScheduled.length === 0
+        ${serviceReminders.map(r => {
+          const v = r.vehicle;
+          const late = r.daysLeft < 0 || (r.kmLeft != null && r.kmLeft < 0);
+          const reasons = [];
+          if (r.dateAlarm) reasons.push(`📅 ${timeLeftText(r.daysLeft)}`);
+          if (r.kmAlarm)   reasons.push(`🛣️ ${kmLeftText(r.kmLeft)}`);
+          const lastKm = r.kmSinceLast != null && r.kmSinceLast >= 0
+            ? ` (${t("svc_rem_last_km", { n: r.kmSinceLast.toLocaleString() })})` : "";
+          const dueKm = r.nextKm != null ? ` / ${r.nextKm.toLocaleString()} km` : "";
+          return `
+            <div class="upcoming-item upcoming-item--${late ? "urgent" : "warning"} service-reminder" data-reminder-vehicle="${v.id}">
+              <div class="service-reminder__body">
+                <div class="upcoming-item__main">
+                  <span class="upcoming-item__name">⚠️ ${v.brand || ""} ${v.model || ""}</span>
+                  <span class="upcoming-item__plate">${v.plate || ""}</span>
+                  <span class="upcoming-item__kind">${t("svc_rem_title")}</span>
+                </div>
+                <div class="service-reminder__info">
+                  ${t("svc_rem_last", { date: formatDate(r.lastDate) })}${lastKm}<br>
+                  ${t("svc_rem_next_due", { date: formatDate(r.nextDate), km: dueKm })}<br>
+                  <strong>${reasons.join(" · ")}</strong>
+                </div>
+                <div class="service-reminder__question">${t("svc_rem_question")}</div>
+                <div class="service-reminder__actions">
+                  <button class="btn btn--primary btn--sm btn-reminder-schedule" data-vehicle="${v.id}">${t("svc_rem_schedule_now")}</button>
+                  <button class="btn btn--secondary btn--sm btn-reminder-snooze" data-vehicle="${v.id}">${t("svc_rem_snooze")}</button>
+                </div>
+              </div>
+            </div>`;
+        }).join("")}
+        ${(!upcomingScheduled || upcomingScheduled.length === 0) && serviceReminders.length > 0 ? "" : !upcomingScheduled || upcomingScheduled.length === 0
           ? `<p class="empty-text">${t("schedule_no_data")}</p>`
           : upcomingScheduled.map(s => {
               const d = s.serviceDate?.toDate ? s.serviceDate.toDate() : new Date(s.serviceDate);
@@ -1476,6 +1539,38 @@ function attachDashboardEvents() {
         });
       } else {
         navigateTo(card.dataset.nav);
+      }
+    });
+  });
+
+  // Podsetnik za redovni servis: "Zakaži sada" → forma za dodavanje servisa
+  document.querySelectorAll(".btn-reminder-schedule").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const vehicle = dashboardVehicles.find(v => v.id === btn.dataset.vehicle);
+      if (!vehicle) return;
+      await openServiceForm(vehicle, null, { serviceType: "regular" }, {
+        onSaved: () => loadDashboardData(),
+      });
+    });
+  });
+
+  // Podsetnik za redovni servis: "Podseti me kasnije" → odloži za 1 dan
+  document.querySelectorAll(".btn-reminder-snooze").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const vehicleId = btn.dataset.vehicle;
+      try {
+        const until = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
+          serviceReminderSnoozedUntil: until,
+        });
+        const v = dashboardVehicles.find(x => x.id === vehicleId);
+        if (v) v.serviceReminderSnoozedUntil = until;
+        showToast(t("svc_rem_snoozed_toast"), "success");
+        loadDashboardData();
+      } catch (err) {
+        showToast(`${t("error")}: ${err.message}`, "error");
       }
     });
   });
