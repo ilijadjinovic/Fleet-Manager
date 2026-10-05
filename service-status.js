@@ -105,6 +105,32 @@ export function normalizeServiceSettings(raw) {
   };
 }
 
+/**
+ * Podešavanja po vozilu (vehicle.serviceSettings). Svako polje je opciono:
+ * prazno/nevalidno polje se ignoriše i vozilo nasleđuje vrednost firme.
+ * @returns objekat samo sa validno popunjenim poljima ({} ako ih nema)
+ */
+export function cleanVehicleServiceOverrides(raw) {
+  const r = raw || {};
+  const out = {};
+  const num = (v, allowZero) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    if (!isFinite(n)) return null;
+    return (allowZero ? n >= 0 : n > 0) ? n : null;
+  };
+  const ik = num(r.intervalKm, false);     if (ik !== null) out.intervalKm = ik;
+  const im = num(r.intervalMonths, false); if (im !== null) out.intervalMonths = Math.round(im);
+  const ak = num(r.alarmKm, true);         if (ak !== null) out.alarmKm = ak;
+  const ad = num(r.alarmDays, true);       if (ad !== null) out.alarmDays = Math.round(ad);
+  return out;
+}
+
+/** Da li vozilo ima bar jedno sopstveno podešavanje servisnog podsetnika. */
+export function hasVehicleServiceOverrides(vehicle) {
+  return Object.keys(cleanVehicleServiceOverrides(vehicle?.serviceSettings)).length > 0;
+}
+
 /** Podešavanja servisnog podsetnika firme (sa podrazumevanim vrednostima). */
 export async function getServiceSettings(companyId) {
   try {
@@ -173,7 +199,9 @@ export function isWeekend(date) {
  *          podacima o prethodnom/sledećem servisu i flagovima alarma.
  */
 export function getRegularServiceInfo(vehicle, services, settings, now = new Date()) {
-  const cfg = normalizeServiceSettings(settings);
+  // Firmska podešavanja, preko njih sopstvena podešavanja vozila (ako postoje)
+  const vehicleOverrides = cleanVehicleServiceOverrides(vehicle?.serviceSettings);
+  const cfg = normalizeServiceSettings({ ...(settings || {}), ...vehicleOverrides });
   const regular = (services || []).filter(s => s.serviceType === "regular");
 
   const done = regular
@@ -216,6 +244,7 @@ export function getRegularServiceInfo(vehicle, services, settings, now = new Dat
     dateAlarm, kmAlarm,
     alarm: dateAlarm || kmAlarm,
     hasOpen, snoozed,
+    customSettings: Object.keys(vehicleOverrides).length > 0,
     // manji broj = hitnije (za sortiranje); km se pretvara u "dane" grubo
     // da bi se oba kriterijuma poredila (1000 km ≈ 30 dana).
     urgency: Math.min(daysLeft, kmLeft != null ? kmLeft / 1000 * 30 : Infinity),
