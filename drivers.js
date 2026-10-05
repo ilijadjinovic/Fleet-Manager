@@ -14,7 +14,7 @@ import {
   updatePassword,
   getAuth
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { t, getCurrentLang } from "./i18n.js";
+import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { usernameToEmail, getSecondaryAuth } from "./firebase.js";
 import { historyAssignmentCard, attachAssignmentHistoryEvents, loadDriverAssignmentHistory } from "./trips.js";
@@ -928,10 +928,7 @@ function assignmentItem(a) {
 
 // ── UTILS ─────────────────────────────────────────────────────
 function formatDate(val) {
-  if (!val) return "—";
-  const d = val.toDate ? val.toDate() : new Date(val);
-  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
-  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
+  return formatDateDMY(val);
 }
 
 function toJsDate(val) {

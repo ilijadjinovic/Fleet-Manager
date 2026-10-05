@@ -9,7 +9,7 @@ import {
   addDoc, updateDoc, deleteDoc, serverTimestamp,
   where
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { t, getCurrentLang } from "./i18n.js";
+import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
 import {
@@ -408,7 +408,7 @@ function vehicleRow(v) {
         <div class="vehicle-row__field ${regWarning ? "vehicle-row__field--warn" : ""}">
           <span class="vehicle-row__field-label">${t("vehicle_reg_expiry")}</span>
           <span class="vehicle-row__field-value">
-            ${regDate ? regDate.toLocaleDateString(getCurrentLang() === "en" ? "en-GB" : "sr-RS") : "—"}
+            ${regDate ? formatDateDMY(regDate) : "—"}
             ${regWarning ? ` <span class="reg-warn">(${daysToReg}d)</span>` : ""}
           </span>
         </div>
@@ -558,7 +558,7 @@ function renderTechTab(v) {
     [t("vehicle_current_km"), v.currentKm
       ? v.currentKm.toLocaleString() + " km"
         + (v.currentKmUpdatedAt
-            ? ` <span style="color:var(--color-danger,#dc2626)">${formatDate(v.currentKmUpdatedAt)}</span>`
+            ? ` <span style="color:var(--color-danger,#dc2626);font-weight:700;margin-left:16px">${formatDateDMY(v.currentKmUpdatedAt)}</span>`
             : "")
       : null],
     [t("vehicle_reg_expiry"), `${formatDate(v.regExpiry)}${regBadge(v)}`],
@@ -1682,13 +1682,10 @@ function assignmentItem(a) {
 }
 
 function formatDate(val) {
-  if (!val) return "—";
-  const d = val.toDate ? val.toDate() : new Date(val);
-  const locale = getCurrentLang() === "en" ? "en-GB" : "sr-RS";
-  return isNaN(d) ? "—" : d.toLocaleDateString(locale);
+  return formatDateDMY(val);
 }
 
-// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
+// ── DATUMI: prikaz i unos u formatu dd.mm.yyyy ──────
 // Napomena: <input type="date"> prikazuje kalendar/datum u formatu koji
 // zavisi od jezika/regije PODEŠENE U BROWSERU/OS-u korisnika (mm/dd/yyyy
 // za en-US, dd/mm/yyyy za sr-RS, itd.) — to nije nešto što aplikacija može
@@ -1702,7 +1699,7 @@ function toDMY(val) {
   if (isNaN(d)) return "";
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}/${mm}/${d.getFullYear()}`;
+  return `${dd}.${mm}.${d.getFullYear()}`;
 }
 
 function todayDMY() {
@@ -1712,14 +1709,14 @@ function todayDMY() {
 // Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
 // pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
 function datePlaceholder() {
-  return getCurrentLang() === "en" ? "dd/mm/yyyy" : "dd/mm/gggg";
+  return getCurrentLang() === "en" ? "dd.mm.yyyy" : "dd.mm.gggg";
 }
 
 // Parsira "dd/mm/yyyy" u Date objekat (lokalno vreme, ponoć). Vraća null
 // ako string nije kompletan ili predstavlja nepostojeći datum (npr. 31/02).
 function parseDMY(str) {
   if (!str) return null;
-  const m = str.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const m = str.trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})\.?$/);
   if (!m) return null;
   const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
   const d = new Date(year, month - 1, day);
@@ -1734,8 +1731,8 @@ function attachDateMask(id) {
   el.addEventListener("input", () => {
     const digits = el.value.replace(/\D/g, "").slice(0, 8);
     let out = digits;
-    if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-    else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    if (digits.length > 4) out = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+    else if (digits.length > 2) out = `${digits.slice(0, 2)}.${digits.slice(2)}`;
     el.value = out;
   });
 }
