@@ -604,6 +604,7 @@ async function saveAssignment(assignmentId, existing) {
     if (startKm && vehicle) {
       await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
         currentKm:          Number(startKm),
+        currentKmUpdatedAt: serverTimestamp(),
         assignedDriverName: `${driver?.firstName} ${driver?.lastName}`,
         updatedAt:          serverTimestamp(),
       });
@@ -762,6 +763,7 @@ async function processUnassign(assignment) {
         doc(db, "companies", S.companyId, "vehicles", assignment.vehicleId),
         {
           currentKm:          Number(endKm),
+          currentKmUpdatedAt: serverTimestamp(),
           assignedDriverName: null,
           updatedAt:          serverTimestamp(),
         }

@@ -555,7 +555,12 @@ function renderTechTab(v) {
       ? `<span class="fuel-level-text--${fuelLevelColorClass(v.fuelLevel)}">${fuelLevelLabel(v.fuelLevel)}</span>`
       : null],
     [t("vehicle_color"),      colorLabel(v.color)],
-    [t("vehicle_current_km"), v.currentKm ? v.currentKm.toLocaleString() + " km" : null],
+    [t("vehicle_current_km"), v.currentKm
+      ? v.currentKm.toLocaleString() + " km"
+        + (v.currentKmUpdatedAt
+            ? ` <span class="detail-row__hint" style="color:var(--color-text-muted,#888);font-size:.85em">(${t("vehicle_km_updated_on")} ${formatDate(v.currentKmUpdatedAt)})</span>`
+            : "")
+      : null],
     [t("vehicle_reg_expiry"), `${formatDate(v.regExpiry)}${regBadge(v)}`],
     [t("vehicle_insurance_company"), v.insuranceCompany],
     [t("vehicle_insurance_policy"),  v.insurancePolicy],
@@ -1197,6 +1202,10 @@ async function saveVehicle(vehicleId) {
       notes:            document.getElementById("f-notes")?.value.trim() || null,
     };
 
+    const prevKm = vehicleId ? (allVehicles.find(x => x.id === vehicleId)?.currentKm ?? null) : null;
+    const kmChanged = data.currentKm != null && data.currentKm !== prevKm;
+    if (kmChanged) data.currentKmUpdatedAt = serverTimestamp();
+
     if (vehicleId) {
       await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
         ...data, updatedAt: serverTimestamp()
@@ -1413,6 +1422,19 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
         }
       }
 
+      // Km uneta uz servis (km pri servisu ili km po završetku) postaje
+      // trenutna kilometraža vozila ako je veća od postojeće; pamti se i datum unosa.
+      const svcKm = Math.max(data.km || 0, data.endKm || 0);
+      if (svcKm > (Number(vehicle.currentKm) || 0)) {
+        await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), {
+          currentKm: svcKm,
+          currentKmUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        vehicle.currentKm = svcKm;
+        vehicle.currentKmUpdatedAt = new Date();
+      }
+
       showToast(weekendShifted ? t("svc_weekend_shifted") : t("success"), "success");
       if (options.onSaved) {
         options.onSaved();
@@ -1491,11 +1513,17 @@ function openCompleteServiceModal(vehicle, service) {
         status: service.previousVehicleStatus || "active",
         updatedAt: serverTimestamp(),
       };
-      if (endKm && endKm > (vehicle.currentKm || 0)) vehicleUpdate.currentKm = endKm;
+      if (endKm && endKm > (vehicle.currentKm || 0)) {
+        vehicleUpdate.currentKm = endKm;
+        vehicleUpdate.currentKmUpdatedAt = serverTimestamp();
+      }
       await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicle.id), vehicleUpdate);
 
       vehicle.status = vehicleUpdate.status;
-      if (vehicleUpdate.currentKm) vehicle.currentKm = vehicleUpdate.currentKm;
+      if (vehicleUpdate.currentKm) {
+        vehicle.currentKm = vehicleUpdate.currentKm;
+        vehicle.currentKmUpdatedAt = new Date();
+      }
       refreshVehicleHeaderBadge(vehicle);
       showToast(t("success"), "success");
       const content = document.getElementById("vehicle-tab-content");

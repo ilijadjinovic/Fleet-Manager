@@ -74,7 +74,7 @@ service cloud.firestore {
         // assignedDriverName pri sopstvenom razduženju (samo na null)
         allow update: if isDriver(companyId)
           && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['currentKm', 'updatedAt', 'assignedDriverName'])
+              .hasOnly(['currentKm', 'currentKmUpdatedAt', 'updatedAt', 'assignedDriverName'])
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['assignedDriverName'])
               || request.resource.data.assignedDriverName == null);
       }

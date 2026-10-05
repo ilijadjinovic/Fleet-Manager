@@ -571,6 +571,7 @@ async function saveIncident() {
     if (vehicleId) {
       await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
         currentKm: currentKm,
+        currentKmUpdatedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     }

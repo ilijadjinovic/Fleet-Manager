@@ -145,6 +145,7 @@
   "about_role": "Designed and developed by",
   "vehicle_status_inactive": "Inactive",
   "vehicle_current_km": "Current mileage",
+  "vehicle_km_updated_on": "entered on",
   "vehicle_reg_expiry": "Registration expiry",
   "vehicle_insurance_company": "Insurance company",
   "vehicle_insurance_policy": "Policy number",

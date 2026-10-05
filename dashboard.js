@@ -776,6 +776,7 @@ function validateKmInput(rawValue, errorElId) {
 async function bumpVehicleKm(newKm, fuelLevel = null) {
   const update = {
     currentKm: newKm,
+    currentKmUpdatedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
   if (fuelLevel) update.fuelLevel = fuelLevel;
@@ -1395,6 +1396,7 @@ async function processDriverUnassign() {
 
     const vehicleUpdate = {
       currentKm:          endKm,
+      currentKmUpdatedAt: serverTimestamp(),
       assignedDriverName: null,
       updatedAt:          serverTimestamp(),
     };
