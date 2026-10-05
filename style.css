@@ -2434,5 +2434,3 @@ tbody td {
   background: var(--color-warning-bg-faint);
 }
 .next-service-banner__sub { font-size: 13px; opacity: 0.85; margin-top: 2px; }
-.next-service-banner__custom { font-size: 12px; opacity: 0.75; margin-top: 2px; }
-.service-reminder__custom { font-size: 11px; opacity: 0.8; margin-left: 6px; white-space: nowrap; }

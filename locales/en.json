@@ -668,18 +668,12 @@
   "svc_next_regular_booked": "A regular service is already scheduled",
   "svc_weekend_shifted": "Date moved to a working day — services are not scheduled on weekends",
   "svc_settings_section": "Service reminder (regular service)",
-  "svc_settings_hint": "A regular service is due when either interval is reached — whichever comes first. The alarm appears on the dashboard as the due point approaches. These are the defaults for all vehicles — an individual vehicle can be set separately when editing the vehicle.",
+  "svc_settings_hint": "A regular service is due when either interval is reached — whichever comes first. The alarm appears on the dashboard as the due point approaches.",
   "svc_settings_interval_km": "Regular service every (km)",
   "svc_settings_interval_months": "Regular service every (months)",
   "svc_settings_alarm_km": "Alarm starts in advance (km)",
   "svc_settings_alarm_days": "Alarm starts in advance (days)",
   "svc_settings_save": "Save settings",
   "svc_settings_saved": "Service reminder settings saved",
-  "svc_settings_invalid": "Enter valid values (intervals must be greater than 0)",
-  "svc_vehicle_section": "Service reminder for this vehicle",
-  "svc_vehicle_hint": "Leave empty to use the company defaults (Profile). Fill in only what should differ for this vehicle.",
-  "svc_vehicle_default_ph": "Default: {{n}}",
-  "svc_vehicle_invalid": "Enter a valid value or leave empty",
-  "svc_custom_badge": "Custom settings for this vehicle",
-  "svc_custom_badge_short": "custom"
+  "svc_settings_invalid": "Enter valid values (intervals must be greater than 0)"
 }
