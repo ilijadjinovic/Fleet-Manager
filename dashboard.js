@@ -1485,7 +1485,7 @@ function showEntryError(id, msg) {
   if (el) { el.textContent = msg; el.classList.remove("hidden"); }
 }
 
-// ── DATUMI: prikaz i unos u formatu dd.mm.yyyy ──────
+// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
 // <input type="date"> prikazuje kalendar u formatu koji zavisi od
 // jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
 // pa koristimo tekstualno polje sa maskom umesto toga.

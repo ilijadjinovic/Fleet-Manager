@@ -1123,7 +1123,7 @@ function datePlaceholder() {
   return getCurrentLang() === "en" ? "dd.mm.yyyy" : "dd.mm.gggg";
 }
 
-// ── DATUMI: prikaz i unos u formatu dd.mm.yyyy ──────
+// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
 // <input type="date"> prikazuje kalendar u formatu koji zavisi od
 // jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
 // pa koristimo tekstualno polje sa maskom umesto toga.

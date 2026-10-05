@@ -558,7 +558,7 @@ function renderTechTab(v) {
     [t("vehicle_current_km"), v.currentKm
       ? v.currentKm.toLocaleString() + " km"
         + (v.currentKmUpdatedAt
-            ? ` <span style="color:var(--color-danger,#dc2626);font-weight:700;margin-left:16px">${formatDateDMY(v.currentKmUpdatedAt)}</span>`
+            ? ` <span style="color:var(--color-danger,#dc2626);font-weight:700;margin-left:16px">${formatDate(v.currentKmUpdatedAt)}</span>`
             : "")
       : null],
     [t("vehicle_reg_expiry"), `${formatDate(v.regExpiry)}${regBadge(v)}`],
@@ -1685,7 +1685,7 @@ function formatDate(val) {
   return formatDateDMY(val);
 }
 
-// ── DATUMI: prikaz i unos u formatu dd.mm.yyyy ──────
+// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
 // Napomena: <input type="date"> prikazuje kalendar/datum u formatu koji
 // zavisi od jezika/regije PODEŠENE U BROWSERU/OS-u korisnika (mm/dd/yyyy
 // za en-US, dd/mm/yyyy za sr-RS, itd.) — to nije nešto što aplikacija može

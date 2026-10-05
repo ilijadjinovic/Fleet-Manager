@@ -54,17 +54,17 @@ export function getCurrentLang() {
 export { SUPPORTED_LANGS };
 
 
-/** Datum u formatu dd.mm.yyyy. (npr. 05.10.2026.) — jedinstven prikaz u celoj aplikaciji */
+/** Datum u formatu dd.mm.yyyy (npr. 05.10.2026) — jedinstven prikaz u celoj aplikaciji */
 export function formatDateDMY(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val));
   if (isNaN(d)) return "—";
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}.${mm}.${d.getFullYear()}.`;
+  return `${dd}.${mm}.${d.getFullYear()}`;
 }
 
-/** Datum i vreme: dd.mm.yyyy. HH:MM */
+/** Datum i vreme: dd.mm.yyyy HH:MM */
 export function formatDateTimeDMY(val) {
   if (!val) return "—";
   const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val));
