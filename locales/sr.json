@@ -668,12 +668,18 @@
   "svc_next_regular_booked": "Redovni servis je već zakazan",
   "svc_weekend_shifted": "Datum pomeren na radni dan — servis se ne zakazuje vikendom",
   "svc_settings_section": "Servisni podsetnik (redovni servis)",
-  "svc_settings_hint": "Redovni servis je na redu nakon isteka oba intervala — šta pre nastupi. Alarm se pojavljuje na dashboardu kad se približi rok.",
+  "svc_settings_hint": "Redovni servis je na redu nakon isteka oba intervala — šta pre nastupi. Alarm se pojavljuje na dashboardu kad se približi rok. Ovo su podrazumevane vrednosti za sva vozila — za pojedino vozilo mogu se podesiti posebno u izmeni vozila.",
   "svc_settings_interval_km": "Redovni servis na svakih (km)",
   "svc_settings_interval_months": "Redovni servis na svakih (meseci)",
   "svc_settings_alarm_km": "Alarm počinje unapred (km)",
   "svc_settings_alarm_days": "Alarm počinje unapred (dana)",
   "svc_settings_save": "Sačuvaj podešavanja",
   "svc_settings_saved": "Podešavanja servisnog podsetnika su sačuvana",
-  "svc_settings_invalid": "Unesite ispravne vrednosti (interval mora biti veći od 0)"
+  "svc_settings_invalid": "Unesite ispravne vrednosti (interval mora biti veći od 0)",
+  "svc_vehicle_section": "Servisni podsetnik za ovo vozilo",
+  "svc_vehicle_hint": "Ostavite prazno da vozilo koristi podrazumevana podešavanja firme (Profil). Popunite samo ono što za ovo vozilo treba da se razlikuje.",
+  "svc_vehicle_default_ph": "Podrazumevano: {{n}}",
+  "svc_vehicle_invalid": "Unesite ispravnu vrednost ili ostavite prazno",
+  "svc_custom_badge": "Prilagođena podešavanja za ovo vozilo",
+  "svc_custom_badge_short": "prilagođeno"
 }
