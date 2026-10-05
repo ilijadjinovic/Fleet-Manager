@@ -558,7 +558,7 @@ function renderTechTab(v) {
     [t("vehicle_current_km"), v.currentKm
       ? v.currentKm.toLocaleString() + " km"
         + (v.currentKmUpdatedAt
-            ? ` <span class="detail-row__hint" style="color:var(--color-text-muted,#888);font-size:.85em">(${t("vehicle_km_updated_on")} ${formatDate(v.currentKmUpdatedAt)})</span>`
+            ? ` <span style="color:var(--color-danger,#dc2626)">${formatDate(v.currentKmUpdatedAt)}</span>`
             : "")
       : null],
     [t("vehicle_reg_expiry"), `${formatDate(v.regExpiry)}${regBadge(v)}`],
