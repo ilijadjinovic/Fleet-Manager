@@ -14,7 +14,8 @@ import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
 import {
   effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
-  getServiceSettings, getRegularServiceInfo, nextServiceSummary, shiftToWorkday, isWeekend
+  getServiceSettings, getRegularServiceInfo, nextServiceSummary, shiftToWorkday, isWeekend,
+  cleanVehicleServiceOverrides
 } from "./service-status.js";
 import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
 
@@ -703,6 +704,7 @@ async function loadServiceTab(container, vehicle) {
             <div class="next-service-banner ${info.alarm ? "next-service-banner--alarm" : ""}">
               ${info.alarm ? "⚠️" : "🔧"} <strong>${t("svc_next_regular")}:</strong> ${when}${kmPart}
               <div class="next-service-banner__sub">${nextServiceSummary(info)}</div>
+              ${info.customSettings ? `<div class="next-service-banner__custom">⚙️ ${t("svc_custom_badge")}</div>` : ""}
             </div>`;
         }
       }
@@ -825,9 +827,12 @@ async function loadAssignmentsTab(container, vehicle) {
 }
 
 // ── FORMA ZA DODAVANJE / EDITOVANJE ──────────────────────────
-function openVehicleForm(vehicle = null) {
+async function openVehicleForm(vehicle = null) {
   const isEdit = !!vehicle;
   const v = vehicle || {};
+  // Firmska podrazumevana podešavanja servisnog podsetnika (prikazuju se kao placeholder)
+  const svcDefaults = await getServiceSettings(S.companyId);
+  const svcOv = cleanVehicleServiceOverrides(v.serviceSettings);
 
   const bodyHTML = `
     <div class="form-section-title">${t("vehicle_tab_tech")}</div>
@@ -1051,6 +1056,32 @@ function openVehicleForm(vehicle = null) {
       <label class="form-label">${t("vehicle_purchase_value")}</label>
       <input id="f-purchaseValue" class="form-input" type="number" value="${v.purchaseValue || ""}" />
     </div>
+    <div class="form-section-title">🔧 ${t("svc_vehicle_section")}</div>
+    <p class="form-hint">${t("svc_vehicle_hint")}</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">${t("svc_settings_interval_km")}</label>
+        <input id="f-svc-intervalKm" class="form-input" type="number" min="1"
+          value="${svcOv.intervalKm ?? ""}" placeholder="${t("svc_vehicle_default_ph", { n: svcDefaults.intervalKm.toLocaleString() })}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("svc_settings_interval_months")}</label>
+        <input id="f-svc-intervalMonths" class="form-input" type="number" min="1" step="1"
+          value="${svcOv.intervalMonths ?? ""}" placeholder="${t("svc_vehicle_default_ph", { n: svcDefaults.intervalMonths })}" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">${t("svc_settings_alarm_km")}</label>
+        <input id="f-svc-alarmKm" class="form-input" type="number" min="0"
+          value="${svcOv.alarmKm ?? ""}" placeholder="${t("svc_vehicle_default_ph", { n: svcDefaults.alarmKm.toLocaleString() })}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("svc_settings_alarm_days")}</label>
+        <input id="f-svc-alarmDays" class="form-input" type="number" min="0" step="1"
+          value="${svcOv.alarmDays ?? ""}" placeholder="${t("svc_vehicle_default_ph", { n: svcDefaults.alarmDays })}" />
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">${t("notes")}</label>
       <textarea id="f-notes" class="form-textarea">${v.notes || ""}</textarea>
@@ -1139,6 +1170,28 @@ async function saveVehicle(vehicleId) {
   if (!model) { fieldError("f-model", t("vehicle_model_required")); valid = false; }
   if (!plate) { fieldError("f-plate", t("vehicle_plate_required")); valid = false; }
   if (vin && vin.length > 17) { fieldError("f-vin", t("vehicle_vin_max_error")); valid = false; }
+
+  // Sopstvena podešavanja servisnog podsetnika (prazno = nasleđuje firmska)
+  const svcRaw = {
+    intervalKm:     document.getElementById("f-svc-intervalKm")?.value.trim(),
+    intervalMonths: document.getElementById("f-svc-intervalMonths")?.value.trim(),
+    alarmKm:        document.getElementById("f-svc-alarmKm")?.value.trim(),
+    alarmDays:      document.getElementById("f-svc-alarmDays")?.value.trim(),
+  };
+  const svcRules = {
+    intervalKm:     { min: 1, int: false },
+    intervalMonths: { min: 1, int: true },
+    alarmKm:        { min: 0, int: false },
+    alarmDays:      { min: 0, int: true },
+  };
+  Object.keys(svcRules).forEach(k => {
+    if (svcRaw[k] === "" || svcRaw[k] == null) return;
+    const n = Number(svcRaw[k]);
+    if (!isFinite(n) || n < svcRules[k].min || (svcRules[k].int && !Number.isInteger(n))) {
+      fieldError("f-svc-" + k, t("svc_vehicle_invalid"));
+      valid = false;
+    }
+  });
   if (!valid) throw new Error("validation");
 
   try {
@@ -1199,6 +1252,10 @@ async function saveVehicle(vehicleId) {
       purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
       purchaseValue:    numOrNull("f-purchaseValue"),
       ownerName:        document.getElementById("f-ownerName")?.value.trim() || null,
+      serviceSettings:  (() => {
+        const ov = cleanVehicleServiceOverrides(svcRaw);
+        return Object.keys(ov).length ? ov : null;
+      })(),
       notes:            document.getElementById("f-notes")?.value.trim() || null,
     };
 

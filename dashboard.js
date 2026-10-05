@@ -419,6 +419,7 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
                   <span class="upcoming-item__name">⚠️ ${v.brand || ""} ${v.model || ""}</span>
                   <span class="upcoming-item__plate">${v.plate || ""}</span>
                   <span class="upcoming-item__kind">${t("svc_rem_title")}</span>
+                  ${r.customSettings ? `<span class="service-reminder__custom" title="${t("svc_custom_badge")}">⚙️ ${t("svc_custom_badge_short")}</span>` : ""}
                 </div>
                 <div class="service-reminder__info">
                   ${t("svc_rem_last", { date: formatDate(r.lastDate) })}${lastKm}<br>
