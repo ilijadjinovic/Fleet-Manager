@@ -69,6 +69,7 @@
   --font-mono: 'Consolas', 'Courier New', monospace;
 
   --nav-height: 64px;
+  --sidebar-width: 76px;
   --header-height: 56px;
   --content-max: 900px;
 }
@@ -165,6 +166,14 @@ body {
   flex-direction: column;
   min-height: 100dvh;
 }
+.app:has(> #main-nav) {
+  padding-left: var(--sidebar-width); /* mesto za levi vertikalni meni (ne važi za ekrane registracije/blokade) */
+}
+
+/* Header ide preko cele širine, iznad levog menija */
+.app-header {
+  margin-left: calc(-1 * var(--sidebar-width));
+}
 
 .app-header {
   position: sticky;
@@ -228,32 +237,34 @@ body {
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 16px calc(var(--nav-height) + 20px);
+  padding: 20px 16px 24px;
   max-width: var(--content-max);
   margin: 0 auto;
   width: 100%;
 }
 
-/* ── BOTTOM NAV ─────────────────────────────────────────── */
+/* ── LEFT SIDEBAR NAV ───────────────────────────────────── */
 .main-nav {
   position: fixed;
+  top: var(--header-height);
   bottom: 0;
   left: 0;
-  right: 0;
+  width: var(--sidebar-width);
   z-index: 100;
-  height: var(--nav-height);
   background: var(--color-nav-bg);
-  border-top: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  overflow-x: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
 }
 .main-nav::-webkit-scrollbar { display: none; }
 
 .nav-btn {
-  flex: 1;
-  min-width: 56px;
+  flex: 0 0 auto;
+  min-height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -264,7 +275,7 @@ body {
   color: var(--color-text-muted);
   cursor: pointer;
   transition: all 0.15s;
-  padding: 8px 4px;
+  padding: 10px 4px;
   position: relative;
 }
 
@@ -272,20 +283,133 @@ body {
 
 .nav-btn--active {
   color: var(--color-primary);
+  background: rgba(255,255,255,0.04);
 }
 .nav-btn--active::after {
   content: "";
   position: absolute;
-  top: 0;
-  left: 20%;
-  right: 20%;
-  height: 2px;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
   background: var(--color-primary);
-  border-radius: 0 0 2px 2px;
+  border-radius: 0 2px 2px 0;
 }
 
-.nav-btn__icon { font-size: 20px; line-height: 1; }
-.nav-btn__label { font-size: 10px; font-weight: 500; white-space: nowrap; }
+/* "O aplikaciji" — uvek na dnu menija */
+.nav-btn--about {
+  margin-top: auto;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Uloga prijavljenog korisnika u zaglavlju */
+.header-role {
+  display: inline-block;
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--color-border);
+}
+.header-role.hidden { display: none; }
+@media (max-width: 360px) {
+  .app-header__name { display: none; }
+}
+
+.about-card.about-card--modal { margin-top: 0; padding: 0; border: none; background: none; box-shadow: none; }
+
+.nav-btn__icon { font-size: 22px; line-height: 1; }
+.nav-btn__label {
+  font-size: 10px;
+  font-weight: 500;
+  max-width: 100%;
+  padding: 0 2px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hamburger dugme — vidljivo samo na telefonima */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+}
+.nav-toggle:hover { background: rgba(255,255,255,0.06); }
+.nav-toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--color-text);
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+body.nav-open .nav-toggle span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+body.nav-open .nav-toggle span:nth-child(2) { opacity: 0; }
+body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+.nav-overlay { display: none; }
+
+/* ── TELEFONI: meni je skriven i izlazi preko sadržaja ───── */
+@media (max-width: 768px) {
+  :root { --sidebar-width: 0px; }
+
+  .nav-toggle { display: flex; }
+
+  .main-nav {
+    width: 240px;
+    max-width: 80vw;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+    z-index: 110;
+  }
+  body.nav-open .main-nav {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* U izvučenom meniju stavke idu horizontalno: ikona + naziv */
+  .nav-btn {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 14px;
+    min-height: 52px;
+    padding: 0 20px;
+  }
+  .nav-btn__label { font-size: 15px; font-weight: 500; max-width: none; padding: 0; text-align: left; }
+
+  .nav-overlay {
+    display: block;
+    position: fixed;
+    top: var(--header-height);
+    left: 0; right: 0; bottom: 0;
+    z-index: 105;
+    background: rgba(0,0,0,0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  body.nav-open .nav-overlay { opacity: 1; pointer-events: auto; }
+  body.nav-open { overflow: hidden; }
+}
 
 /* ── BUTTONS ────────────────────────────────────────────── */
 .btn {
@@ -836,8 +960,8 @@ tbody td {
 /* ── TOAST ──────────────────────────────────────────────── */
 .toast {
   position: fixed;
-  bottom: calc(var(--nav-height) + 12px);
-  left: 50%;
+  bottom: 20px;
+  left: calc(50% + var(--sidebar-width) / 2);
   transform: translateX(-50%) translateY(8px);
   background: var(--color-surface-3);
   border: 1px solid var(--color-border);
@@ -851,7 +975,7 @@ tbody td {
   opacity: 0;
   transition: all 0.25s ease;
   white-space: nowrap;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - var(--sidebar-width) - 32px);
   text-align: center;
 }
 .toast--visible { opacity: 1; transform: translateX(-50%) translateY(0); }
