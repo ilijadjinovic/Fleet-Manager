@@ -6,7 +6,7 @@
 import { db } from "./firebase.js";
 import {
   collection, query, where, getDocs, orderBy,
-  doc, addDoc, updateDoc, serverTimestamp
+  doc, getDoc, addDoc, updateDoc, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
@@ -19,6 +19,7 @@ import {
 } from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
+import { openFiscalScanner } from "./fiscal-qr.js";
 
 // ── STANJE MODULA: aktivno zaduženje trenutnog vozača ─────────
 // Vozač može imati VIŠE aktivnih zaduženja istovremeno (npr. dva
@@ -1125,19 +1126,91 @@ async function saveNewTrip() {
 }
 
 // ── FORMA ZA TOČENJE GORIVA ───────────────────────────────────
-function openFuelForm() {
+
+// Vrsta goriva iz podataka o vozilu: podrazumevana vrednost + dozvoljene
+// vrednosti (bez upozorenja). Hibridi: benzin/dizel prate motor, a za
+// TNG-CNG hibrid početna vrednost je TNG (češće), CNG je takođe dozvoljen.
+function fuelDefaultsForVehicle(vehicleFuelType) {
+  switch (vehicleFuelType) {
+    case "petrol": case "hybrid_petrol": return { def: "petrol",   allowed: ["petrol"] };
+    case "diesel": case "hybrid_diesel": return { def: "diesel",   allowed: ["diesel"] };
+    case "lpg":                          return { def: "lpg",      allowed: ["lpg"] };
+    case "cng":                          return { def: "cng",      allowed: ["cng"] };
+    case "electric":                     return { def: "electric", allowed: ["electric"] };
+    case "hybrid_tng_cng":               return { def: "lpg",      allowed: ["lpg", "cng"] };
+    default:                             return { def: "diesel",   allowed: null }; // nepoznato → bez upozorenja
+  }
+}
+
+// Pumpe po ugovoru iz podešavanja kompanije; podrazumevana ide prva.
+async function loadCompanyFuelStations() {
+  try {
+    const snap = await getDoc(doc(db, "companies", S.companyId));
+    const raw = snap.data()?.fuelStations;
+    if (!Array.isArray(raw)) return [];
+    const list = raw
+      .map(s => (typeof s === "string" ? { name: s, isDefault: false } : s))
+      .filter(s => s && typeof s.name === "string" && s.name.trim());
+    return [...list.filter(s => s.isDefault), ...list.filter(s => !s.isDefault)];
+  } catch {
+    return [];
+  }
+}
+
+// Da li je račun (po broju) već unet — vraća postojeći unos ili null.
+async function findDuplicateReceipt(receiptNo) {
+  try {
+    const snap = await getDocs(query(
+      collection(db, "companies", S.companyId, "tripEntries"),
+      where("receiptNo", "==", receiptNo),
+      limit(1)
+    ));
+    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+  } catch (e) {
+    console.error("Duplicate receipt check failed:", e);
+    return null; // ako provera ne uspe, ne blokiramo unos
+  }
+}
+
+const fmtRsd = (n) => Number(n).toLocaleString("sr-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Stanje otvorene forme (skeniran račun, pumpe)
+let fuelFormScan = null;
+let fuelFormStations = [];
+
+async function openFuelForm() {
+  fuelFormScan = null;
+  fuelFormStations = await loadCompanyFuelStations();
+  const stations = fuelFormStations;
+
+  const { def: defaultFuel, allowed: allowedFuels } = fuelDefaultsForVehicle(activeVehicle?.fuelType);
+  const fuelOptions = ["diesel", "petrol", "lpg", "cng", "electric"]
+    .map(ft => `<option value="${ft}" ${ft === defaultFuel ? "selected" : ""}>${t("fuel_" + ft)}</option>`)
+    .join("");
+
+  const stationFieldHTML = stations.length
+    ? `
+      <select id="tf-fuelStationSelect" class="form-select">
+        ${stations.map(s => `<option value="${escapeAttr(s.name)}">${escapeHtml(s.name)}</option>`).join("")}
+        <option value="__other__">${t("trip_fuel_station_other")}</option>
+      </select>
+      <input id="tf-fuelStation" class="form-input hidden" type="text" style="margin-top:8px"
+        placeholder="${t("trip_fuel_station_other_ph")}" />`
+    : `<input id="tf-fuelStation" class="form-input" type="text" placeholder="npr. NIS Petrol" />`;
+
   const bodyHTML = `
     <div class="form-section-title">${t("trip_fuel_header")}</div>
+
+    <div class="fuel-scan">
+      <button type="button" class="btn btn--secondary btn--sm" id="tf-scan-btn">📷 ${t("qr_scan_btn")}</button>
+      <div id="tf-scan-result" class="fuel-scan__result hidden"></div>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_type")} *</label>
-        <select id="tf-fuelType" class="form-select">
-          <option value="diesel">${t("fuel_diesel")}</option>
-          <option value="petrol">${t("fuel_petrol")}</option>
-          <option value="lpg">${t("fuel_lpg")}</option>
-          <option value="cng">${t("fuel_cng")}</option>
-          <option value="electric">${t("fuel_electric")}</option>
-        </select>
+        <select id="tf-fuelType" class="form-select">${fuelOptions}</select>
+        <p id="tf-fuelType-warn" class="form-warning hidden"></p>
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_amount")} (L) *</label>
@@ -1147,7 +1220,7 @@ function openFuelForm() {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_price")} (RSD) *</label>
-        <input id="tf-fuelCost" class="form-input" type="number" min="0" />
+        <input id="tf-fuelCost" class="form-input" type="number" min="0" step="0.01" />
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_price_per_l")}</label>
@@ -1157,8 +1230,10 @@ function openFuelForm() {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">${t("trip_fuel_station")} *</label>
-        <input id="tf-fuelStation" class="form-input" type="text" placeholder="npr. NIS Petrol" />
+        <label class="form-label">${t("trip_fuel_station")} *
+          <span id="tf-station-badge" class="badge badge--inline hidden"></span>
+        </label>
+        ${stationFieldHTML}
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_receipt")}</label>
@@ -1180,32 +1255,165 @@ function openFuelForm() {
 
   openModal(t("trip_with_fueling"), bodyHTML, () => saveFuelEntry());
 
-  // Auto-izračun cene po litru
-  const calcPrice = () => {
-    const amount = parseFloat(document.getElementById("tf-fuelAmount")?.value);
-    const cost   = parseFloat(document.getElementById("tf-fuelCost")?.value);
-    if (amount > 0 && cost > 0) {
-      document.getElementById("tf-pricePerL").value = (cost / amount).toFixed(2);
+  const $ = (id) => document.getElementById(id);
+
+  // ── Upozorenje ako vrsta goriva ne odgovara vozilu ──
+  const fuelTypeSel = $("tf-fuelType");
+  const updateFuelWarn = () => {
+    const warn = $("tf-fuelType-warn");
+    if (!warn) return;
+    const mismatch = allowedFuels && !allowedFuels.includes(fuelTypeSel.value);
+    warn.classList.toggle("hidden", !mismatch);
+    if (mismatch) {
+      warn.textContent = t("trip_fuel_type_warn", {
+        vehicle: activeVehicle?.fuelType ? t("fuel_" + activeVehicle.fuelType) : "—",
+        selected: t("fuel_" + fuelTypeSel.value),
+      });
     }
   };
-  setTimeout(() => {
-    document.getElementById("tf-fuelAmount")?.addEventListener("input", calcPrice);
-    document.getElementById("tf-fuelCost")?.addEventListener("input", calcPrice);
-  }, 100);
+  fuelTypeSel?.addEventListener("change", updateFuelWarn);
+
+  // ── Pumpa: izbor + bedž "Ugovorena" / "Van ugovora" ──
+  const stationSel   = $("tf-fuelStationSelect");
+  const stationInput = $("tf-fuelStation");
+  const updateStationBadge = () => {
+    const badge = $("tf-station-badge");
+    if (!badge || !stations.length) return;
+    const contracted = isStationContracted();
+    badge.classList.remove("hidden", "badge--active", "badge--service");
+    if (stationSel.value === "__other__" && !stationInput.value.trim()) {
+      badge.classList.add("hidden");
+      return;
+    }
+    badge.classList.add(contracted ? "badge--active" : "badge--service");
+    badge.textContent = contracted ? t("trip_fuel_station_contracted") : t("trip_fuel_station_off_contract");
+  };
+  stationSel?.addEventListener("change", () => {
+    const other = stationSel.value === "__other__";
+    stationInput.classList.toggle("hidden", !other);
+    if (other) stationInput.focus();
+    updateStationBadge();
+  });
+  stationInput?.addEventListener("input", updateStationBadge);
+  updateStationBadge();
+
+  // ── Cena po litru ↔ količina ──
+  const amountEl = $("tf-fuelAmount");
+  const costEl   = $("tf-fuelCost");
+  const priceEl  = $("tf-pricePerL");
+  const calcPrice = () => {
+    const amount = parseFloat(amountEl.value);
+    const cost   = parseFloat(costEl.value);
+    if (amount > 0 && cost > 0) priceEl.value = (cost / amount).toFixed(2);
+  };
+  amountEl.addEventListener("input", calcPrice);
+  costEl.addEventListener("input", calcPrice);
+  // Posle skeniranja računa količina se računa iz unete cene po litru
+  priceEl.addEventListener("input", () => {
+    if (!fuelFormScan) return;
+    const price = parseFloat(priceEl.value);
+    const cost  = parseFloat(costEl.value);
+    amountEl.value = (price > 0 && cost > 0) ? (cost / price).toFixed(2) : "";
+  });
+
+  // ── QR skeniranje ──
+  const resultEl = $("tf-scan-result");
+  const clearScan = () => {
+    fuelFormScan = null;
+    resultEl.classList.add("hidden");
+    resultEl.innerHTML = "";
+    costEl.readOnly = false;
+    $("tf-receiptNo").readOnly = false;
+    priceEl.readOnly = true;
+    priceEl.placeholder = t("trip_fuel_price_per_l_ph");
+    $("tf-scan-btn").classList.remove("hidden");
+  };
+  const applyScan = async (d) => {
+    $("fuel-form-error")?.classList.add("hidden");
+    const dup = await findDuplicateReceipt(d.invoiceNo);
+    if (dup) {
+      showEntryError("fuel-form-error", t("qr_duplicate", {
+        no: d.invoiceNo,
+        plate: dup.vehiclePlate || "—",
+        date: formatDateTimeDMY(dup.createdAt),
+      }));
+      return;
+    }
+    fuelFormScan = d;
+    costEl.value = d.totalAmount;
+    costEl.readOnly = true;
+    $("tf-receiptNo").value = d.invoiceNo;
+    $("tf-receiptNo").readOnly = true;
+    amountEl.value = "";
+    priceEl.value = "";
+    priceEl.readOnly = false;
+    priceEl.placeholder = t("qr_price_prompt");
+    resultEl.innerHTML = `
+      <div>✅ ${t("qr_scanned_ok")}</div>
+      <div class="fuel-scan__meta">${escapeHtml(d.invoiceNo)} · ${fmtRsd(d.totalAmount)} RSD · ${formatDateTimeDMY(d.dateTime)}</div>
+      <div class="fuel-scan__meta">${t("qr_price_prompt_long")}</div>
+      <button type="button" class="btn btn--secondary btn--sm" id="tf-scan-clear">✕ ${t("qr_scan_clear")}</button>`;
+    resultEl.classList.remove("hidden");
+    $("tf-scan-clear").onclick = clearScan;
+    $("tf-scan-btn").classList.add("hidden");
+    priceEl.focus();
+  };
+  $("tf-scan-btn").addEventListener("click", () => {
+    openFiscalScanner(applyScan);
+  });
 }
+
+// Da li izabrana/uneta pumpa postoji u listi pumpi po ugovoru
+function isStationContracted() {
+  const sel = document.getElementById("tf-fuelStationSelect");
+  if (!fuelFormStations.length || !sel) return null;
+  if (sel.value !== "__other__") return true;
+  const typed = document.getElementById("tf-fuelStation")?.value.trim().toLowerCase();
+  return fuelFormStations.some(s => s.name.trim().toLowerCase() === typed);
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+const escapeAttr = escapeHtml;
 
 async function saveFuelEntry() {
   const fuelAmount  = parseFloat(document.getElementById("tf-fuelAmount")?.value);
   const fuelCost    = parseFloat(document.getElementById("tf-fuelCost")?.value);
-  const fuelStation = document.getElementById("tf-fuelStation")?.value.trim();
+  const stationSel  = document.getElementById("tf-fuelStationSelect");
+  const fuelStation = (stationSel && stationSel.value !== "__other__")
+    ? stationSel.value
+    : document.getElementById("tf-fuelStation")?.value.trim();
 
+  if (fuelFormScan && !fuelAmount) {
+    showEntryError("fuel-form-error", t("qr_price_required"));
+    return false;
+  }
   if (!fuelAmount || !fuelCost || !fuelStation) {
     showEntryError("fuel-form-error", t("required_field"));
-    return;
+    return false;
   }
 
   const currentKm = validateKmInput(document.getElementById("tf-currentKm")?.value, "fuel-form-error");
-  if (currentKm === null) return;
+  if (currentKm === null) return false;
+
+  const receiptNo = document.getElementById("tf-receiptNo")?.value.trim() || null;
+
+  // Zaštita od duplog unosa istog fiskalnog računa (ponovo, neposredno pre upisa)
+  if (fuelFormScan) {
+    const dup = await findDuplicateReceipt(fuelFormScan.invoiceNo);
+    if (dup) {
+      showEntryError("fuel-form-error", t("qr_duplicate", {
+        no: fuelFormScan.invoiceNo,
+        plate: dup.vehiclePlate || "—",
+        date: formatDateTimeDMY(dup.createdAt),
+      }));
+      return false;
+    }
+  }
+
+  const fuelType = document.getElementById("tf-fuelType")?.value;
+  const { allowed } = fuelDefaultsForVehicle(activeVehicle?.fuelType);
 
   try {
     await addDoc(collection(db, "companies", S.companyId, "tripEntries"), {
@@ -1217,12 +1425,17 @@ async function saveFuelEntry() {
       driverId:     S.profile?.driverId || null,
       driverUid:    S.user.uid,
       driverName:   activeAssignment.driverName,
-      fuelType:     document.getElementById("tf-fuelType")?.value,
+      fuelType,
+      vehicleFuelType: activeVehicle?.fuelType || null,
+      fuelTypeOverride: !!(allowed && !allowed.includes(fuelType)),
       fuelAmount,
       fuelCost,
       pricePerL:    fuelAmount > 0 ? fuelCost / fuelAmount : null,
       fuelStation,
-      receiptNo:    document.getElementById("tf-receiptNo")?.value.trim() || null,
+      fuelStationContracted: isStationContracted(),
+      receiptNo,
+      fiscalScanned:   !!fuelFormScan,
+      receiptDateTime: fuelFormScan ? fuelFormScan.dateTime : null,
       currentKm,
       notes:        document.getElementById("tf-notes")?.value.trim() || null,
       createdAt:    serverTimestamp(),
@@ -1234,6 +1447,7 @@ async function saveFuelEntry() {
     await refreshEntries();
   } catch (e) {
     showEntryError("fuel-form-error", `${t("error")}: ${e.message}`);
+    return false;
   }
 }
 

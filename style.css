@@ -2560,3 +2560,44 @@ tbody td {
 .next-service-banner__sub { font-size: 13px; opacity: 0.85; margin-top: 2px; }
 .next-service-banner__custom { font-size: 12px; opacity: 0.75; margin-top: 2px; }
 .service-reminder__custom { font-size: 11px; opacity: 0.8; margin-left: 6px; white-space: nowrap; }
+
+/* ── TOČENJE GORIVA: QR skener, upozorenja, pumpe po ugovoru ── */
+.form-warning {
+  margin: 6px 0 0; padding: 8px 10px; border-radius: 8px;
+  font-size: 13px; line-height: 1.35;
+  background: var(--color-warning-soft); color: var(--color-warning);
+}
+.fuel-scan { margin-bottom: 14px; }
+.fuel-scan__result {
+  margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--color-success-soft); color: var(--color-success);
+  font-size: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+}
+.fuel-scan__meta { font-size: 13px; opacity: 0.9; word-break: break-all; }
+
+.qr-scan-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,0.9);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.qr-scan { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 12px; color: #fff; }
+.qr-scan__title { font-size: 18px; font-weight: 600; text-align: center; }
+.qr-scan__viewport {
+  position: relative; width: 100%; aspect-ratio: 1 / 1;
+  border-radius: 14px; overflow: hidden; background: #000;
+}
+.qr-scan__video { width: 100%; height: 100%; object-fit: cover; }
+.qr-scan__frame {
+  position: absolute; inset: 12%; border: 3px solid rgba(255,255,255,0.85);
+  border-radius: 14px; pointer-events: none;
+}
+.qr-scan__hint { margin: 0; text-align: center; font-size: 14px; opacity: 0.9; }
+.qr-scan__hint--error { color: #fca5a5; opacity: 1; }
+.qr-scan__actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.fs-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.fs-row { display: flex; align-items: center; gap: 8px; }
+.fs-row__default-wrap { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.fs-row__name { flex: 1; min-width: 0; }
+.fs-add { display: flex; gap: 8px; }
+.fs-add .form-input { flex: 1; min-width: 0; }

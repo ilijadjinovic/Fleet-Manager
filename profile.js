@@ -411,6 +411,21 @@ function renderSettingsTab({ profile, company }) {
       </div>
     ` : ""}
 
+    ${canEditServiceSettings ? `
+      <div class="profile-section">
+        <div class="profile-section__header">
+          <h3 class="profile-section__title">⛽ ${t("fs_settings_section")}</h3>
+        </div>
+        <p class="form-hint">${t("fs_settings_hint")}</p>
+        <div id="fs-list" class="fs-list"></div>
+        <div class="fs-add">
+          <input id="fs-new" class="form-input" type="text" placeholder="${t("fs_settings_add_ph")}" />
+          <button class="btn btn--secondary btn--sm" id="fs-add-btn" type="button">＋ ${t("fs_settings_add")}</button>
+        </div>
+        <button class="btn btn--primary btn--sm" id="btn-save-fuel-stations" style="margin-top:12px">${t("svc_settings_save")}</button>
+      </div>
+    ` : ""}
+
     ${canSetLocalLogin ? `
       <div class="profile-section">
         <div class="profile-section__header">
@@ -485,6 +500,95 @@ function bindSettingsTab({ profile, company }) {
       showToast(`${t("error")}: ${e.message}`, "error");
     }
   });
+
+  // Pumpe po ugovoru (fleet_admin / master_admin)
+  const fsListEl = document.getElementById("fs-list");
+  if (fsListEl && company) {
+    const normalize = (raw) => (Array.isArray(raw) ? raw : [])
+      .map(x => (typeof x === "string" ? { name: x, isDefault: false } : x))
+      .filter(x => x && typeof x.name === "string" && x.name.trim())
+      .map(x => ({ name: x.name.trim(), isDefault: !!x.isDefault }));
+    let draft = normalize(company.fuelStations);
+    const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+    // Pročitaj trenutne vrednosti iz polja (nazive koje je korisnik izmenio)
+    const syncFromDom = () => {
+      const rows = [...fsListEl.querySelectorAll(".fs-row")];
+      draft = rows.map(r => ({
+        name: r.querySelector(".fs-row__name").value,
+        isDefault: r.querySelector(".fs-row__default").checked,
+      }));
+    };
+    const renderList = () => {
+      if (!draft.length) {
+        fsListEl.innerHTML = `<p class="form-hint">${t("fs_settings_empty")}</p>`;
+        return;
+      }
+      if (!draft.some(x => x.isDefault)) draft[0].isDefault = true;
+      fsListEl.innerHTML = draft.map((x, i) => `
+        <div class="fs-row" data-i="${i}">
+          <label class="fs-row__default-wrap" title="${t("fs_settings_default")}">
+            <input type="radio" name="fs-default" class="fs-row__default" ${x.isDefault ? "checked" : ""} />
+            <span>${t("fs_settings_default")}</span>
+          </label>
+          <input type="text" class="form-input fs-row__name" value="${esc(x.name)}" />
+          <button type="button" class="btn btn--secondary btn--sm fs-row__remove" aria-label="${t("delete")}">✕</button>
+        </div>`).join("");
+    };
+    renderList();
+
+    fsListEl.addEventListener("click", (e) => {
+      const rm = e.target.closest(".fs-row__remove");
+      if (!rm) return;
+      syncFromDom();
+      draft.splice(Number(rm.closest(".fs-row").dataset.i), 1);
+      renderList();
+    });
+
+    const addStation = () => {
+      const input = document.getElementById("fs-new");
+      const name = input.value.trim();
+      if (!name) return;
+      syncFromDom();
+      if (draft.some(x => x.name.trim().toLowerCase() === name.toLowerCase())) {
+        showToast(t("fs_settings_duplicate"), "error");
+        return;
+      }
+      draft.push({ name, isDefault: false });
+      input.value = "";
+      renderList();
+    };
+    document.getElementById("fs-add-btn")?.addEventListener("click", addStation);
+    document.getElementById("fs-new")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); addStation(); }
+    });
+
+    document.getElementById("btn-save-fuel-stations")?.addEventListener("click", async () => {
+      syncFromDom();
+      const seen = new Set();
+      const cleaned = [];
+      for (const x of draft) {
+        const name = x.name.trim();
+        const key = name.toLowerCase();
+        if (!name || seen.has(key)) continue;
+        seen.add(key);
+        cleaned.push({ name, isDefault: x.isDefault });
+      }
+      if (cleaned.length && !cleaned.some(x => x.isDefault)) cleaned[0].isDefault = true;
+      // samo jedna podrazumevana
+      let found = false;
+      cleaned.forEach(x => { if (x.isDefault && !found) found = true; else x.isDefault = false; });
+      try {
+        await updateDoc(doc(db, "companies", company.id), { fuelStations: cleaned, updatedAt: serverTimestamp() });
+        company.fuelStations = cleaned;
+        draft = cleaned.map(x => ({ ...x }));
+        renderList();
+        showToast(t("fs_settings_saved"), "success");
+      } catch (e) {
+        showToast(`${t("error")}: ${e.message}`, "error");
+      }
+    });
+  }
 
   // Podešavanje lokalnog login-a (fleet_admin / master_admin)
   document.getElementById("btn-setup-local-login")?.addEventListener("click", () => {
