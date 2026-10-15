@@ -92,6 +92,10 @@ export async function renderIncidents(container) {
     document.querySelectorAll("[data-itype]").forEach(c => c.classList.remove("chip--active"));
     chip.classList.add("chip--active");
     filterType = chip.dataset.itype;
+    // Izbor čipa poništava pretragu — korisnik očekuje da vidi sve što taj filter obuhvata
+    searchRaw = ""; searchTerm = "";
+    const searchInput = document.getElementById("incident-search");
+    if (searchInput) searchInput.value = "";
     renderList();
   });
 
@@ -101,6 +105,10 @@ export async function renderIncidents(container) {
     document.querySelectorAll("[data-istatus]").forEach(c => c.classList.remove("chip--active"));
     chip.classList.add("chip--active");
     filterStatus = chip.dataset.istatus;
+    // Izbor čipa poništava pretragu — korisnik očekuje da vidi sve što taj filter obuhvata
+    searchRaw = ""; searchTerm = "";
+    const searchInput = document.getElementById("incident-search");
+    if (searchInput) searchInput.value = "";
     renderList();
   });
 

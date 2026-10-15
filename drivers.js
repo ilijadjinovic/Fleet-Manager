@@ -78,6 +78,10 @@ export async function renderDrivers(container) {
       document.querySelectorAll(".filter-chips .chip").forEach(c => c.classList.remove("chip--active"));
       chip.classList.add("chip--active");
       filterStatus = chip.dataset.filter;
+      // Izbor čipa poništava pretragu — korisnik očekuje da vidi sve što taj filter obuhvata
+      searchRaw = ""; searchTerm = "";
+      const searchInput = document.getElementById("driver-search");
+      if (searchInput) searchInput.value = "";
       renderList();
     });
   });

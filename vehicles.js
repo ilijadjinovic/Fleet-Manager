@@ -269,6 +269,10 @@ export async function renderVehicles(container, initialFilter = null) {
     document.querySelectorAll(".chip").forEach(c => c.classList.remove("chip--active"));
     chip.classList.add("chip--active");
     currentFilter = chip.dataset.filter;
+    // Izbor čipa poništava pretragu — korisnik očekuje da vidi sve što taj filter obuhvata
+    searchRaw = ""; searchTerm = "";
+    const searchInput = document.getElementById("vehicle-search");
+    if (searchInput) searchInput.value = "";
     renderList();
   });
 
