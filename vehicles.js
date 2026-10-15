@@ -187,6 +187,7 @@ function fuelBadge(v) {
 let allVehicles = [];
 let currentFilter = "all";
 let searchTerm = "";
+let searchRaw  = ""; // tekst kako je ukucan u polju (za vraćanje u polje pri povratku na listu)
 let currentSort = "none";
 let currentVehicleId = null; // za detail pogled
 
@@ -197,7 +198,13 @@ export async function renderVehicles(container, initialFilter = null) {
     return;
   }
 
-  if (initialFilter) currentFilter = initialFilter;
+  // Dolazak sa dashboarda sa zadatim filterom: stara pretraga bi sakrila
+  // vozila koja korisnik očekuje da vidi, pa se briše.
+  if (initialFilter) {
+    currentFilter = initialFilter;
+    searchTerm = "";
+    searchRaw  = "";
+  }
 
   const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
 
@@ -244,10 +251,17 @@ export async function renderVehicles(container, initialFilter = null) {
     document.getElementById("btn-add-vehicle")?.addEventListener("click", () => openVehicleForm());
   }
 
-  document.getElementById("vehicle-search")?.addEventListener("input", (e) => {
-    searchTerm = e.target.value.toLowerCase();
-    renderList();
-  });
+  // Pretraga ostaje primenjena i nakon povratka sa detalja vozila — zato se
+  // ukucani tekst vraća u polje, da filter uvek bude vidljiv i da se može obrisati.
+  const searchEl = document.getElementById("vehicle-search");
+  if (searchEl) {
+    searchEl.value = searchRaw;
+    searchEl.addEventListener("input", (e) => {
+      searchRaw  = e.target.value;
+      searchTerm = searchRaw.toLowerCase();
+      renderList();
+    });
+  }
 
   document.getElementById("filter-chips")?.addEventListener("click", (e) => {
     const chip = e.target.closest(".chip");

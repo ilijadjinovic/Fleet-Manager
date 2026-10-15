@@ -18,6 +18,7 @@ let allVehicles    = [];
 let allDrivers     = [];
 let filterStatus   = "active";
 let searchTerm     = "";
+let searchRaw = ""; // ukucani tekst — vraća se u polje pri povratku na listu
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderAssignments(container) {
@@ -41,9 +42,9 @@ export async function renderAssignments(container) {
           placeholder="${t("search")}..." />
       </div>
       <div class="filter-chips">
-        <button class="chip" data-filter="all">${t("company_all")}</button>
-        <button class="chip chip--active" data-filter="active">${t("assignment_status_active")}</button>
-        <button class="chip" data-filter="closed">${t("assignment_status_closed")}</button>
+        <button class="chip ${filterStatus === "all" ? "chip--active" : ""}" data-filter="all">${t("company_all")}</button>
+        <button class="chip ${filterStatus === "active" ? "chip--active" : ""}" data-filter="active">${t("assignment_status_active")}</button>
+        <button class="chip ${filterStatus === "closed" ? "chip--active" : ""}" data-filter="closed">${t("assignment_status_closed")}</button>
       </div>
     </div>
 
@@ -54,8 +55,11 @@ export async function renderAssignments(container) {
     document.getElementById("btn-add-assignment")?.addEventListener("click", () => openAssignmentForm());
   }
 
-  document.getElementById("assignment-search")?.addEventListener("input", (e) => {
-    searchTerm = e.target.value.toLowerCase();
+  const searchEl = document.getElementById("assignment-search");
+  if (searchEl) searchEl.value = searchRaw;
+  searchEl?.addEventListener("input", (e) => {
+    searchRaw  = e.target.value;
+    searchTerm = searchRaw.toLowerCase();
     renderList();
   });
 

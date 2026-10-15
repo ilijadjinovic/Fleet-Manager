@@ -27,6 +27,7 @@ import {
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allDrivers = [];
 let searchTerm = "";
+let searchRaw = ""; // ukucani tekst — vraća se u polje pri povratku na listu
 let filterStatus = "all";
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
@@ -51,9 +52,9 @@ export async function renderDrivers(container) {
           placeholder="${t("search")}..." />
       </div>
       <div class="filter-chips">
-        <button class="chip chip--active" data-filter="all">${t("company_all")}</button>
-        <button class="chip" data-filter="active">${t("driver_active")}</button>
-        <button class="chip" data-filter="inactive">${t("driver_inactive")}</button>
+        <button class="chip ${filterStatus === "all" ? "chip--active" : ""}" data-filter="all">${t("company_all")}</button>
+        <button class="chip ${filterStatus === "active" ? "chip--active" : ""}" data-filter="active">${t("driver_active")}</button>
+        <button class="chip ${filterStatus === "inactive" ? "chip--active" : ""}" data-filter="inactive">${t("driver_inactive")}</button>
       </div>
     </div>
 
@@ -64,8 +65,11 @@ export async function renderDrivers(container) {
     document.getElementById("btn-add-driver")?.addEventListener("click", () => openDriverForm());
   }
 
-  document.getElementById("driver-search")?.addEventListener("input", (e) => {
-    searchTerm = e.target.value.toLowerCase();
+  const searchEl = document.getElementById("driver-search");
+  if (searchEl) searchEl.value = searchRaw;
+  searchEl?.addEventListener("input", (e) => {
+    searchRaw  = e.target.value;
+    searchTerm = searchRaw.toLowerCase();
     renderList();
   });
 
