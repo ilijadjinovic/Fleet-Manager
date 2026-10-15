@@ -12,6 +12,7 @@ import {
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, showToast } from "./app.js";
 import { isVehicleRegistered } from "./vehicles.js";
+import { sumEntries } from "./entries-view.js";
 import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js";
 
 // ── FONT ZA SRPSKA SLOVA (š đ č ć ž) ───────────────────────────
@@ -887,8 +888,7 @@ function drawFuelingsSection(pdf, fuelings, y) {
   });
 
   // Sumarni red
-  const totalL    = fuelings.reduce((s, f) => s + (f.fuelAmount || 0), 0);
-  const totalCost = fuelings.reduce((s, f) => s + (f.fuelCost   || 0), 0);
+  const { fuelL: totalL, fuelCost: totalCost } = sumEntries(fuelings);
   y += 2;
   pdf.setFont(REPORT_FONT, "bold");
   pdf.setFontSize(8.5);
@@ -928,7 +928,7 @@ function drawCostsSection(pdf, costs, y) {
     ], y, i % 2 === 0);
   });
 
-  const total = costs.reduce((s, c) => s + (c.amount || 0), 0);
+  const total = sumEntries(costs).costsTotal;
   y += 2;
   pdf.setFont(REPORT_FONT, "bold");
   pdf.setFontSize(8.5);

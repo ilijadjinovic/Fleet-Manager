@@ -18,6 +18,11 @@ import {
   cleanVehicleServiceOverrides
 } from "./service-status.js";
 import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
+import {
+  sumEntries, countIncidents, incidentStatusOf, PERIODS, DEFAULT_PERIOD, periodStart, inPeriod,
+  buildItems, matchesFilter, filterCounts, renderFilterChips, renderCounters, renderSummary,
+  monthlyRows, renderMonthlyTable, expenseRow, renderByMonth, isExpenseEntry, esc
+} from "./entries-view.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
 const VEHICLE_COLORS = [
@@ -624,33 +629,68 @@ function renderSafetyTab(v) {
   `;
 }
 
-async function loadFinanceTab(container, v) {
+// ── TAB "FINANSIJSKI PODACI" ──────────────────────────────────
+// Gore: sažetak troškova (gorivo, putarine, parking, pranje, ostalo, servis,
+// ukupno + broj otvorenih prijava) za izabrani period (podrazumevano
+// poslednjih 12 meseci). Zatim mesečna tabela (otvara se na klik) i
+// nabavni podaci. Pojedinačni unosi su u tabu "Prijave i troškovi".
+async function loadFinanceTab(container, v, period = DEFAULT_PERIOD) {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   try {
-    const snap = await getDocs(
-      query(
-        collection(db, "companies", S.companyId, "services"),
-        where("vehicleId", "==", v.id)
-      )
+    const base = (name) => query(
+      collection(db, "companies", S.companyId, name),
+      where("vehicleId", "==", v.id)
     );
-    const totalServiceCost = snap.docs.reduce((sum, d) => sum + (Number(d.data().cost) || 0), 0);
+    const [servicesSnap, entriesSnap, incidentsSnap] = await Promise.all([
+      getDocs(base("services")),
+      getDocs(base("tripEntries")),
+      getDocs(base("incidents")),
+    ]);
+
+    const from = periodStart(period);
+    const services = servicesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(s => s.status !== SERVICE_STATUS.CANCELLED)
+      .filter(s => inPeriod(s.serviceDate, from));
+    const entries = entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(isExpenseEntry)
+      .filter(e => inPeriod(e.createdAt, from));
+    // Prijave: broj otvorenih je trenutno stanje — ne zavisi od perioda
+    const incCounts = countIncidents(incidentsSnap.docs.map(d => d.data()));
+
+    const sums = sumEntries(entries);
+    const serviceInfo = {
+      cost:  services.reduce((sum, s) => sum + (Number(s.cost) || 0), 0),
+      count: services.length,
+    };
 
     const rows = [
-      [t("vehicle_owner"),          v.ownerName],
+      [t("vehicle_owner"),          esc(v.ownerName)],
       [t("vehicle_purchase_date"),  formatDate(v.purchaseDate)],
-      [t("vehicle_purchase_type"),  v.purchaseType],
+      [t("vehicle_purchase_type"),  esc(v.purchaseType)],
       [t("vehicle_purchase_value"), v.purchaseValue ? Number(v.purchaseValue).toLocaleString() + " RSD" : null],
     ];
 
     container.innerHTML = `
-      ${totalServiceCost > 0 ? `
-        <div class="service-total-bar">
-          <span>${t("service_total_cost")}:</span>
-          <strong>${totalServiceCost.toLocaleString()} RSD</strong>
-        </div>
-      ` : ""}
+      <div class="filter-chips fin-periods" id="fin-periods">
+        ${PERIODS.map(p => `
+          <button type="button" class="chip ${p === period ? "chip--active" : ""}" data-period="${p}">${t("entries_period_" + p)}</button>
+        `).join("")}
+      </div>
+
+      ${renderSummary(sums, { service: serviceInfo, incCounts, openLink: true })}
+      ${renderMonthlyTable(monthlyRows(entries, services))}
+
+      <div class="form-section-title" style="margin-top:18px">${t("entries_purchase_title")}</div>
       ${detailTable(rows)}
     `;
+
+    container.querySelectorAll("[data-period]").forEach(btn => {
+      btn.addEventListener("click", () => loadFinanceTab(container, v, btn.dataset.period));
+    });
+    // Skok na tab "Prijave i troškovi"
+    document.getElementById("btn-fin-open-incidents")?.addEventListener("click", () => {
+      document.querySelector('#vehicle-tabs [data-vtab="incidents"]')?.click();
+    });
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
@@ -755,34 +795,83 @@ async function loadServiceTab(container, vehicle) {
   }
 }
 
-// ── TAB "PRIJAVE" (kvarovi/oštećenja/nezgode za ovo vozilo) ────
-// Isti vizuelni prikaz i logika kao u drivers.js (tab "Prijave" kod
-// konkretnog vozača) — koristi se ista incidentCard komponenta.
-async function loadIncidentsTab(container, vehicle) {
+// ── TAB "PRIJAVE I TROŠKOVI" (za ovo vozilo) ───────────────────
+// Dnevnik svega što se dešavalo sa vozilom: kvarovi/oštećenja/nezgode
+// (incidentCard — ista komponenta kao kod vozača), točenja goriva,
+// putarine, parking, pranje i ostali troškovi (kompaktan red).
+// Otvorene prijave su uvek na vrhu, ostalo je grupisano po mesecu.
+async function loadIncidentsTab(container, vehicle, filter = "all") {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   const canEdit = S.profile?.role !== "driver" && !vehicle.archived;
   try {
-    const snap = await getDocs(
-      query(
-        collection(db, "companies", S.companyId, "incidents"),
-        where("vehicleId", "==", vehicle.id),
-        orderBy("createdAt", "desc")
-      )
+    const base = (name) => query(
+      collection(db, "companies", S.companyId, name),
+      where("vehicleId", "==", vehicle.id)
     );
-    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let entriesFailed = false;
+    const [incSnap, entSnap] = await Promise.all([
+      getDocs(base("incidents")),
+      getDocs(base("tripEntries")).catch((e) => {
+        console.warn("tripEntries load failed:", e);
+        entriesFailed = true;
+        return { docs: [] };
+      }),
+    ]);
+    const incidents = incSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const entries   = entSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    container.innerHTML = items.length === 0
-      ? `<div class="empty-state"><div class="empty-state__icon">⚠️</div><p>${t("no_data")}</p></div>`
-      : `<div class="incidents-list">${items.map(i => incidentCard(i, false, canEdit)).join("")}</div>`;
+    const items     = buildItems(incidents, entries);
+    const incCounts = countIncidents(incidents);
+    const counts    = filterCounts(items);
 
-    if (canEdit) {
-      container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const inc = items.find(x => x.id === btn.dataset.id);
-          if (inc) scheduleServiceForIncident(inc, () => loadIncidentsTab(container, vehicle));
-        });
+    const render = (active) => {
+      const showAttention = active === "all" || active === "incidents";
+      const attention = showAttention
+        ? items.filter(i => i.kind === "incident" && incidentStatusOf(i.data) !== "closed")
+        : [];
+      const attentionIds = new Set(attention.map(i => i.data.id));
+      const rest = items
+        .filter(i => matchesFilter(i, active))
+        .filter(i => !(i.kind === "incident" && attentionIds.has(i.data.id)));
+
+      const renderItem = (it) => it.kind === "incident"
+        ? incidentCard(it.data, false, canEdit)
+        : expenseRow(it.data, { showDriver: true });
+
+      container.innerHTML = `
+        ${renderCounters(items.length, incCounts)}
+        ${entriesFailed ? `<div class="error-state" style="margin-bottom:10px">${t("entries_load_failed")}</div>` : ""}
+        ${renderFilterChips(counts, active)}
+
+        ${items.length === 0 ? `
+          <div class="empty-state"><div class="empty-state__icon">⚠️</div><p>${t("no_data")}</p></div>
+        ` : `
+          ${attention.length ? `
+            <div class="entries-attention">
+              <div class="entries-attention__title">⚠️ ${t("entries_attention_title")} <span class="entries-month__count">${attention.length}</span></div>
+              <div class="incidents-list">${attention.map(renderItem).join("")}</div>
+            </div>
+          ` : ""}
+          ${rest.length ? renderByMonth(rest, renderItem)
+            : (attention.length ? "" : `<div class="empty-state"><p>${t("no_data")}</p></div>`)}
+        `}
+      `;
+
+      container.querySelectorAll("[data-efilter]").forEach(btn => {
+        btn.addEventListener("click", () => render(btn.dataset.efilter));
       });
-    }
+
+      if (canEdit) {
+        container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const inc = incidents.find(x => x.id === btn.dataset.id);
+            if (inc) scheduleServiceForIncident(inc, () => loadIncidentsTab(container, vehicle, active));
+          });
+        });
+      }
+    };
+
+    render(filter);
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }

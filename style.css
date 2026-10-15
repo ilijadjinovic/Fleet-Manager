@@ -2601,3 +2601,137 @@ tbody td {
 .fs-row__name { flex: 1; min-width: 0; }
 .fs-add { display: flex; gap: 8px; }
 .fs-add .form-input { flex: 1; min-width: 0; }
+
+/* ── PRIJAVE I TROŠKOVI + FINANSIJSKI SAŽETAK (entries-view.js) ── */
+.entries-counters {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1px; background: var(--color-border);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  overflow: hidden; margin-bottom: 12px;
+}
+.entries-counter {
+  background: var(--color-surface-2); padding: 10px 8px;
+  text-align: center; display: flex; flex-direction: column; gap: 2px;
+}
+.entries-counter__value { font-size: 18px; font-weight: 800; color: var(--color-text); }
+.entries-counter__label {
+  font-size: 10px; color: var(--color-text-faint);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.entries-counter--danger .entries-counter__value { color: var(--color-danger); }
+.entries-counter--warn   .entries-counter__value { color: var(--color-warning); }
+
+.entries-chips { margin-bottom: 14px; }
+.chip__count { opacity: 0.75; font-weight: 700; margin-left: 2px; }
+
+.entries-attention {
+  border: 1px solid var(--color-warning-border-soft);
+  background: var(--color-warning-bg-faint);
+  border-radius: var(--radius-md);
+  padding: 10px; margin-bottom: 16px;
+}
+.entries-attention__title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+
+.entries-month { margin-bottom: 16px; }
+.entries-month__title {
+  font-size: 13px; font-weight: 700;
+  padding-bottom: 6px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.entries-month__count {
+  background: var(--color-surface-3); color: var(--color-text-muted);
+  border-radius: 10px; font-size: 11px; font-weight: 700;
+  padding: 1px 8px; margin-left: 6px;
+}
+.entries-month__items { display: flex; flex-direction: column; gap: 8px; }
+.entries-summary-note {
+  font-size: 11px; color: var(--color-text-faint);
+  text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px;
+}
+
+/* kompaktan red za gorivo / trošak */
+.ledger-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-slate-dark);
+  border-radius: var(--radius-md);
+}
+.ledger-row--fuel { border-left-color: var(--color-info); }
+.ledger-row__icon { font-size: 18px; line-height: 1.4; }
+.ledger-row__body { flex: 1; min-width: 0; }
+.ledger-row__main { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.ledger-row__sub  { font-size: 12px; color: var(--color-text-muted); margin-top: 3px; }
+.ledger-row__notes { font-size: 12px; color: var(--color-text-faint); margin-top: 3px; font-style: italic; }
+.ledger-row__date { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; }
+
+/* sažetak troškova */
+.fin-periods { margin-bottom: 14px; }
+.fin-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 10px;
+}
+.fin-card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.fin-card__label {
+  font-size: 11px; font-weight: 700; color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.fin-card__value { font-size: 18px; font-weight: 800; margin-top: 4px; }
+.fin-card__sub   { font-size: 11px; color: var(--color-text-faint); margin-top: 4px; line-height: 1.5; }
+.fin-total-bar { font-size: 14px; }
+.fin-total-bar strong { font-size: 16px; }
+.fin-open {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap;
+  padding: 8px 14px; margin-bottom: 12px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 13px; color: var(--color-text-muted);
+}
+.fin-open--warn {
+  background: var(--color-warning-bg-faint);
+  border-color: var(--color-warning-border-soft);
+  color: var(--color-text);
+}
+
+/* mesečna tabela — otvara se na klik */
+.fin-monthly {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+.fin-monthly > summary {
+  cursor: pointer; padding: 10px 14px;
+  font-size: 13px; font-weight: 700; list-style-position: inside;
+}
+.fin-monthly[open] > summary { border-bottom: 1px solid var(--color-border); }
+.fin-monthly__scroll { overflow-x: auto; }
+.fin-monthly__table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fin-monthly__table th, .fin-monthly__table td {
+  padding: 8px 12px; text-align: right; white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+.fin-monthly__table th:first-child, .fin-monthly__table td:first-child { text-align: left; }
+.fin-monthly__table th {
+  font-size: 10px; color: var(--color-text-faint);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.fin-monthly__table tfoot td { border-bottom: 0; font-weight: 700; background: var(--color-surface-3); }
+.fin-monthly__hint { font-size: 10px; color: var(--color-text-faint); padding: 6px 12px 8px; text-align: right; }
+
+.incidents-group__total { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
+
+@media (max-width: 640px) {
+  .entries-counters { grid-template-columns: repeat(2, 1fr); }
+  .fin-summary { grid-template-columns: repeat(2, 1fr); }
+  .ledger-row { flex-wrap: wrap; }
+  .ledger-row__date { width: 100%; text-align: right; }
+}

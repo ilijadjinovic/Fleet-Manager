@@ -19,6 +19,10 @@ import { S, showToast, openModal } from "./app.js";
 import { usernameToEmail, getSecondaryAuth } from "./firebase.js";
 import { historyAssignmentCard, attachAssignmentHistoryEvents, loadDriverAssignmentHistory } from "./trips.js";
 import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
+import {
+  sumEntries, countIncidents, buildItems, matchesFilter, filterCounts,
+  renderFilterChips, renderCounters, renderSummary, expenseRow, fmtRsd
+} from "./entries-view.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allDrivers = [];
@@ -363,31 +367,53 @@ async function loadDriverAssignments(container, driver) {
   }
 }
 
-async function loadDriverIncidents(container, driver) {
+// ── TAB "PRIJAVE I TROŠKOVI" (za ovog vozača) ─────────────────
+// Sažetak (gorivo, putarine, parking, pranje, ostalo, ukupno, otvorene
+// prijave) + filteri + lista grupisana po zaduženju. Prijave se prikazuju
+// incidentCard-om, gorivo i troškovi kompaktnim redom.
+async function loadDriverIncidents(container, driver, filter = "all") {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   try {
-    const snap = await getDocs(query(
-      collection(db, "companies", S.companyId, "incidents"),
-      where("driverId", "==", driver.id),
-      orderBy("createdAt", "desc")
-    ));
-    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Podaci su istorijski mešoviti (neki dokumenti imaju samo driverId,
+    // neki samo driverUid) — pa se oba upita pokreću i spajaju bez duplikata.
+    // Bez orderBy (sortira se lokalno) — da ne zavisimo od kompozitnih indeksa.
+    async function fetchMerged(collName) {
+      const byId = new Map();
+      const run = async (field, value) => {
+        if (!value) return;
+        try {
+          const snap = await getDocs(query(
+            collection(db, "companies", S.companyId, collName),
+            where(field, "==", value)
+          ));
+          snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
+        } catch (e) {
+          console.warn(`loadDriverIncidents ${collName}/${field} failed:`, e);
+        }
+      };
+      await run("driverId", driver.id);
+      await run("driverUid", driver.localAuthUid || null);
+      return [...byId.values()];
+    }
 
+    const [incidents, entries] = await Promise.all([
+      fetchMerged("incidents"),
+      fetchMerged("tripEntries"),
+    ]);
+
+    const items = buildItems(incidents, entries);
     if (items.length === 0) {
       container.innerHTML = `<div class="empty-state"><div class="empty-state__icon">⚠️</div><p>${t("no_data")}</p></div>`;
       return;
     }
 
-    // Grupiši prijave po zaduženju
-    const byAssignment = {};
-    items.forEach(i => {
-      const key = i.assignmentId || "unknown";
-      (byAssignment[key] ||= []).push(i);
-    });
+    const incCounts = countIncidents(incidents);
+    const counts    = filterCounts(items);
+    const sums      = sumEntries(entries);
 
     // Dohvati podatke o zaduženjima (za naslov grupe) i vožnjama
-    // (da bi svaka prijava mogla da nazna u kojoj je vožnji nastala)
-    const assignmentIds = Object.keys(byAssignment).filter(k => k !== "unknown");
+    // (da bi svaka stavka mogla da nazna u kojoj je vožnji nastala)
+    const assignmentIds = [...new Set(items.map(i => i.data.assignmentId).filter(Boolean))];
     const assignmentsInfo = {};
     await Promise.all(assignmentIds.map(async (aid) => {
       try {
@@ -396,7 +422,7 @@ async function loadDriverIncidents(container, driver) {
       } catch (e) { /* ignoriši — prikaži grupu bez zaglavlja */ }
     }));
 
-    const tripIds = [...new Set(items.map(i => i.tripId).filter(Boolean))];
+    const tripIds = [...new Set(items.map(i => i.data.tripId).filter(Boolean))];
     const tripsInfo = {};
     await Promise.all(tripIds.map(async (tid) => {
       try {
@@ -405,58 +431,87 @@ async function loadDriverIncidents(container, driver) {
       } catch (e) { /* ignoriši */ }
     }));
 
-    // Grupe sortirane po datumu zaduženja — najnovije prvo; nepoznato na kraju
-    const sortedKeys = assignmentIds.sort((a, b) => {
-      const da = toJsDate(assignmentsInfo[a]?.startDate);
-      const dbb = toJsDate(assignmentsInfo[b]?.startDate);
-      return (dbb?.getTime() || 0) - (da?.getTime() || 0);
-    });
-    if (byAssignment["unknown"]) sortedKeys.push("unknown");
+    const render = (active) => {
+      const visible = items.filter(i => matchesFilter(i, active));
 
-    container.innerHTML = `
-      <div class="incidents-by-assignment">
-        ${sortedKeys.map(key => {
-          const a = assignmentsInfo[key];
-          const groupItems = byAssignment[key];
-          const headerHTML = a
-            ? `
-              <div class="incidents-group__header">
-                🚗 <strong>${a.vehicleBrand || ""} ${a.vehicleModel || ""}</strong> — ${a.vehiclePlate || ""}
-                <span class="incidents-group__dates">📅 ${formatDate(a.startDate)} → ${a.endDate ? formatDate(a.endDate) : t("assignment_status_active")}</span>
-              </div>
-            `
-            : `<div class="incidents-group__header">${t("driver_tab_incidents")}</div>`;
-
-          return `
-            <div class="incidents-group">
-              ${headerHTML}
-              <div class="incidents-group__items">
-                ${groupItems.map(i => {
-                  const trip = i.tripId ? tripsInfo[i.tripId] : null;
-                  const tripLabel = trip
-                    ? `${formatDate(trip.startDate)}${trip.destination ? " — 📍 " + trip.destination : ""}`
-                    : null;
-                  return `
-                    <div class="incident-item-wrap">
-                      ${tripLabel ? `<div class="incident-item__trip-label">🔑 ${t("driver_trip_label")}: ${tripLabel}</div>` : ""}
-                      ${incidentCard(i, false, true)}
-                    </div>
-                  `;
-                }).join("")}
-              </div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-    `;
-
-    container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const incident = items.find(i => i.id === btn.dataset.id);
-        if (incident) scheduleServiceForIncident(incident, () => loadDriverIncidents(container, driver));
+      // Grupiši po zaduženju
+      const byAssignment = {};
+      visible.forEach(i => {
+        const key = i.data.assignmentId || "unknown";
+        (byAssignment[key] ||= []).push(i);
       });
-    });
+
+      // Grupe sortirane po datumu zaduženja — najnovije prvo; nepoznato na kraju
+      const sortedKeys = Object.keys(byAssignment).filter(k => k !== "unknown").sort((a, b) => {
+        const da = toJsDate(assignmentsInfo[a]?.startDate);
+        const dbb = toJsDate(assignmentsInfo[b]?.startDate);
+        return (dbb?.getTime() || 0) - (da?.getTime() || 0);
+      });
+      if (byAssignment["unknown"]) sortedKeys.push("unknown");
+
+      const listHTML = visible.length === 0
+        ? `<div class="empty-state"><p>${t("no_data")}</p></div>`
+        : `<div class="incidents-by-assignment">
+          ${sortedKeys.map(key => {
+            const a = assignmentsInfo[key];
+            const groupItems = byAssignment[key];
+            const groupTotal = sumEntries(groupItems.filter(i => i.kind === "expense").map(i => i.data)).total;
+            const headerHTML = a
+              ? `
+                <div class="incidents-group__header">
+                  🚗 <strong>${a.vehicleBrand || ""} ${a.vehicleModel || ""}</strong> — ${a.vehiclePlate || ""}
+                  <span class="incidents-group__dates">📅 ${formatDate(a.startDate)} → ${a.endDate ? formatDate(a.endDate) : t("assignment_status_active")}</span>
+                  ${groupTotal > 0 ? `<span class="incidents-group__total">💰 ${fmtRsd(groupTotal)}</span>` : ""}
+                </div>
+              `
+              : `<div class="incidents-group__header">${t("driver_tab_incidents")}${groupTotal > 0 ? `<span class="incidents-group__total">💰 ${fmtRsd(groupTotal)}</span>` : ""}</div>`;
+
+            return `
+              <div class="incidents-group">
+                ${headerHTML}
+                <div class="incidents-group__items">
+                  ${groupItems.map(it => {
+                    const trip = it.data.tripId ? tripsInfo[it.data.tripId] : null;
+                    const tripLabel = trip
+                      ? `${formatDate(trip.startDate)}${trip.destination ? " — 📍 " + trip.destination : ""}`
+                      : null;
+                    return `
+                      <div class="incident-item-wrap">
+                        ${tripLabel ? `<div class="incident-item__trip-label">🔑 ${t("driver_trip_label")}: ${tripLabel}</div>` : ""}
+                        ${it.kind === "incident"
+                          ? incidentCard(it.data, false, true)
+                          : expenseRow(it.data)}
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>`;
+
+      container.innerHTML = `
+        ${renderCounters(items.length, incCounts)}
+        <div class="entries-summary-note">${t("entries_summary_all_time")}</div>
+        ${renderSummary(sums, { incCounts: null })}
+        ${renderFilterChips(counts, active)}
+        ${listHTML}
+      `;
+
+      container.querySelectorAll("[data-efilter]").forEach(btn => {
+        btn.addEventListener("click", () => render(btn.dataset.efilter));
+      });
+
+      container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const incident = incidents.find(i => i.id === btn.dataset.id);
+          if (incident) scheduleServiceForIncident(incident, () => loadDriverIncidents(container, driver, active));
+        });
+      });
+    };
+
+    render(filter);
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
