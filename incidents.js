@@ -19,7 +19,6 @@ let allIncidents  = [];
 let filterType    = "all";
 let filterStatus  = "all";
 let searchTerm    = "";
-let searchRaw = ""; // ukucani tekst — vraća se u polje pri povratku na listu
 let onSavedCallback = null; // opcioni hook — poziva se posle uspešnog snimanja (npr. iz trips.js)
 let formAssignmentId = null; // zaduženje za koje se trenutno otvorena forma prijave vezuje
 
@@ -55,20 +54,20 @@ export async function renderIncidents(container) {
           placeholder="${t("search")}..." />
       </div>
       <div class="filter-chips" id="type-chips">
-        <button class="chip ${filterType === "all" ? "chip--active" : ""}" data-itype="all">${t("company_all")}</button>
-        <button class="chip ${filterType === "fault" ? "chip--active" : ""}" data-itype="fault">🔧 ${t("incident_fault")}</button>
-        <button class="chip ${filterType === "damage" ? "chip--active" : ""}" data-itype="damage">💥 ${t("incident_damage")}</button>
-        <button class="chip ${filterType === "accident" ? "chip--active" : ""}" data-itype="accident">🚨 ${t("incident_accident")}</button>
-        <button class="chip ${filterType === "other" ? "chip--active" : ""}" data-itype="other">📋 ${t("incident_other")}</button>
+        <button class="chip chip--active" data-itype="all">${t("company_all")}</button>
+        <button class="chip" data-itype="fault">🔧 ${t("incident_fault")}</button>
+        <button class="chip" data-itype="damage">💥 ${t("incident_damage")}</button>
+        <button class="chip" data-itype="accident">🚨 ${t("incident_accident")}</button>
+        <button class="chip" data-itype="other">📋 ${t("incident_other")}</button>
       </div>
     </div>
 
     <div class="filter-bar" style="margin-top:-8px">
       <div class="filter-chips" id="status-chips">
-        <button class="chip ${filterStatus === "all" ? "chip--active" : ""}" data-istatus="all">${t("company_all")}</button>
-        <button class="chip ${filterStatus === "open" ? "chip--active" : ""}" data-istatus="open">🔴 ${t("incident_status_open")}</button>
-        <button class="chip ${filterStatus === "in_progress" ? "chip--active" : ""}" data-istatus="in_progress">🟡 ${t("incident_status_in_progress")}</button>
-        <button class="chip ${filterStatus === "closed" ? "chip--active" : ""}" data-istatus="closed">🟢 ${t("incident_status_closed")}</button>
+        <button class="chip chip--active" data-istatus="all">${t("company_all")}</button>
+        <button class="chip" data-istatus="open">🔴 ${t("incident_status_open")}</button>
+        <button class="chip" data-istatus="in_progress">🟡 ${t("incident_status_in_progress")}</button>
+        <button class="chip" data-istatus="closed">🟢 ${t("incident_status_closed")}</button>
       </div>
     </div>
 
@@ -78,11 +77,8 @@ export async function renderIncidents(container) {
   // Vozač može da doda prijavu i odavde
   document.getElementById("btn-add-incident")?.addEventListener("click", () => openIncidentForm());
 
-  const searchEl = document.getElementById("incident-search");
-  if (searchEl) searchEl.value = searchRaw;
-  searchEl?.addEventListener("input", (e) => {
-    searchRaw  = e.target.value;
-    searchTerm = searchRaw.toLowerCase();
+  document.getElementById("incident-search")?.addEventListener("input", (e) => {
+    searchTerm = e.target.value.toLowerCase();
     renderList();
   });
 
@@ -92,10 +88,6 @@ export async function renderIncidents(container) {
     document.querySelectorAll("[data-itype]").forEach(c => c.classList.remove("chip--active"));
     chip.classList.add("chip--active");
     filterType = chip.dataset.itype;
-    // Izbor čipa poništava pretragu — korisnik očekuje da vidi sve što taj filter obuhvata
-    searchRaw = ""; searchTerm = "";
-    const searchInput = document.getElementById("incident-search");
-    if (searchInput) searchInput.value = "";
     renderList();
   });
 
@@ -105,10 +97,6 @@ export async function renderIncidents(container) {
     document.querySelectorAll("[data-istatus]").forEach(c => c.classList.remove("chip--active"));
     chip.classList.add("chip--active");
     filterStatus = chip.dataset.istatus;
-    // Izbor čipa poništava pretragu — korisnik očekuje da vidi sve što taj filter obuhvata
-    searchRaw = ""; searchTerm = "";
-    const searchInput = document.getElementById("incident-search");
-    if (searchInput) searchInput.value = "";
     renderList();
   });
 

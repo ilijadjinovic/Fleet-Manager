@@ -335,6 +335,11 @@ function tripHistoryCard(trip, entries, index) {
   `;
 }
 
+// Escape za tekst koji dolazi sa računa (adresa pumpe)
+function escHtmlTrips(v) {
+  return String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 // ── Pojedinačan unos unutar razvijene kartice istorije ─────────
 function historyEntryItem(entry) {
   if (entry.type === "fuel") {
@@ -342,7 +347,7 @@ function historyEntryItem(entry) {
       <div class="trip-history-entry">
         <span>⛽ ${t("trip_entry_fuel")}</span>
         <span>${entry.fuelAmount ?? "—"} L${entry.fuelCost ? ` / ${entry.fuelCost.toLocaleString()} RSD` : ""}</span>
-        ${entry.fuelStation ? `<span>🏪 ${entry.fuelStation}${entry.fuelStationContracted === false ? ` <span class="badge badge--service badge--inline">${t("trip_fuel_off_contract_badge")}</span>` : ""}</span>` : ""}
+        ${entry.fuelStation ? `<span>🏪 ${entry.fuelStation}</span>` : ""}
         ${entry.currentKm ? `<span>🛣️ ${entry.currentKm.toLocaleString()} km</span>` : ""}
         <span class="trip-history-entry__date">${formatDate(entry.createdAt)}</span>
       </div>
@@ -439,7 +444,7 @@ export function tripEntryCard(entry) {
             ${entry.pricePerL ? `(${entry.pricePerL.toFixed(2)} RSD/L)` : ""}
           </div>
           <div class="trip-entry-card__sub">
-            🏪 ${entry.fuelStation}${entry.fuelStationContracted === false ? ` <span class="badge badge--service badge--inline">${t("trip_fuel_off_contract_badge")}</span>` : ""}
+            🏪 ${entry.fuelStation}${entry.fuelStationAddress ? `, ${escHtmlTrips(entry.fuelStationAddress)}` : ""}
             ${entry.receiptNo ? ` · ${t("trip_fuel_receipt")}: ${entry.receiptNo}` : ""}
             ${entry.currentKm ? ` · ${entry.currentKm.toLocaleString()} km` : ""}
           </div>

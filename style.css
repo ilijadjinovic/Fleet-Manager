@@ -2561,177 +2561,64 @@ tbody td {
 .next-service-banner__custom { font-size: 12px; opacity: 0.75; margin-top: 2px; }
 .service-reminder__custom { font-size: 11px; opacity: 0.8; margin-left: 6px; white-space: nowrap; }
 
-/* ── TOČENJE GORIVA: QR skener, upozorenja, pumpe po ugovoru ── */
-.form-warning {
-  margin: 6px 0 0; padding: 8px 10px; border-radius: 8px;
-  font-size: 13px; line-height: 1.35;
-  background: var(--color-warning-soft); color: var(--color-warning);
-}
-.fuel-scan { margin-bottom: 14px; }
-.fuel-scan__result {
-  margin-top: 10px; padding: 10px 12px; border-radius: 10px;
-  background: var(--color-success-soft); color: var(--color-success);
-  font-size: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
-}
-.fuel-scan__meta { font-size: 13px; opacity: 0.9; word-break: break-all; }
 
-.qr-scan-overlay {
-  position: fixed; inset: 0; z-index: 10000;
-  background: rgba(0,0,0,0.9);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
+/* ── Skeniranje fiskalnog računa ─────────────────────────────── */
+.scan-status {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 13px;
+  line-height: 1.4;
 }
-.qr-scan { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 12px; color: #fff; }
-.qr-scan__title { font-size: 18px; font-weight: 600; text-align: center; }
-.qr-scan__viewport {
-  position: relative; width: 100%; aspect-ratio: 1 / 1;
-  border-radius: 14px; overflow: hidden; background: #000;
-}
-.qr-scan__video { width: 100%; height: 100%; object-fit: cover; }
-.qr-scan__frame {
-  position: absolute; inset: 12%; border: 3px solid rgba(255,255,255,0.85);
-  border-radius: 14px; pointer-events: none;
-}
-.qr-scan__hint { margin: 0; text-align: center; font-size: 14px; opacity: 0.9; }
-.qr-scan__hint--error { color: #fca5a5; opacity: 1; }
-.qr-scan__actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.scan-status--info  { background: var(--color-surface-2, #eef2f7); color: var(--color-text, #1a2744); }
+.scan-status--ok    { background: #e6f6ec; color: #17653a; }
+.scan-status--warn  { background: #fff4dc; color: #8a5a00; }
+.scan-status--error { background: #fde8e8; color: #a31d1d; }
 
-.fs-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.fs-row { display: flex; align-items: center; gap: 8px; }
-.fs-row__default-wrap { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.fs-row__name { flex: 1; min-width: 0; }
-.fs-add { display: flex; gap: 8px; }
-.fs-add .form-input { flex: 1; min-width: 0; }
-
-/* ── PRIJAVE I TROŠKOVI + FINANSIJSKI SAŽETAK (entries-view.js) ── */
-.entries-counters {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 1px; background: var(--color-border);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  overflow: hidden; margin-bottom: 12px;
+.scan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.entries-counter {
-  background: var(--color-surface-2); padding: 10px 8px;
-  text-align: center; display: flex; flex-direction: column; gap: 2px;
+.scan-overlay__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.entries-counter__value { font-size: 18px; font-weight: 800; color: var(--color-text); }
-.entries-counter__label {
-  font-size: 10px; color: var(--color-text-faint);
-  text-transform: uppercase; letter-spacing: 0.03em;
+.scan-overlay__frame {
+  position: relative;
+  width: min(72vw, 320px);
+  aspect-ratio: 1 / 1;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
 }
-.entries-counter--danger .entries-counter__value { color: var(--color-danger); }
-.entries-counter--warn   .entries-counter__value { color: var(--color-warning); }
-
-.entries-chips { margin-bottom: 14px; }
-.chip__count { opacity: 0.75; font-weight: 700; margin-left: 2px; }
-
-.entries-attention {
-  border: 1px solid var(--color-warning-border-soft);
-  background: var(--color-warning-bg-faint);
-  border-radius: var(--radius-md);
-  padding: 10px; margin-bottom: 16px;
+.scan-overlay__hint {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
-.entries-attention__title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
-
-.entries-month { margin-bottom: 16px; }
-.entries-month__title {
-  font-size: 13px; font-weight: 700;
-  padding-bottom: 6px; margin-bottom: 8px;
-  border-bottom: 1px solid var(--color-border);
-}
-.entries-month__count {
-  background: var(--color-surface-3); color: var(--color-text-muted);
-  border-radius: 10px; font-size: 11px; font-weight: 700;
-  padding: 1px 8px; margin-left: 6px;
-}
-.entries-month__items { display: flex; flex-direction: column; gap: 8px; }
-.entries-summary-note {
-  font-size: 11px; color: var(--color-text-faint);
-  text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px;
-}
-
-/* kompaktan red za gorivo / trošak */
-.ledger-row {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 10px 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-slate-dark);
-  border-radius: var(--radius-md);
-}
-.ledger-row--fuel { border-left-color: var(--color-info); }
-.ledger-row__icon { font-size: 18px; line-height: 1.4; }
-.ledger-row__body { flex: 1; min-width: 0; }
-.ledger-row__main { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
-.ledger-row__sub  { font-size: 12px; color: var(--color-text-muted); margin-top: 3px; }
-.ledger-row__notes { font-size: 12px; color: var(--color-text-faint); margin-top: 3px; font-style: italic; }
-.ledger-row__date { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; }
-
-/* sažetak troškova */
-.fin-periods { margin-bottom: 14px; }
-.fin-summary {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 10px; margin-bottom: 10px;
-}
-.fin-card {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 12px;
-}
-.fin-card__label {
-  font-size: 11px; font-weight: 700; color: var(--color-text-muted);
-  text-transform: uppercase; letter-spacing: 0.03em;
-}
-.fin-card__value { font-size: 18px; font-weight: 800; margin-top: 4px; }
-.fin-card__sub   { font-size: 11px; color: var(--color-text-faint); margin-top: 4px; line-height: 1.5; }
-.fin-total-bar { font-size: 14px; }
-.fin-total-bar strong { font-size: 16px; }
-.fin-open {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; flex-wrap: wrap;
-  padding: 8px 14px; margin-bottom: 12px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: 13px; color: var(--color-text-muted);
-}
-.fin-open--warn {
-  background: var(--color-warning-bg-faint);
-  border-color: var(--color-warning-border-soft);
-  color: var(--color-text);
-}
-
-/* mesečna tabela — otvara se na klik */
-.fin-monthly {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  margin-bottom: 8px;
-}
-.fin-monthly > summary {
-  cursor: pointer; padding: 10px 14px;
-  font-size: 13px; font-weight: 700; list-style-position: inside;
-}
-.fin-monthly[open] > summary { border-bottom: 1px solid var(--color-border); }
-.fin-monthly__scroll { overflow-x: auto; }
-.fin-monthly__table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.fin-monthly__table th, .fin-monthly__table td {
-  padding: 8px 12px; text-align: right; white-space: nowrap;
-  border-bottom: 1px solid var(--color-border);
-}
-.fin-monthly__table th:first-child, .fin-monthly__table td:first-child { text-align: left; }
-.fin-monthly__table th {
-  font-size: 10px; color: var(--color-text-faint);
-  text-transform: uppercase; letter-spacing: 0.03em;
-}
-.fin-monthly__table tfoot td { border-bottom: 0; font-weight: 700; background: var(--color-surface-3); }
-.fin-monthly__hint { font-size: 10px; color: var(--color-text-faint); padding: 6px 12px 8px; text-align: right; }
-
-.incidents-group__total { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
-
-@media (max-width: 640px) {
-  .entries-counters { grid-template-columns: repeat(2, 1fr); }
-  .fin-summary { grid-template-columns: repeat(2, 1fr); }
-  .ledger-row { flex-wrap: wrap; }
-  .ledger-row__date { width: 100%; text-align: right; }
+.scan-overlay__close {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
 }
