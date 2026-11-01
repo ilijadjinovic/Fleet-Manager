@@ -632,16 +632,99 @@ function renderSafetyTab(v) {
   `;
 }
 
+// ── TAB "FINANSIJSKI PODACI" ──────────────────────────────────
+// Zbir troškova vozila za izabrani period: gorivo, putarine, parking,
+// pranje, ostali troškovi i servisi. Servisi se računaju SAMO kad su
+// završeni (planirani i otkazani nisu trošak). Podaci se učitavaju jednom
+// (upiti samo po vehicleId, bez složenih indeksa), a promena perioda ih
+// samo filtrira u memoriji.
+function financeTotals(services, entries, from, to) {
+  const fromMs = from ? from.getTime() : -Infinity;
+  const toMs   = to   ? to.getTime()   : Infinity;
+  const inPeriod = (val) => {
+    const ms = val?.toMillis ? val.toMillis() : new Date(val).getTime();
+    return !isNaN(ms) && ms >= fromMs && ms <= toMs;
+  };
+
+  const sum = {
+    fuelCount: 0, fuelL: 0, fuelCost: 0,
+    toll: 0, parking: 0, washing: 0, other: 0,
+    serviceCount: 0, serviceCost: 0, servicePlanned: 0, serviceCancelled: 0,
+  };
+
+  entries.filter(e => inPeriod(e.createdAt)).forEach(e => {
+    if (e.type === "fuel") {
+      sum.fuelCount++;
+      sum.fuelL    += Number(e.fuelAmount) || 0;
+      sum.fuelCost += Number(e.fuelCost)   || 0;
+    } else if (e.type === "toll")       sum.toll    += Number(e.amount) || 0;
+    else if (e.type === "parking")      sum.parking += Number(e.amount) || 0;
+    else if (e.type === "washing")      sum.washing += Number(e.amount) || 0;
+    else if (e.type === "other_cost")   sum.other   += Number(e.amount) || 0;
+  });
+
+  services.filter(sv => inPeriod(sv.serviceDate)).forEach(sv => {
+    const status = effectiveServiceStatus(sv);
+    if (status === SERVICE_STATUS.DONE) {
+      sum.serviceCount++;
+      sum.serviceCost += Number(sv.cost) || 0;
+    } else if (status === SERVICE_STATUS.CANCELLED) {
+      sum.serviceCancelled++;
+    } else {
+      sum.servicePlanned++; // zakazano ili u servisu
+    }
+  });
+
+  sum.total = sum.fuelCost + sum.toll + sum.parking + sum.washing + sum.other + sum.serviceCost;
+  return sum;
+}
+
+function financeSummaryHTML(sum, from, to) {
+  const rsd = (n) => `${Math.round(n).toLocaleString()} RSD`;
+  const periodLabel = (from || to)
+    ? `${from ? toDMY(from) : "…"} – ${to ? toDMY(to) : "…"}`
+    : t("finance_all_period");
+  const avgPrice = sum.fuelL > 0 ? `${t("finance_avg_price")}: ${(sum.fuelCost / sum.fuelL).toFixed(2)} RSD/L` : "";
+
+  const card = (icon, label, value, sub = "") => `
+    <div class="finance-card">
+      <div class="finance-card__label">${icon} ${label}</div>
+      <div class="finance-card__value">${value}</div>
+      ${sub ? `<div class="finance-card__sub">${sub}</div>` : ""}
+    </div>`;
+
+  const skipped = [];
+  if (sum.servicePlanned)   skipped.push(`${t("service_status_planned").toLowerCase()}: ${sum.servicePlanned}`);
+  if (sum.serviceCancelled) skipped.push(`${t("service_status_cancelled").toLowerCase()}: ${sum.serviceCancelled}`);
+
+  return `
+    <div class="finance-period-label">📅 ${t("finance_period_label")}: <strong>${periodLabel}</strong></div>
+    <div class="finance-grid">
+      ${card("⛽", t("trip_entry_fuel"), rsd(sum.fuelCost),
+          `${sum.fuelL.toFixed(1)} L · ${sum.fuelCount} ${t("finance_fillups")}${avgPrice ? " · " + avgPrice : ""}`)}
+      ${card("🛣️", t("trip_entry_toll"),    rsd(sum.toll))}
+      ${card("🅿️", t("trip_entry_parking"), rsd(sum.parking))}
+      ${card("🚿", t("trip_entry_washing"), rsd(sum.washing))}
+      ${card("📋", t("trip_entry_cost"),    rsd(sum.other))}
+      ${card("🔧", t("finance_services"),   rsd(sum.serviceCost),
+          `${sum.serviceCount} ${t("finance_services_done")}${skipped.length ? " · " + t("finance_services_not_counted") + " (" + skipped.join(", ") + ")" : ""}`)}
+      <div class="finance-card finance-card--total">
+        <div class="finance-card__label">💰 ${t("finance_total")}</div>
+        <div class="finance-card__value">${rsd(sum.total)}</div>
+      </div>
+    </div>`;
+}
+
 async function loadFinanceTab(container, v) {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   try {
-    const snap = await getDocs(
-      query(
-        collection(db, "companies", S.companyId, "services"),
-        where("vehicleId", "==", v.id)
-      )
-    );
-    const totalServiceCost = snap.docs.reduce((sum, d) => sum + (Number(d.data().cost) || 0), 0);
+    const col = (name) => collection(db, "companies", S.companyId, name);
+    const [svcSnap, entSnap] = await Promise.all([
+      getDocs(query(col("services"),    where("vehicleId", "==", v.id))),
+      getDocs(query(col("tripEntries"), where("vehicleId", "==", v.id))),
+    ]);
+    const services = svcSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const entries  = entSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     const rows = [
       [t("vehicle_owner"),          v.ownerName],
@@ -650,15 +733,83 @@ async function loadFinanceTab(container, v) {
       [t("vehicle_purchase_value"), v.purchaseValue ? Number(v.purchaseValue).toLocaleString() + " RSD" : null],
     ];
 
+    const defaultFrom = new Date();
+    defaultFrom.setDate(defaultFrom.getDate() - 30);
+
     container.innerHTML = `
-      ${totalServiceCost > 0 ? `
-        <div class="service-total-bar">
-          <span>${t("service_total_cost")}:</span>
-          <strong>${totalServiceCost.toLocaleString()} RSD</strong>
+      <div class="finance-period">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">${t("report_date_from")}</label>
+            <input id="fin-from" class="form-input" type="text" inputmode="numeric" maxlength="10"
+              placeholder="${datePlaceholder()}" value="${toDMY(defaultFrom)}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t("report_date_to")}</label>
+            <input id="fin-to" class="form-input" type="text" inputmode="numeric" maxlength="10"
+              placeholder="${datePlaceholder()}" value="${todayDMY()}" />
+          </div>
         </div>
-      ` : ""}
+        <div class="finance-period__actions">
+          <button type="button" class="btn btn--secondary btn--sm" data-fin-preset="30">${t("finance_preset_30")}</button>
+          <button type="button" class="btn btn--secondary btn--sm" data-fin-preset="year">${t("finance_preset_year")}</button>
+          <button type="button" class="btn btn--secondary btn--sm" data-fin-preset="all">${t("finance_preset_all")}</button>
+          <button type="button" class="btn btn--primary btn--sm" id="fin-apply">${t("finance_apply")}</button>
+        </div>
+      </div>
+
+      <div id="fin-summary"></div>
+
+      <div class="form-section-title" style="margin-top:18px">${t("finance_purchase_title")}</div>
       ${detailTable(rows)}
     `;
+
+    attachDateMask("fin-from");
+    attachDateMask("fin-to");
+
+    const apply = () => {
+      // Oba datuma su opciona: prazno "Od" = od početka, prazno "Do" = do danas i dalje
+      const res = collectDates([{ id: "fin-from" }, { id: "fin-to" }]);
+      if (!res.ok) return;
+      const from = res.values["fin-from"];
+      const to   = res.values["fin-to"];
+      if (from && to && from > to) {
+        setDateError("fin-to", t("date_err_range_to_before_from"), { focus: true });
+        return;
+      }
+      if (to) to.setHours(23, 59, 59, 999);
+      const sum = financeTotals(services, entries, from, to);
+      document.getElementById("fin-summary").innerHTML = financeSummaryHTML(sum, from, to);
+    };
+
+    const setPeriod = (from, to) => {
+      document.getElementById("fin-from").value = from ? toDMY(from) : "";
+      document.getElementById("fin-to").value   = to   ? toDMY(to)   : "";
+      apply();
+    };
+
+    container.querySelectorAll("[data-fin-preset]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const kind = btn.dataset.finPreset;
+        const today = new Date();
+        if (kind === "30") {
+          const d = new Date(); d.setDate(d.getDate() - 30);
+          setPeriod(d, today);
+        } else if (kind === "year") {
+          setPeriod(new Date(today.getFullYear(), 0, 1), today);
+        } else {
+          setPeriod(null, null); // ceo period
+        }
+      });
+    });
+    document.getElementById("fin-apply")?.addEventListener("click", apply);
+    ["fin-from", "fin-to"].forEach(id =>
+      document.getElementById(id)?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); apply(); }
+      })
+    );
+
+    apply();
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }

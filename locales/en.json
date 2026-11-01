@@ -597,7 +597,7 @@
   "report_pdf_period_label": "Period",
   "report_pdf_page_label": "Page",
   "report_pdf_total_km_label": "Total distance",
-  "report_pdf_total_service_cost_label": "Total service costs",
+  "report_pdf_total_service_cost_label": "Total service costs (completed)",
   "report_pdf_fuel_total_label": "Total",
   "report_pdf_fuel_avg_label": "average",
   "report_pdf_total_other_costs_label": "Total other costs",
@@ -714,5 +714,18 @@
   "vehicle_assign_collapse_all": "Collapse all drivers",
   "vehicle_assign_assignments_n": "assignments",
   "vehicle_assign_orphans": "Entries without a linked assignment",
-  "vehicle_assign_hint": "Click a driver to see their assignments, and an assignment to see trips, fuel, costs and reports."
+  "vehicle_assign_hint": "Click a driver to see their assignments, and an assignment to see trips, fuel, costs and reports.",
+  "finance_period_label": "Period",
+  "finance_all_period": "All time",
+  "finance_fillups": "fill-ups",
+  "finance_avg_price": "Average price",
+  "finance_services": "Services",
+  "finance_services_done": "completed",
+  "finance_services_not_counted": "not counted",
+  "finance_total": "Total",
+  "finance_preset_30": "Last 30 days",
+  "finance_preset_year": "This year",
+  "finance_preset_all": "All time",
+  "finance_apply": "Show",
+  "finance_purchase_title": "Ownership and purchase"
 }

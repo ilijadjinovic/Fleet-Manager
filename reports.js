@@ -12,6 +12,7 @@ import {
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, showToast } from "./app.js";
 import { isVehicleRegistered } from "./vehicles.js";
+import { effectiveServiceStatus, SERVICE_STATUS } from "./service-status.js";
 import {
   toDMY, datePlaceholder, attachDateMask, collectDates, setDateError
 } from "./date-input.js";
@@ -512,16 +513,14 @@ async function generateDriverReport(allDrivers) {
       if (!firstPage) pdf.addPage();
       firstPage = false;
 
+      // Zapisi su istorijski mešoviti: neki imaju popunjen samo driverId, neki
+      // samo driverUid (npr. kad profil korisnika nema driverId). Zato se traži
+      // po OBA polja i rezultati se spajaju bez duplikata — isto kao u
+      // trips.js (loadDriverAssignmentHistory) i na tabu vozača.
       const [assignments, entries, incidents] = await Promise.all([
-        getDocsInPeriod("assignments", "startDate", from, to, [
-          where("driverId", "==", driver.id)
-        ]),
-        getDocsInPeriod("tripEntries", "createdAt", from, to, [
-          where("driverId", "==", driver.id)
-        ]),
-        getDocsInPeriod("incidents", "createdAt", from, to, [
-          where("driverId", "==", driver.id)
-        ]),
+        getDriverDocsInPeriod("assignments", "startDate", from, to, driver),
+        getDriverDocsInPeriod("tripEntries", "createdAt", from, to, driver),
+        getDriverDocsInPeriod("incidents",   "createdAt", from, to, driver),
       ]);
 
       const fuelings = entries.filter(e => e.type === "fuel");
@@ -815,6 +814,18 @@ function drawAssignmentsSection(pdf, assignments, y) {
   return y + 2;
 }
 
+function isServiceDone(srv) {
+  return effectiveServiceStatus(srv) === SERVICE_STATUS.DONE;
+}
+
+// Kolona "Trošak": za završen servis iznos, za ostale (planiran, u servisu,
+// otkazan) naziv statusa — da se vidi zašto iznos nije u ukupnom zbiru.
+function serviceCostCell(srv) {
+  const status = effectiveServiceStatus(srv);
+  if (status !== SERVICE_STATUS.DONE) return t("service_status_" + status);
+  return srv.cost ? Number(srv.cost).toLocaleString() + " RSD" : "—";
+}
+
 function drawServicesSection(pdf, services, y) {
   y = drawSectionTitle(pdf, `${t("report_pdf_section_services")} (${services.length})`, y, 15);
   if (services.length === 0) { return drawEmptyRow(pdf, y); }
@@ -833,7 +844,7 @@ function drawServicesSection(pdf, services, y) {
       t("service_type_" + s.serviceType) || s.serviceType,
       formatDateSr(s.serviceDate),
       s.km ? s.km.toLocaleString() : "—",
-      s.cost ? s.cost.toLocaleString() + " RSD" : "—",
+      serviceCostCell(s),
       s.workshop || "—",
     ], y, i % 2 === 0);
 
@@ -847,7 +858,10 @@ function drawServicesSection(pdf, services, y) {
     }
   });
 
-  const totalCost = services.reduce((s, srv) => s + (srv.cost || 0), 0);
+  // U zbir ulaze samo ZAVRŠENI servisi — planirani i otkazani nisu trošak.
+  const totalCost = services
+    .filter(isServiceDone)
+    .reduce((s, srv) => s + (Number(srv.cost) || 0), 0);
   if (totalCost > 0) {
     y += 2;
     pdf.setFont(REPORT_FONT, "bold");
@@ -1090,6 +1104,29 @@ async function getDocsInPeriod(subcollection, dateField, from, to, extraWhere = 
     console.warn(`getDocsInPeriod(${subcollection}) error:`, e);
     return [];
   }
+}
+
+// Dokumenti vozača u periodu: upit po driverId + (ako vozač ima lokalni nalog)
+// upit po driverUid; spajanje bez duplikata po id-ju, sortirano po datumu.
+async function getDriverDocsInPeriod(subcollection, dateField, from, to, driver) {
+  const jobs = [
+    getDocsInPeriod(subcollection, dateField, from, to, [where("driverId", "==", driver.id)]),
+  ];
+  if (driver.localAuthUid) {
+    jobs.push(
+      getDocsInPeriod(subcollection, dateField, from, to, [where("driverUid", "==", driver.localAuthUid)])
+    );
+  }
+  const merged = new Map();
+  (await Promise.all(jobs)).flat().forEach(d => merged.set(d.id, d));
+  return [...merged.values()].sort((a, b) => toMillis(a[dateField]) - toMillis(b[dateField]));
+}
+
+function toMillis(val) {
+  if (!val) return 0;
+  if (val.toMillis) return val.toMillis();
+  const d = new Date(val);
+  return isNaN(d) ? 0 : d.getTime();
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
