@@ -9,6 +9,10 @@ import {
   addDoc, updateDoc, serverTimestamp, where, Timestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
+import {
+  toDMY, todayDMY, datePlaceholder, attachDateMask,
+  collectDates, setDateError
+} from "./date-input.js";
 import { S, showToast, openModal } from "./app.js";
 import { fuelLevelLabel } from "./vehicles.js";
 
@@ -458,8 +462,6 @@ function bindSearchDropdown(inputId, dropdownId, hiddenId, items, labelFn, value
 async function saveAssignment(assignmentId, existing) {
   const vehicleId = document.getElementById("af-vehicleId")?.value;
   const driverId  = document.getElementById("af-driverId")?.value;
-  const startDate = document.getElementById("af-startDate")?.value;
-  const endDate   = document.getElementById("af-endDate")?.value;
   const startKm   = document.getElementById("af-startKm")?.value;
   const tripType  = document.querySelector("input[name='af-tripType']:checked")?.value || "local";
   const destination = document.getElementById("af-destination")?.value.trim();
@@ -469,22 +471,26 @@ async function saveAssignment(assignmentId, existing) {
   // Validacija
   if (!vehicleId) { showAssignError(t("assignment_no_vehicle")); return false; }
   if (!driverId)  { showAssignError(t("assignment_no_driver")); return false; }
-  if (!startDate) { showAssignError(t("assignment_no_date")); return false; }
   if (tripType === "intercity" && !destination) {
     showAssignError(t("assignment_no_destination"));
     return false;
   }
 
+  // Datumi: poruka ispod pogrešnog polja + fokus na njega
+  const dates = collectDates([
+    { id: "af-startDate", required: true, requiredMessage: t("assignment_no_date") },
+    { id: "af-endDate" },
+  ]);
+  if (!dates.ok) return false;
+
   const vehicle = allVehicles.find(v => v.id === vehicleId);
   const driver  = allDrivers.find(d => d.id === driverId);
 
-  const startDateObj = parseDMY(startDate);
-  const endDateObj   = endDate ? parseDMY(endDate) : null;
+  const startDateObj = dates.values["af-startDate"];
+  const endDateObj   = dates.values["af-endDate"];
 
-  if (!startDateObj) { showAssignError(t("assignment_no_date")); return false; }
-  if (endDate && !endDateObj) { showAssignError(t("required_field")); return false; }
   if (endDateObj && endDateObj <= startDateObj) {
-    showAssignError(t("required_field"));
+    setDateError("af-endDate", t("date_err_end_before_start"), { focus: true });
     return false;
   }
 
@@ -652,12 +658,12 @@ function showConflictDialog(existingAssignment, newDriver, suggestedCloseDate) {
 
       import("./app.js").then(({ openModal }) => {
         openModal(t("assignment_conflict_title"), bodyHTML, () => {
-          // Ažuriraj datum zatvaranja iz inputa
-          const dateInput = document.getElementById("conflict-close-date");
-          const parsed = dateInput?.value ? parseDMY(dateInput.value) : null;
-          if (parsed) {
-            suggestedCloseDate.setTime(parsed.getTime());
-          }
+          // Ažuriraj datum zatvaranja iz inputa (nevažeći datum ne zatvara dijalog)
+          const closeDate = collectDates([
+            { id: "conflict-close-date", required: true },
+          ]);
+          if (!closeDate.ok) return false;
+          suggestedCloseDate.setTime(closeDate.values["conflict-close-date"].getTime());
           resolve(true);
         });
 
@@ -719,29 +725,20 @@ function openUnassignForm(assignment) {
 }
 
 async function processUnassign(assignment) {
-  const endDate = document.getElementById("ua-endDate")?.value;
   const endKm   = document.getElementById("ua-endKm")?.value;
   const notes   = document.getElementById("ua-notes")?.value.trim();
 
-  if (!endDate) {
-    const err = document.getElementById("unassign-error");
-    if (err) { err.textContent = t("assignment_unassign_date_required"); err.classList.remove("hidden"); }
-    return false;
-  }
-
-  const endDateObj = parseDMY(endDate);
-  if (!endDateObj) {
-    const err = document.getElementById("unassign-error");
-    if (err) { err.textContent = t("assignment_unassign_date_required"); err.classList.remove("hidden"); }
-    return false;
-  }
+  const unassignDates = collectDates([
+    { id: "ua-endDate", required: true, requiredMessage: t("assignment_unassign_date_required") },
+  ]);
+  if (!unassignDates.ok) return false;
+  const endDateObj = unassignDates.values["ua-endDate"];
   const startDate  = assignment.startDate?.toDate
     ? assignment.startDate.toDate()
     : new Date(assignment.startDate);
 
   if (endDateObj < startDate) {
-    const err = document.getElementById("unassign-error");
-    if (err) { err.textContent = t("assignment_unassign_date_error"); err.classList.remove("hidden"); }
+    setDateError("ua-endDate", t("assignment_unassign_date_error"), { focus: true });
     return false;
   }
 
@@ -804,51 +801,6 @@ async function processUnassign(assignment) {
 // ── UTILS ─────────────────────────────────────────────────────
 function formatDate(val) {
   return formatDateDMY(val);
-}
-
-// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
-// <input type="date"> prikazuje kalendar u formatu koji zavisi od
-// jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
-// pa koristimo tekstualno polje sa maskom umesto toga.
-function toDMY(val) {
-  if (!val) return "";
-  const d = val.toDate ? val.toDate() : new Date(val);
-  if (isNaN(d)) return "";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}.${mm}.${d.getFullYear()}`;
-}
-
-function todayDMY() {
-  return toDMY(new Date());
-}
-
-// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
-// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
-function datePlaceholder() {
-  return getCurrentLang() === "en" ? "dd.mm.yyyy" : "dd.mm.gggg";
-}
-
-function parseDMY(str) {
-  if (!str) return null;
-  const m = String(str).trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})\.?$/);
-  if (!m) return null;
-  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  return d;
-}
-
-function attachDateMask(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener("input", () => {
-    const digits = el.value.replace(/\D/g, "").slice(0, 8);
-    let out = digits;
-    if (digits.length > 4) out = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
-    else if (digits.length > 2) out = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    el.value = out;
-  });
 }
 
 function showAssignError(msg) {

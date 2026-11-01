@@ -10,6 +10,10 @@ import {
   where
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
+import {
+  toDMY, todayDMY, parseDMY, datePlaceholder, attachDateMask,
+  collectDates, setDateError
+} from "./date-input.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
 import {
@@ -18,6 +22,10 @@ import {
   cleanVehicleServiceOverrides
 } from "./service-status.js";
 import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
+import {
+  loadVehicleAssignmentHistory, groupAssignmentsByDriver, summarizeAssignments,
+  historyAssignmentCard, historyEntryItem, attachAssignmentHistoryEvents
+} from "./trips.js";
 
 // ── PREDEFINISANE BOJE VOZILA ────────────────────────────────
 const VEHICLE_COLORS = [
@@ -806,21 +814,147 @@ export function incidentToServicePrefill(inc) {
   };
 }
 
+// ── TAB "ZADUŽENJA" — sve aktivnosti svih vozača na ovom vozilu ──
+// Zaduženja su grupisana po vozaču. Klik na vozača otvara/zatvara njegova
+// zaduženja, a klik na zaduženje otvara vožnje sa gorivom, troškovima i
+// prijavama (ista kartica kao u tabu "Zaduženja" kod vozača).
+function escText(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+function assignSummaryBoxes(sum) {
+  return `
+    <div class="assignment-history-summary assignment-history-summary--five">
+      <div class="assignment-history-summary__item">
+        <span class="assignment-history-summary__value">${sum.count}</span>
+        <span class="assignment-history-summary__label">${t("vehicle_assign_count")}</span>
+      </div>
+      <div class="assignment-history-summary__item">
+        <span class="assignment-history-summary__value">${sum.km.toLocaleString()} km</span>
+        <span class="assignment-history-summary__label">${t("assignment_summary_km")}</span>
+      </div>
+      <div class="assignment-history-summary__item">
+        <span class="assignment-history-summary__value">${sum.fuelL.toFixed(1)} L</span>
+        <span class="assignment-history-summary__label">${t("trip_stats_fuel")}</span>
+      </div>
+      <div class="assignment-history-summary__item">
+        <span class="assignment-history-summary__value">${(sum.fuelCost + sum.otherCost).toLocaleString()} RSD</span>
+        <span class="assignment-history-summary__label">${t("assignment_summary_costs")}</span>
+      </div>
+      <div class="assignment-history-summary__item ${sum.incidents > 0 ? "assignment-history-summary__item--warn" : ""}">
+        <span class="assignment-history-summary__value">${sum.incidents}</span>
+        <span class="assignment-history-summary__label">${t("trip_stats_incidents")}</span>
+      </div>
+    </div>`;
+}
+
+function driverGroupHTML(group, history) {
+  const { tripsByAssignment, entriesByTrip, entriesByAssignment } = history;
+  const sum = summarizeAssignments(group.assignments, tripsByAssignment, entriesByAssignment);
+
+  // Period: od najranijeg početka do najkasnijeg kraja (ili "Aktivno")
+  const first = group.assignments[group.assignments.length - 1];
+  const last  = group.assignments[0];
+  const periodEnd = sum.hasActive
+    ? t("assignment_status_active")
+    : (last?.endDate ? formatDate(last.endDate) : "—");
+
+  return `
+    <section class="vehicle-driver-group">
+      <div class="vehicle-driver-group__header" data-toggle-driver-group role="button" tabindex="0" aria-expanded="true">
+        <div class="vehicle-driver-group__who">
+          <div class="vehicle-driver-group__name">
+            👤 <strong>${escText(group.driverName)}</strong>
+            ${sum.hasActive ? `<span class="trip-history-badge trip-history-badge--active">🟢 ${t("assignment_status_active")}</span>` : ""}
+          </div>
+          <div class="vehicle-driver-group__period">
+            📅 ${formatDate(first?.startDate)} → ${periodEnd} · ${sum.count} ${t("vehicle_assign_assignments_n")}
+          </div>
+        </div>
+        <div class="vehicle-driver-group__stats">
+          <span class="trip-history-badge">🛣️ ${sum.km.toLocaleString()} km</span>
+          <span class="trip-history-badge">⛽ ${sum.fuelL.toFixed(1)} L</span>
+          <span class="trip-history-badge">💰 ${(sum.fuelCost + sum.otherCost).toLocaleString()} RSD</span>
+          ${sum.incidents > 0 ? `<span class="trip-history-badge trip-history-badge--warn">⚠️ ${sum.incidents}</span>` : ""}
+          <span class="vehicle-driver-group__chevron">▾</span>
+        </div>
+      </div>
+      <div class="vehicle-driver-group__body">
+        ${group.assignments.map(a =>
+          historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entriesByAssignment, { hideVehicle: true })
+        ).join("")}
+      </div>
+    </section>`;
+}
+
 async function loadAssignmentsTab(container, vehicle) {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   try {
-    const snap = await getDocs(
-      query(
-        collection(db, "companies", S.companyId, "assignments"),
-        where("vehicleId", "==", vehicle.id),
-        orderBy("startDate", "desc")
-      )
-    );
-    const assignments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const history = await loadVehicleAssignmentHistory(vehicle.id);
+    const { assignments, tripsByAssignment, entriesByAssignment, orphanEntries } = history;
 
-    container.innerHTML = assignments.length === 0
-      ? `<div class="empty-state"><div class="empty-state__icon">🔑</div><p>${t("no_data")}</p></div>`
-      : `<div class="assignment-list">${assignments.map(a => assignmentItem(a)).join("")}</div>`;
+    if (assignments.length === 0 && orphanEntries.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-state__icon">🔑</div><p>${t("no_data")}</p></div>`;
+      return;
+    }
+
+    const groups = groupAssignmentsByDriver(assignments);
+    const total  = summarizeAssignments(assignments, tripsByAssignment, entriesByAssignment);
+
+    container.innerHTML = `
+      ${assignSummaryBoxes(total)}
+
+      <div class="vehicle-assign-toolbar">
+        <span class="form-hint">${t("vehicle_assign_hint")}</span>
+        ${groups.length > 1 ? `<button type="button" class="btn btn--secondary btn--sm" id="btn-toggle-all-drivers"
+          data-state="open">${t("vehicle_assign_collapse_all")}</button>` : ""}
+      </div>
+
+      <div class="vehicle-driver-groups">
+        ${groups.map(g => driverGroupHTML(g, history)).join("")}
+      </div>
+
+      ${orphanEntries.length > 0 ? `
+        <section class="vehicle-driver-group vehicle-driver-group--orphans">
+          <div class="vehicle-driver-group__header vehicle-driver-group__header--static">
+            <div class="vehicle-driver-group__name">📋 <strong>${t("vehicle_assign_orphans")}</strong> (${orphanEntries.length})</div>
+          </div>
+          <div class="vehicle-driver-group__body">
+            <div class="trip-history-card__entries">${orphanEntries.map(e => historyEntryItem(e)).join("")}</div>
+          </div>
+        </section>` : ""}
+    `;
+
+    // Otvaranje/zatvaranje zaduženja i vožnji (isti handleri kao kod vozača)
+    attachAssignmentHistoryEvents(container);
+
+    // Otvaranje/zatvaranje grupe jednog vozača
+    const setGroupOpen = (group, open) => {
+      group.classList.toggle("vehicle-driver-group--collapsed", !open);
+      group.querySelector("[data-toggle-driver-group]")?.setAttribute("aria-expanded", String(open));
+    };
+    container.querySelectorAll("[data-toggle-driver-group]").forEach(header => {
+      const toggle = () => {
+        const group = header.closest(".vehicle-driver-group");
+        setGroupOpen(group, group.classList.contains("vehicle-driver-group--collapsed"));
+      };
+      header.addEventListener("click", toggle);
+      header.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+    });
+
+    // "Skupi sve / Razvij sve"
+    const toggleAll = document.getElementById("btn-toggle-all-drivers");
+    toggleAll?.addEventListener("click", () => {
+      const open = toggleAll.dataset.state !== "open"; // sledeće stanje
+      container.querySelectorAll("section.vehicle-driver-group:not(.vehicle-driver-group--orphans)")
+        .forEach(g => setGroupOpen(g, open));
+      toggleAll.dataset.state = open ? "open" : "closed";
+      toggleAll.textContent = open ? t("vehicle_assign_collapse_all") : t("vehicle_assign_expand_all");
+    });
   } catch (e) {
     container.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
@@ -1192,7 +1326,25 @@ async function saveVehicle(vehicleId) {
       valid = false;
     }
   });
-  if (!valid) throw new Error("validation");
+
+  // Datumi (svi opcioni): nepostojeći datum (npr. 31.09.2026) više se ne
+  // pretvara tiho u prazno polje — korisnik dobija poruku ispod polja.
+  const vehicleDates = collectDates([
+    { id: "f-firstRegDate" },
+    { id: "f-regExpiry" },
+    { id: "f-insuranceExpiry" },
+    { id: "f-purchaseDate" },
+    { id: "f-tachographExpiry" },
+  ]);
+  if (!vehicleDates.ok) valid = false;
+
+  if (!valid) {
+    // Fokus na prvo pogrešno polje po redosledu u formi
+    const firstBad = document.querySelector(".input--error");
+    firstBad?.focus();
+    firstBad?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    throw new Error("validation");
+  }
 
   try {
     // ── JEDINSTVENOST TABLICE ─────────────────────────────────
@@ -1412,8 +1564,17 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   `;
 
   openModal(isEdit ? `${t("edit")}: ${t("service_type_" + s.serviceType) || s.serviceType}` : t("service_add"), bodyHTML, async () => {
-    let serviceDateVal = dateOrNull("sf-date");
-    if (!serviceDateVal) return;
+    const svcDates = collectDates([
+      { id: "sf-date", required: true },
+      { id: "sf-endDate" },
+    ]);
+    if (!svcDates.ok) return false; // false = dijalog ostaje otvoren
+    let serviceDateVal = svcDates.values["sf-date"];
+    const serviceEndVal = svcDates.values["sf-endDate"];
+    if (serviceEndVal && serviceEndVal < serviceDateVal) {
+      setDateError("sf-endDate", t("date_err_service_end_before_start"), { focus: true });
+      return false;
+    }
     try {
       // Servis se ne zakazuje vikendom (subota → petak, nedelja → ponedeljak).
       // Ne važi za servis koji je već obavljen (unos unazad) — tu se upisuje
@@ -1559,6 +1720,8 @@ function openCompleteServiceModal(vehicle, service) {
   `;
 
   openModal(t("service_complete_title"), bodyHTML, async () => {
+    const csDates = collectDates([{ id: "cs-endDate" }]);
+    if (!csDates.ok) return false; // dijalog ostaje otvoren, poruka je ispod polja
     try {
       const endKm = numOrNull("cs-endKm");
       await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
@@ -1716,83 +1879,11 @@ function serviceItem(s, vehicle, canEdit) {
   `;
 }
 
-function assignmentItem(a) {
-  return `
-    <div class="assignment-item">
-      <div class="assignment-item__header">
-        <span class="badge badge--${a.status === 'active' ? 'active' : 'inactive'}">
-          ${t("assignment_status_" + a.status)}
-        </span>
-        <span class="assignment-item__dates">
-          ${formatDate(a.startDate)} ${a.endDate ? "→ " + formatDate(a.endDate) : ""}
-        </span>
-      </div>
-      <div class="assignment-item__driver">👤 ${a.driverName || "—"}</div>
-      <div class="assignment-item__km">
-        ${a.startKm ? a.startKm.toLocaleString() + " km" : ""}
-        ${a.endKm ? " → " + a.endKm.toLocaleString() + " km" : ""}
-      </div>
-      ${a.reason ? `<div class="assignment-item__reason">${a.reason}</div>` : ""}
-      ${a.tripType === "intercity" && a.destination ? `<div class="assignment-item__dest">📍 ${a.destination}</div>` : ""}
-    </div>
-  `;
-}
-
 function formatDate(val) {
   return formatDateDMY(val);
 }
 
-// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
-// Napomena: <input type="date"> prikazuje kalendar/datum u formatu koji
-// zavisi od jezika/regije PODEŠENE U BROWSERU/OS-u korisnika (mm/dd/yyyy
-// za en-US, dd/mm/yyyy za sr-RS, itd.) — to nije nešto što aplikacija može
-// da promeni preko HTML/CSS/JS za taj input tip. Zato ovde koristimo obično
-// tekstualno polje sa maskom, tako da je format uvek dd/mm/yyyy za sve
-// korisnike, nezavisno od podešavanja njihovog browsera.
-
-function toDMY(val) {
-  if (!val) return "";
-  const d = val.toDate ? val.toDate() : new Date(val);
-  if (isNaN(d)) return "";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}.${mm}.${d.getFullYear()}`;
-}
-
-function todayDMY() {
-  return toDMY(new Date());
-}
-
-// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
-// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
-function datePlaceholder() {
-  return getCurrentLang() === "en" ? "dd.mm.yyyy" : "dd.mm.gggg";
-}
-
-// Parsira "dd/mm/yyyy" u Date objekat (lokalno vreme, ponoć). Vraća null
-// ako string nije kompletan ili predstavlja nepostojeći datum (npr. 31/02).
-function parseDMY(str) {
-  if (!str) return null;
-  const m = str.trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})\.?$/);
-  if (!m) return null;
-  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  return d;
-}
-
-// Auto-formatiranje dok korisnik kuca: cifre se same grupišu u dd/mm/yyyy.
-function attachDateMask(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener("input", () => {
-    const digits = el.value.replace(/\D/g, "").slice(0, 8);
-    let out = digits;
-    if (digits.length > 4) out = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
-    else if (digits.length > 2) out = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    el.value = out;
-  });
-}
+// Datumi (maska, kalendar, provera) — vidi date-input.js
 
 function numOrNull(id) {
   const val = document.getElementById(id)?.value;

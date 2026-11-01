@@ -9,6 +9,7 @@ import {
   doc, addDoc, updateDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
+import { todayDMY, datePlaceholder, attachDateMask, collectDates } from "./date-input.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
 import { getCompanies } from "./firebase.js";
 import { isVehicleRegistered, needsTachograph, openVehicleDetail, openServiceForm, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
@@ -1490,29 +1491,27 @@ function openDriverUnassignForm() {
 }
 
 async function processDriverUnassign() {
-  const endDate   = document.getElementById("du-endDate")?.value;
   const endKm     = parseFloat(document.getElementById("du-endKm")?.value);
   const notes     = document.getElementById("du-notes")?.value.trim();
   const fuelLevel = document.getElementById("du-fuelLevel")?.value || null;
 
-  if (!endDate) {
-    showEntryError("unassign-form-error", t("assignment_unassign_date_required"));
-    return;
-  }
-  const endDateObj = parseDMY(endDate);
-  if (!endDateObj) {
-    showEntryError("unassign-form-error", t("assignment_unassign_date_required"));
-    return;
-  }
+  // Datum: poruka ispod polja + fokus. `return false` drži dijalog otvorenim
+  // (običan `return` ga je zatvarao i korisnik je gubio unos).
+  const unassignDates = collectDates([
+    { id: "du-endDate", required: true, requiredMessage: t("assignment_unassign_date_required") },
+  ]);
+  if (!unassignDates.ok) return false;
+  const endDateObj = unassignDates.values["du-endDate"];
+
   if (!endKm || endKm <= 0) {
     showEntryError("unassign-form-error", t("assignment_unassign_endkm_required"));
-    return;
+    return false;
   }
 
   const lastKm = getLastKnownKm();
   if (endKm < lastKm) {
     showEntryError("unassign-form-error", `${t("trip_km_too_low")}: ${lastKm.toLocaleString()} km`);
-    return;
+    return false;
   }
 
   try {
@@ -1618,45 +1617,6 @@ async function refreshEntries() {
 function showEntryError(id, msg) {
   const el = document.getElementById(id);
   if (el) { el.textContent = msg; el.classList.remove("hidden"); }
-}
-
-// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
-// <input type="date"> prikazuje kalendar u formatu koji zavisi od
-// jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
-// pa koristimo tekstualno polje sa maskom umesto toga.
-function todayDMY() {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}.${mm}.${d.getFullYear()}`;
-}
-
-// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
-// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
-function datePlaceholder() {
-  return getCurrentLang() === "en" ? "dd.mm.yyyy" : "dd.mm.gggg";
-}
-
-function parseDMY(str) {
-  if (!str) return null;
-  const m = String(str).trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})\.?$/);
-  if (!m) return null;
-  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  return d;
-}
-
-function attachDateMask(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener("input", () => {
-    const digits = el.value.replace(/\D/g, "").slice(0, 8);
-    let out = digits;
-    if (digits.length > 4) out = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
-    else if (digits.length > 2) out = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    el.value = out;
-  });
 }
 
 function attachDashboardEvents() {

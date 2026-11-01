@@ -2622,3 +2622,164 @@ tbody td {
   font-size: 20px;
   cursor: pointer;
 }
+
+/* ============================================================
+   POLJA ZA DATUM — maska dd.mm.gggg + dugme sa kalendarom
+   (vidi date-input.js)
+   ============================================================ */
+.date-field {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+.date-field .form-input {
+  /* mesto za dugme sa kalendarom na desnoj strani */
+  padding-right: 56px;
+}
+.date-field__btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--color-surface-2);
+  color: var(--color-primary);
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.date-field__btn:hover:not(:disabled),
+.date-field__btn:focus-visible {
+  background: var(--color-primary);
+  color: #fff;
+  outline: none;
+}
+.date-field__btn:active:not(:disabled) { background: var(--color-primary-dark); }
+.date-field__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.date-field .form-input:focus ~ .date-field__btn { border-left-color: var(--color-primary); }
+.date-field .form-input.input--error ~ .date-field__btn { border-left-color: var(--color-danger); }
+
+/* Skriveni nativni birač datuma — služi samo da otvori kalendar ispod polja */
+.date-field__native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+  padding: 0;
+  color-scheme: dark;
+}
+
+/* Greška na polju (koristi se i u formi vozila — ranije bez stila) */
+.form-input.input--error,
+.form-select.input--error,
+.form-textarea.input--error,
+.input--error {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px var(--color-danger-soft);
+}
+.field-error-msg {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--color-danger);
+}
+
+/* ============================================================
+   VOZILO → TAB "ZADUŽENJA" (grupisano po vozaču)
+   ============================================================ */
+.assignment-history-summary--five {
+  grid-template-columns: repeat(5, 1fr);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+@media (max-width: 640px) {
+  .assignment-history-summary--five { grid-template-columns: repeat(2, 1fr); }
+  .assignment-history-summary--five .assignment-history-summary__item:last-child { grid-column: 1 / -1; }
+}
+
+.vehicle-assign-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.vehicle-driver-groups { display: flex; flex-direction: column; gap: 14px; }
+
+.vehicle-driver-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.vehicle-driver-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--color-surface-2);
+  cursor: pointer;
+  user-select: none;
+}
+.vehicle-driver-group__header:hover { background: var(--color-surface-3); }
+.vehicle-driver-group__header:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+.vehicle-driver-group__header--static { cursor: default; }
+.vehicle-driver-group__header--static:hover { background: var(--color-surface-2); }
+.vehicle-driver-group__who { min-width: 0; }
+.vehicle-driver-group__name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 15px;
+}
+.vehicle-driver-group__period {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.vehicle-driver-group__stats {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vehicle-driver-group__chevron {
+  margin-left: 4px;
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
+}
+.vehicle-driver-group--collapsed .vehicle-driver-group__chevron { transform: rotate(-90deg); }
+.vehicle-driver-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.vehicle-driver-group--collapsed .vehicle-driver-group__body { display: none; }
+.vehicle-driver-group--collapsed .vehicle-driver-group__header { border-bottom: 0; }
+
+@media (max-width: 640px) {
+  .vehicle-driver-group__header { flex-direction: column; align-items: flex-start; }
+  .vehicle-driver-group__stats { justify-content: flex-start; }
+}

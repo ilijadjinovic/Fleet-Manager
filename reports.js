@@ -12,6 +12,9 @@ import {
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, showToast } from "./app.js";
 import { isVehicleRegistered } from "./vehicles.js";
+import {
+  toDMY, datePlaceholder, attachDateMask, collectDates, setDateError
+} from "./date-input.js";
 import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js";
 
 // ── FONT ZA SRPSKA SLOVA (š đ č ć ž) ───────────────────────────
@@ -86,12 +89,12 @@ export async function renderReports(container) {
         <div class="form-group">
           <label class="form-label">${t("report_date_from")}</label>
           <input id="rep-from" class="form-input" type="text" inputmode="numeric" maxlength="10"
-            placeholder="${datePlaceholder()}" value="${toDMY(firstDayOfMonth())}" />
+            placeholder="${datePlaceholder()}" value="${toDMY(defaultPeriodFrom())}" />
         </div>
         <div class="form-group">
           <label class="form-label">${t("report_date_to")}</label>
           <input id="rep-to" class="form-input" type="text" inputmode="numeric" maxlength="10"
-            placeholder="${datePlaceholder()}" value="${toDMY(today())}" />
+            placeholder="${datePlaceholder()}" value="${toDMY(new Date())}" />
         </div>
       </div>
     </div>
@@ -269,10 +272,9 @@ async function generateVehicleReport(allVehicles) {
   const selectedIds = [...document.querySelectorAll(".chk-vehicle:checked")].map(c => c.value);
   if (selectedIds.length === 0) { showToast(t("report_select_vehicle_required"), "warning"); return; }
 
-  const from = parseDMY(document.getElementById("rep-from")?.value);
-  const to   = parseDMY(document.getElementById("rep-to")?.value);
-  if (!from || !to) { showToast(t("required_field"), "warning"); return; }
-  to.setHours(23, 59, 59);
+  const period = readReportPeriod();
+  if (!period) return;
+  const { from, to } = period;
 
   setStatus(t("loading"));
 
@@ -491,10 +493,9 @@ async function generateDriverReport(allDrivers) {
   const selectedIds = [...document.querySelectorAll(".chk-driver:checked")].map(c => c.value);
   if (selectedIds.length === 0) { showToast(t("report_select_driver_required"), "warning"); return; }
 
-  const from = parseDMY(document.getElementById("rep-from")?.value);
-  const to   = parseDMY(document.getElementById("rep-to")?.value);
-  if (!from || !to) { showToast(t("required_field"), "warning"); return; }
-  to.setHours(23, 59, 59);
+  const period = readReportPeriod();
+  if (!period) return;
+  const { from, to } = period;
 
   setStatus(t("loading"));
 
@@ -1105,55 +1106,42 @@ function formatDateSr(val) {
 }
 
 function formatDateFile(date) {
-  return date.toISOString().split("T")[0];
+  // Lokalni datum (toISOString bi oko ponoći dao UTC datum, tj. pogrešan dan)
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${mm}-${dd}`;
 }
 
-function firstDayOfMonth() {
+// Podrazumevani period izveštaja: poslednjih 30 dana (do danas).
+// Ranije je podrazumevano bio "od 1. u mesecu", pa je prvog dana u mesecu
+// izveštaj izgledao prazan iako postoje unosi iz prethodnog meseca.
+function defaultPeriodFrom() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
-}
-
-function today() {
-  return new Date().toISOString().split("T")[0];
-}
-
-// Placeholder prati jezik aplikacije (dd/mm ostaje fiksno — poslovno
-// pravilo firme — menja se samo naziv za "godinu": yyyy (en) / gggg (sr)).
-function datePlaceholder() {
-  return getCurrentLang() === "en" ? "dd.mm.yyyy" : "dd.mm.gggg";
-}
-
-// ── DATUMI: prikaz i unos u lokalnom formatu dd/mm/yyyy ──────
-// <input type="date"> prikazuje kalendar u formatu koji zavisi od
-// jezika/regije podešene u browseru korisnika, ne od jezika aplikacije,
-// pa koristimo tekstualno polje sa maskom umesto toga.
-function toDMY(val) {
-  if (!val) return "";
-  const d = val.toDate ? val.toDate() : new Date(val);
-  if (isNaN(d)) return "";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}.${mm}.${d.getFullYear()}`;
-}
-
-function parseDMY(str) {
-  if (!str) return null;
-  const m = String(str).trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})\.?$/);
-  if (!m) return null;
-  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  d.setDate(d.getDate() - 30);
   return d;
 }
 
-function attachDateMask(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener("input", () => {
-    const digits = el.value.replace(/\D/g, "").slice(0, 8);
-    let out = digits;
-    if (digits.length > 4) out = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
-    else if (digits.length > 2) out = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    el.value = out;
-  });
+// Čita i proverava polja "Od" / "Do". Pri grešci prikazuje poruku ISPOD
+// pogrešnog polja, stavlja fokus na njega i vraća null.
+function readReportPeriod() {
+  const res = collectDates([
+    { id: "rep-from", required: true },
+    { id: "rep-to",   required: true },
+  ]);
+  if (!res.ok) {
+    showToast(res.firstMessage, "warning");
+    return null;
+  }
+
+  const from = res.values["rep-from"];
+  const to   = res.values["rep-to"];
+  if (from > to) {
+    const msg = t("date_err_range_to_before_from");
+    setDateError("rep-to", msg, { focus: true });
+    showToast(msg, "warning");
+    return null;
+  }
+
+  to.setHours(23, 59, 59, 999);
+  return { from, to };
 }
