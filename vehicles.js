@@ -1459,6 +1459,12 @@ async function openVehicleForm(vehicle = null) {
         <input id="f-tiresDimensions" class="form-input" type="text" placeholder="205/55/16" value="${v.tires?.dimensions || ""}" />
       </div>
     </div>
+    <div class="form-group form-group--checkbox">
+      <label class="form-checkbox-label">
+        <input id="f-tireReminderDisabled" type="checkbox" ${v.tireReminderDisabled === true ? "checked" : ""} />
+        ${t("vehicle_tire_reminder_disabled")}
+      </label>
+    </div>
 
     <div class="form-section-title" style="margin-top:8px">${t("vehicle_tab_finance")}</div>
     <div class="form-row">
@@ -1693,6 +1699,7 @@ async function saveVehicle(vehicleId) {
       tachographExpiry: dateOrNull("f-tachographExpiry"),
       requiredEquipment,
       tires: (tiresType || tiresDimensions) ? { type: tiresType, dimensions: tiresDimensions } : null,
+      tireReminderDisabled: !!document.getElementById("f-tireReminderDisabled")?.checked,
       purchaseDate:     dateOrNull("f-purchaseDate"),
       purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
       purchaseValue:    numOrNull("f-purchaseValue"),

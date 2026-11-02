@@ -302,11 +302,42 @@ async function loadDashboardData() {
 
     // Podsetnici za zamenu sezonskih guma (samo administracija parka),
     // mesec dana pre zakonskog roka — vidi getTireSeasonReminder().
+    // Podsetnik se ne prikazuje ako je zamena već zakazana / u toku,
+    // ako je u tekućem periodu već odrađen servis tipa "Gume", ili
+    // ako ga je admin odložio ("Podseti me kasnije").
     const tireReminders = [];
     if (role !== "driver") {
+      const toD = (x) => x?.toDate ? x.toDate() : (x ? new Date(x) : null);
+      const tireSvcByVehicle = new Map();
+      try {
+        const tireSnap = await getDocs(
+          query(collection(db, "companies", cid, "services"), where("serviceType", "==", "tires"))
+        );
+        tireSnap.docs.forEach(d => {
+          const sv = { id: d.id, ...d.data() };
+          if (!tireSvcByVehicle.has(sv.vehicleId)) tireSvcByVehicle.set(sv.vehicleId, []);
+          tireSvcByVehicle.get(sv.vehicleId).push(sv);
+        });
+      } catch (e) {
+        console.error("Tire services error:", e);
+      }
+      const nowTs = new Date();
       activeVehicles.forEach(v => {
         const r = getTireSeasonReminder(v);
-        if (r) tireReminders.push({ ...r, vehicle: v });
+        if (!r) return;
+        if (v.tireReminderDisabled === true) return; // trajno isključeno (npr. vozilo koristi samo jednu sezonu)
+        const snoozedUntil = toD(v.tireReminderSnoozedUntil);
+        if (snoozedUntil && snoozedUntil > nowTs) return;
+        // početak perioda podsetnika = mesec dana pre roka
+        const windowStart = new Date(r.deadline.getFullYear(), r.deadline.getMonth() - 1, 1);
+        const handled = (tireSvcByVehicle.get(v.id) || []).some(sv => {
+          const st = effectiveServiceStatus(sv);
+          if (st === SERVICE_STATUS.PLANNED || st === SERVICE_STATUS.IN_PROGRESS) return true;
+          if (st === SERVICE_STATUS.DONE) { const d = toD(sv.serviceDate); return d && d >= windowStart; }
+          return false;
+        });
+        if (handled) return;
+        tireReminders.push({ ...r, vehicle: v });
       });
       // Najhitnije (najviše zakasnelo / najbliži rok) prvo
       tireReminders.sort((a, b) => a.daysLeft - b.daysLeft);
@@ -455,16 +486,23 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
           const curType = v.tires?.type ? t("tire_" + v.tires.type) : "";
           const dims = v.tires?.dimensions ? ` (${v.tires.dimensions})` : "";
           return `
-            <div class="upcoming-item upcoming-item--${urgent ? "urgent" : "warning"} tire-reminder" data-vehicle-id="${v.id}" data-vehicle-tab="safety" style="cursor:pointer">
-              <div class="upcoming-item__main">
-                <span class="upcoming-item__name">🛞 ${v.brand || ""} ${v.model || ""}</span>
-                <span class="upcoming-item__plate">${v.plate || ""}</span>
-                <span class="upcoming-item__kind">${t("tire_rem_title_" + r.needed)}</span>
-              </div>
-              <div class="upcoming-item__right">
-                <span class="upcoming-item__date">${t("tire_rem_deadline", { date: formatDate(r.deadline) })}</span>
-                <span class="upcoming-item__days">${timeLeftText(r.daysLeft)}</span>
-                <span class="upcoming-item__days">${t("tire_rem_current", { type: curType, dims })}</span>
+            <div class="upcoming-item upcoming-item--${urgent ? "urgent" : "warning"} service-reminder tire-reminder" data-tire-vehicle="${v.id}">
+              <div class="service-reminder__body">
+                <div class="upcoming-item__main">
+                  <span class="upcoming-item__name">🛞 ${v.brand || ""} ${v.model || ""}</span>
+                  <span class="upcoming-item__plate">${v.plate || ""}</span>
+                  <span class="upcoming-item__kind">${t("tire_rem_title_" + r.needed)}</span>
+                </div>
+                <div class="service-reminder__info">
+                  ${t("tire_rem_current", { type: curType, dims })}<br>
+                  ${t("tire_rem_deadline", { date: formatDate(r.deadline) })}<br>
+                  <strong>📅 ${timeLeftText(r.daysLeft)}</strong>
+                </div>
+                <div class="service-reminder__question">${t("svc_rem_question")}</div>
+                <div class="service-reminder__actions">
+                  <button class="btn btn--primary btn--sm btn-tire-schedule" data-vehicle="${v.id}">${t("svc_rem_schedule_now")}</button>
+                  <button class="btn btn--secondary btn--sm btn-tire-snooze" data-vehicle="${v.id}">${t("svc_rem_snooze")}</button>
+                </div>
               </div>
             </div>`;
         }).join("")}
@@ -1708,23 +1746,60 @@ function attachDashboardEvents() {
     });
   });
 
-  // Podsetnik za redovni servis: "Podseti me kasnije" → odloži za 1 dan
+  // Podsetnik za redovni servis: "Podseti me kasnije" → pitanje za koliko dana odložiti
   document.querySelectorAll(".btn-reminder-snooze").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const vehicleId = btn.dataset.vehicle;
-      try {
-        const until = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
-          serviceReminderSnoozedUntil: until,
-        });
-        const v = dashboardVehicles.find(x => x.id === vehicleId);
-        if (v) v.serviceReminderSnoozedUntil = until;
-        showToast(t("svc_rem_snoozed_toast"), "success");
-        loadDashboardData();
-      } catch (err) {
-        showToast(`${t("error")}: ${err.message}`, "error");
-      }
+      openSnoozeModal({
+        permanent: false,
+        onPick: async (days) => {
+          const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+          await updateDoc(doc(db, "companies", S.companyId, "vehicles", vehicleId), {
+            serviceReminderSnoozedUntil: until,
+          });
+          const v = dashboardVehicles.find(x => x.id === vehicleId);
+          if (v) v.serviceReminderSnoozedUntil = until;
+          showToast(t("svc_rem_snoozed_toast", { n: days }), "success");
+        },
+      });
+    });
+  });
+
+  // Podsetnik za gume: "Zakaži sada" → forma za servis tipa "Gume"
+  document.querySelectorAll(".btn-tire-schedule").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const vehicle = dashboardVehicles.find(v => v.id === btn.dataset.vehicle);
+      if (!vehicle) return;
+      await openServiceForm(vehicle, null, { serviceType: "tires" }, {
+        onSaved: () => loadDashboardData(),
+      });
+    });
+  });
+
+  // Podsetnik za gume: "Podseti me kasnije" → za koliko dana, ili trajno
+  document.querySelectorAll(".btn-tire-snooze").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const vehicleId = btn.dataset.vehicle;
+      openSnoozeModal({
+        permanent: true,
+        onPick: async (days) => {
+          const ref = doc(db, "companies", S.companyId, "vehicles", vehicleId);
+          const v = dashboardVehicles.find(x => x.id === vehicleId);
+          if (days === "forever") {
+            await updateDoc(ref, { tireReminderDisabled: true });
+            if (v) v.tireReminderDisabled = true;
+            showToast(t("tire_snoozed_forever_toast"), "success");
+          } else {
+            const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+            await updateDoc(ref, { tireReminderSnoozedUntil: until });
+            if (v) v.tireReminderSnoozedUntil = until;
+            showToast(t("tire_snoozed_toast", { n: days }), "success");
+          }
+        },
+      });
     });
   });
 
@@ -1741,6 +1816,33 @@ function attachDashboardEvents() {
       });
       openVehicleDetail(vehicleId, vehicleTab, null, () => navigateTo("dashboard"));
     });
+  });
+}
+
+// Zajednički prozor "Podseti me kasnije": pita za koliko dana odložiti
+// (opciono i "Trajno"). onPick(days | "forever") snima odluku.
+function openSnoozeModal({ permanent = false, onPick }) {
+  const opts = [1, 3, 7, 14];
+  openModal(t("svc_rem_snooze"), `
+    <div class="form-group">
+      <label class="form-label">${t("tire_snooze_question")}</label>
+      <select id="snooze-days" class="form-select">
+        ${opts.map(n => `<option value="${n}" ${n === 3 ? "selected" : ""}>${t("tire_snooze_opt_" + n)}</option>`).join("")}
+        ${permanent ? `<option value="forever">${t("tire_snooze_opt_forever")}</option>` : ""}
+      </select>
+      ${permanent ? `<div class="form-hint">${t("tire_snooze_forever_hint")}</div>` : ""}
+    </div>
+  `, async () => {
+    const raw = document.getElementById("snooze-days")?.value;
+    const pick = raw === "forever" ? "forever" : (parseInt(raw, 10) || 1);
+    try {
+      await onPick(pick);
+      loadDashboardData();
+      return true;
+    } catch (err) {
+      showToast(`${t("error")}: ${err.message}`, "error");
+      return false;
+    }
   });
 }
 
