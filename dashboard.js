@@ -21,6 +21,7 @@ import {
 import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
 import { scanQRCode, parseFiscalQR, fetchReceiptDetails, receiptWorkerConfigured } from "./receipt-scan.js";
+import { findReceiptDuplicate, saveTripEntry, DuplicateReceiptError, normalizeReceiptNo } from "./receipt-guard.js";
 
 // ── STANJE MODULA: aktivno zaduženje trenutnog vozača ─────────
 // Vozač može imati VIŠE aktivnih zaduženja istovremeno (npr. dva
@@ -1217,18 +1218,23 @@ function openFuelForm() {
 // Stanje poslednjeg skeniranja (čuva se uz unos goriva)
 let fuelScan = { url: null, source: "manual", pib: null, object: null };
 
-// Da li je račun (PFR broj) već unet kao gorivo
-async function fuelReceiptExists(pfr) {
-  if (!pfr) return false;
+// Poruka "Račun X je već unet (datum, vozač, vozilo)"
+function duplicateReceiptMessage(pfr, existing) {
+  const when = existing?.createdAt ? formatDateDMY(existing.createdAt) : "—";
+  const who  = [existing?.driverName, existing?.vehiclePlate].filter(Boolean).join(", ") || "—";
+  return t("receipt_duplicate_detail", { pfr, date: when, who });
+}
+
+// Proverava da li je račun već unet (gorivo ILI trošak). Vraća
+//   { duplicate: unos } | { duplicate: null } | { error: poruka }
+// Ako provera ne uspe, snimanje se NE dozvoljava (ranije je tiho prolazilo).
+async function checkReceiptDuplicate(pfr) {
+  if (!normalizeReceiptNo(pfr)) return { duplicate: null };
   try {
-    const snap = await getDocs(query(
-      collection(db, "companies", S.companyId, "tripEntries"),
-      where("receiptNo", "==", pfr)
-    ));
-    return snap.docs.some((d) => d.data().type === "fuel");
+    return { duplicate: await findReceiptDuplicate(S.companyId, pfr) };
   } catch (e) {
     console.warn("Provera duplikata računa nije uspela:", e);
-    return false;
+    return { error: t("receipt_check_failed") };
   }
 }
 
@@ -1259,8 +1265,10 @@ async function onScanReceipt() {
 
   const qr = parseFiscalQR(text);
   if (!qr) { setStatus(t("receipt_scan_not_fiscal"), "error"); return; }
-  if (await fuelReceiptExists(qr.pfr)) {
-    setStatus(t("receipt_scan_duplicate", { pfr: qr.pfr }), "error");
+  const dup = await checkReceiptDuplicate(qr.pfr);
+  if (dup.error) { setStatus(dup.error, "error"); return; }
+  if (dup.duplicate) {
+    setStatus(duplicateReceiptMessage(qr.pfr, dup.duplicate), "error");
     return;
   }
 
@@ -1328,15 +1336,18 @@ async function saveFuelEntry() {
   const currentKm = validateKmInput(document.getElementById("tf-currentKm")?.value, "fuel-form-error");
   if (currentKm === null) return false;
 
-  const receiptNo = document.getElementById("tf-receiptNo")?.value.trim() || null;
-  if (receiptNo && await fuelReceiptExists(receiptNo)) {
-    showEntryError("fuel-form-error", t("receipt_scan_duplicate", { pfr: receiptNo }));
-    return false;
+  const receiptNo = normalizeReceiptNo(document.getElementById("tf-receiptNo")?.value);
+  if (receiptNo) {
+    const dup = await checkReceiptDuplicate(receiptNo);
+    if (dup.error || dup.duplicate) {
+      showEntryError("fuel-form-error", dup.error || duplicateReceiptMessage(receiptNo, dup.duplicate));
+      return false;
+    }
   }
   const priceField = parseFloat(document.getElementById("tf-pricePerL")?.value);
 
   try {
-    await addDoc(collection(db, "companies", S.companyId, "tripEntries"), {
+    await saveTripEntry(S.companyId, {
       type:         "fuel",
       assignmentId: activeAssignment.id,
       tripId:       activeTrip?.id || null,
@@ -1367,7 +1378,9 @@ async function saveFuelEntry() {
     showToast(t("success"), "success");
     await refreshEntries();
   } catch (e) {
-    showEntryError("fuel-form-error", `${t("error")}: ${e.message}`);
+    showEntryError("fuel-form-error", e instanceof DuplicateReceiptError
+      ? duplicateReceiptMessage(e.receiptNo, e.existing)
+      : `${t("error")}: ${e.message}`);
     return false;
   }
 }
@@ -1425,8 +1438,17 @@ async function saveCostEntry() {
   const currentKm = validateKmInput(document.getElementById("tc-currentKm")?.value, "cost-form-error");
   if (currentKm === null) return;
 
+  const costReceiptNo = normalizeReceiptNo(document.getElementById("tc-receiptNo")?.value);
+  if (costReceiptNo) {
+    const dup = await checkReceiptDuplicate(costReceiptNo);
+    if (dup.error || dup.duplicate) {
+      showEntryError("cost-form-error", dup.error || duplicateReceiptMessage(costReceiptNo, dup.duplicate));
+      return false;
+    }
+  }
+
   try {
-    await addDoc(collection(db, "companies", S.companyId, "tripEntries"), {
+    await saveTripEntry(S.companyId, {
       type:         document.getElementById("tc-type")?.value || "other_cost",
       assignmentId: activeAssignment.id,
       tripId:       activeTrip?.id || null,
@@ -1436,7 +1458,7 @@ async function saveCostEntry() {
       driverUid:    S.user.uid,
       driverName:   activeAssignment.driverName,
       amount,
-      receiptNo:    document.getElementById("tc-receiptNo")?.value.trim() || null,
+      receiptNo:    costReceiptNo,
       location:     document.getElementById("tc-location")?.value.trim() || null,
       currentKm,
       notes:        document.getElementById("tc-notes")?.value.trim() || null,
@@ -1448,7 +1470,10 @@ async function saveCostEntry() {
     showToast(t("success"), "success");
     await refreshEntries();
   } catch (e) {
-    showEntryError("cost-form-error", `${t("error")}: ${e.message}`);
+    showEntryError("cost-form-error", e instanceof DuplicateReceiptError
+      ? duplicateReceiptMessage(e.receiptNo, e.existing)
+      : `${t("error")}: ${e.message}`);
+    return false;
   }
 }
 

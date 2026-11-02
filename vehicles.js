@@ -22,6 +22,9 @@ import {
   cleanVehicleServiceOverrides
 } from "./service-status.js";
 import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
+import { detailButton, isAdminViewer } from "./entry-details.js";
+import { rememberEntry } from "./detail-registry.js";
+import { esc as escDet, fmtNum as fmtNumDet, fmtRsd as fmtRsdDet, toMillis as toMsDet } from "./entries-view.js";
 import {
   loadVehicleAssignmentHistory, groupAssignmentsByDriver, summarizeAssignments,
   historyAssignmentCard, historyEntryItem, attachAssignmentHistoryEvents
@@ -63,6 +66,26 @@ const REQUIRED_EQUIPMENT_ITEMS = ["triangle", "first_aid", "vest", "tow_rope", "
 
 function equipmentLabel(code) {
   return REQUIRED_EQUIPMENT_ITEMS.includes(code) ? t("equipment_" + code) : code;
+}
+
+// Obavezna oprema prema kategoriji vozila (iz saobraćajne). Kategorija bez
+// izbora (null) dobija punu listu da se ništa ne sakrije.
+const REQUIRED_EQUIPMENT_BY_CATEGORY = {
+  passenger:    ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "accident_report"],
+  van:          ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "accident_report", "fire_extinguisher"],
+  truck:        ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "fire_extinguisher", "wheel_chocks"],
+  bus:          ["triangle", "first_aid", "vest", "tow_rope", "spare_wheel", "fire_extinguisher", "wheel_chocks"],
+  motorcycle:   ["first_aid"],
+  trailer:      ["triangle", "wheel_chocks"],
+  work_machine: ["fire_extinguisher", "first_aid"],
+  other:        ["fire_extinguisher", "first_aid"],
+};
+
+// Lista obavezne opreme za datu kategoriju (redosled kao u REQUIRED_EQUIPMENT_ITEMS)
+export function requiredEquipmentFor(category) {
+  const list = REQUIRED_EQUIPMENT_BY_CATEGORY[category];
+  if (!list) return [...REQUIRED_EQUIPMENT_ITEMS];
+  return REQUIRED_EQUIPMENT_ITEMS.filter(eq => list.includes(eq));
 }
 
 // ── PNEUMATICI ─────────────────────────────────────────────────
@@ -443,7 +466,12 @@ function vehicleRow(v) {
 
 // ── DETAIL POGLED ─────────────────────────────────────────────
 // initialTab — omogućava skok direktno na neki tab (npr. sa dashboarda na "service")
-export async function openVehicleDetail(vehicleId, initialTab = "tech") {
+// Zaduženje koje treba otvoriti/istaći kad se tab "Zaduženja" učita
+// (link iz liste zaduženja → vozilo → to zaduženje).
+let pendingFocusAssignmentId = null;
+
+export async function openVehicleDetail(vehicleId, initialTab = "tech", focusAssignmentId = null) {
+  pendingFocusAssignmentId = focusAssignmentId;
   currentVehicleId = vehicleId;
   let vehicle = allVehicles.find(v => v.id === vehicleId);
 
@@ -599,8 +627,11 @@ function renderSafetyTab(v) {
   const tireOk = !tireType ? null : (tireType === "all_season" || tireType === expectedTireSeason());
   const tireBadgeClass = tireType ? (tireOk ? "badge--active" : "badge--broken") : "badge--inactive";
 
-  const equipmentRows = REQUIRED_EQUIPMENT_ITEMS.map(eq => {
-    const has = (v.requiredEquipment || []).includes(eq);
+  const required = requiredEquipmentFor(v.category);
+  const owned = v.requiredEquipment || [];
+  const extra = owned.filter(eq => !required.includes(eq));
+  const equipmentRows = required.map(eq => {
+    const has = owned.includes(eq);
     const color = has ? "var(--color-success)" : "var(--color-danger)";
     return `
       <div class="detail-row">
@@ -625,10 +656,15 @@ function renderSafetyTab(v) {
       </div>
     </div>
 
-    <div class="form-section-title" style="margin-top:16px">${t("vehicle_required_equipment")}</div>
+    <div class="form-section-title" style="margin-top:16px">${t("vehicle_required_equipment")}${v.category ? ` — ${vehicleCategoryLabel(v.category)}` : ""}</div>
     <div class="detail-table">
       ${equipmentRows}
     </div>
+    ${extra.length ? `
+      <div class="form-section-title" style="margin-top:16px">${t("vehicle_equipment_extra")}</div>
+      <div class="detail-table">
+        <div class="detail-row"><div class="detail-row__value">${extra.map(equipmentLabel).join(", ")}</div></div>
+      </div>` : ""}
   `;
 }
 
@@ -715,6 +751,77 @@ function financeSummaryHTML(sum, from, to) {
     </div>`;
 }
 
+// Lista pojedinačnih troškova za izabrani period (gorivo, putarine, parking,
+// pranje, ostalo + servisi). Unosi su klikabilni (svi detalji), a lista se
+// slaže sa zbirnim karticama iznad (isti period, isti datum = createdAt).
+function financeListHTML(services, entries, from, to) {
+  const fromMs = from ? from.getTime() : -Infinity;
+  const toMs   = to   ? to.getTime()   : Infinity;
+  const inPeriod = (val) => { const ms = toMsDet(val); return ms && ms >= fromMs && ms <= toMs; };
+  const icons = { fuel: "⛽", toll: "🛣️", parking: "🅿️", washing: "🚿", other_cost: "📋" };
+  const labels = {
+    fuel: t("trip_entry_fuel"), toll: t("trip_entry_toll"), parking: t("trip_entry_parking"),
+    washing: t("trip_entry_washing"), other_cost: t("trip_entry_cost"),
+  };
+  const admin = isAdminViewer();
+
+  const items = [];
+  entries.filter(e => icons[e.type] && inPeriod(e.createdAt)).forEach(e => {
+    rememberEntry(e);
+    const isFuel = e.type === "fuel";
+    const main = isFuel
+      ? `${fmtNumDet(e.fuelAmount, 2)} L · ${fmtRsdDet(e.fuelCost)}`
+      : fmtRsdDet(e.amount);
+    const sub = [
+      isFuel && e.fuelType ? t("fuel_" + e.fuelType) : null,
+      isFuel && e.fuelStation ? "🏪 " + e.fuelStation : null,
+      !isFuel && e.location ? "📍 " + e.location : null,
+      e.receiptNo ? `${t("trip_fuel_receipt")}: ${e.receiptNo}` : null,
+      e.driverName ? "👤 " + e.driverName : null,
+    ].filter(Boolean).map(escDet).join(" · ");
+    items.push({
+      ms: toMsDet(e.createdAt),
+      html: `
+        <div class="finance-list-row${admin ? " finance-list-row--clickable" : ""}"
+          ${admin ? `data-entry-id="${escDet(e.id)}" role="button" tabindex="0"` : ""}>
+          <span class="finance-list-row__icon">${icons[e.type]}</span>
+          <div class="finance-list-row__body">
+            <div class="finance-list-row__main"><span class="badge badge--${isFuel ? "info" : "inactive"}">${labels[e.type]}</span> <strong>${main}</strong></div>
+            ${sub ? `<div class="finance-list-row__sub">${sub}</div>` : ""}
+          </div>
+          <div class="finance-list-row__date">${formatDate(e.createdAt)}</div>
+        </div>`,
+    });
+  });
+
+  services.filter(sv => inPeriod(sv.serviceDate)).forEach(sv => {
+    const status = effectiveServiceStatus(sv);
+    const done = status === SERVICE_STATUS.DONE;
+    const sub = [
+      sv.workshop ? "🏭 " + sv.workshop : null,
+      sv.km ? "🛣️ " + fmtNumDet(sv.km) + " km" : null,
+      sv.description || null,
+    ].filter(Boolean).map(escDet).join(" · ");
+    items.push({
+      ms: toMsDet(sv.serviceDate),
+      html: `
+        <div class="finance-list-row">
+          <span class="finance-list-row__icon">🔧</span>
+          <div class="finance-list-row__body">
+            <div class="finance-list-row__main"><span class="badge badge--service">${escDet(t("service_type_" + sv.serviceType) || sv.serviceType || "")}</span>
+              <strong>${done ? fmtRsdDet(sv.cost) : escDet(t("service_status_" + status))}</strong></div>
+            ${sub ? `<div class="finance-list-row__sub">${sub}</div>` : ""}
+          </div>
+          <div class="finance-list-row__date">${formatDate(sv.serviceDate)}</div>
+        </div>`,
+    });
+  });
+
+  if (items.length === 0) return `<div class="empty-state"><p>${t("no_data")}</p></div>`;
+  items.sort((a, b) => b.ms - a.ms);
+  return `<div class="finance-list">${items.map(i => i.html).join("")}</div>`;
+}
+
 async function loadFinanceTab(container, v) {
   container.innerHTML = `<div class="loading">${t("loading")}</div>`;
   try {
@@ -760,6 +867,10 @@ async function loadFinanceTab(container, v) {
 
       <div id="fin-summary"></div>
 
+      <div class="form-section-title" style="margin-top:18px">${t("finance_list_title")}</div>
+      ${isAdminViewer() ? `<div class="form-hint" style="margin-bottom:8px">${t("finance_list_hint")}</div>` : ""}
+      <div id="fin-list"></div>
+
       <div class="form-section-title" style="margin-top:18px">${t("finance_purchase_title")}</div>
       ${detailTable(rows)}
     `;
@@ -780,6 +891,7 @@ async function loadFinanceTab(container, v) {
       if (to) to.setHours(23, 59, 59, 999);
       const sum = financeTotals(services, entries, from, to);
       document.getElementById("fin-summary").innerHTML = financeSummaryHTML(sum, from, to);
+      document.getElementById("fin-list").innerHTML = financeListHTML(services, entries, from, to);
     };
 
     const setPeriod = (from, to) => {
@@ -1018,6 +1130,7 @@ function driverGroupHTML(group, history) {
         <div class="vehicle-driver-group__who">
           <div class="vehicle-driver-group__name">
             👤 <strong>${escText(group.driverName)}</strong>
+            ${group.assignments[0]?.driverId ? detailButton("data-detail-driver", group.assignments[0].driverId, t("det_title_driver")) : ""}
             ${sum.hasActive ? `<span class="trip-history-badge trip-history-badge--active">🟢 ${t("assignment_status_active")}</span>` : ""}
           </div>
           <div class="vehicle-driver-group__period">
@@ -1080,6 +1193,20 @@ async function loadAssignmentsTab(container, vehicle) {
 
     // Otvaranje/zatvaranje zaduženja i vožnji (isti handleri kao kod vozača)
     attachAssignmentHistoryEvents(container);
+
+    // Dolazak iz liste zaduženja: razvij traženo zaduženje, skroluj do njega i istakni ga
+    if (pendingFocusAssignmentId) {
+      const target = [...container.querySelectorAll("[data-assignment-id]")]
+        .find(el => el.dataset.assignmentId === pendingFocusAssignmentId);
+      pendingFocusAssignmentId = null;
+      if (target) {
+        target.querySelector(".assignment-history-card__trips")?.classList.remove("hidden");
+        target.querySelector("[data-toggle-assignment]")?.classList.add("assignment-history-card__header--open");
+        target.classList.add("assignment-history-card--focus");
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => target.classList.remove("assignment-history-card--focus"), 2500);
+      }
+    }
 
     // Otvaranje/zatvaranje grupe jednog vozača
     const setGroupOpen = (group, open) => {

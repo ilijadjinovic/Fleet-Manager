@@ -14,7 +14,8 @@ import {
   collectDates, setDateError
 } from "./date-input.js";
 import { S, showToast, openModal } from "./app.js";
-import { fuelLevelLabel } from "./vehicles.js";
+import { fuelLevelLabel, openVehicleDetail } from "./vehicles.js";
+import { rememberAssignment } from "./detail-registry.js";
 
 // ── STANJE MODULA ─────────────────────────────────────────────
 let allAssignments = [];
@@ -134,6 +135,19 @@ function renderList() {
     </div>
   `;
 
+  // Klik na zaduženje → vozilo, tab "Zaduženja", to zaduženje je razvijeno
+  const openLinked = (card) =>
+    openVehicleDetail(card.dataset.openVehicle, "assignments", card.dataset.openAssignment);
+  list.querySelectorAll(".assignment-card[data-open-vehicle]").forEach(card => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("button, a, input, select, textarea")) return;
+      openLinked(card);
+    });
+    card.addEventListener("keydown", (e) => {
+      if (e.target === card && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openLinked(card); }
+    });
+  });
+
   if (canEdit) {
     list.querySelectorAll(".btn-unassign").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -152,12 +166,14 @@ function renderList() {
 
 // ── ASSIGNMENT CARD ───────────────────────────────────────────
 function assignmentCard(a, canEdit) {
+  rememberAssignment(a);
   const isActive = a.status === "active";
   const startDate = formatDate(a.startDate);
   const endDate   = a.endDate ? formatDate(a.endDate) : "—";
 
   return `
-    <div class="assignment-card ${isActive ? "assignment-card--active" : ""}">
+    <div class="assignment-card ${isActive ? "assignment-card--active" : ""}${a.vehicleId ? " assignment-card--link" : ""}"
+      ${a.vehicleId ? `data-open-vehicle="${a.vehicleId}" data-open-assignment="${a.id}" tabindex="0" role="link" title="${t("assignment_open_in_vehicle")}"` : ""}>
       <div class="assignment-card__left">
         <div class="assignment-card__status-dot ${isActive ? "dot--active" : "dot--closed"}"></div>
       </div>
@@ -174,7 +190,9 @@ function assignmentCard(a, canEdit) {
         </div>
 
         <div class="assignment-card__driver">
-          👤 ${a.driverName}
+          👤 ${a.driverId
+            ? `<a href="#" class="detail-link" data-detail-driver="${a.driverId}">${a.driverName}</a>`
+            : a.driverName}
         </div>
 
         <div class="assignment-card__meta">
@@ -215,6 +233,7 @@ function assignmentCard(a, canEdit) {
           </button>
         </div>
       ` : ""}
+
     </div>
   `;
 }

@@ -11,7 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S, showToast } from "./app.js";
-import { isVehicleRegistered } from "./vehicles.js";
+import { isVehicleRegistered, requiredEquipmentFor } from "./vehicles.js";
 import { effectiveServiceStatus, SERVICE_STATUS } from "./service-status.js";
 import {
   toDMY, datePlaceholder, attachDateMask, collectDates, setDateError
@@ -313,6 +313,7 @@ async function generateVehicleReport(allVehicles) {
 
       let y = drawHeader(pdf, company, from, to);
       y = drawVehicleSection(pdf, vehicle, y);
+      y = drawEquipmentSection(pdf, vehicle, y);
       y = drawAssignmentsSection(pdf, assignments, y);
       y = drawServicesSection(pdf, services, y);
       y = drawFuelingsSection(pdf, fuelings, y);
@@ -764,12 +765,58 @@ function drawVehicleSection(pdf, v, y) {
   y = drawRow(pdf, t("vehicle_fuel_type"),         v.fuelType ? t("fuel_" + v.fuelType) : null, y, true);
   y = drawRow(pdf, t("vehicle_seats"),             v.seats,        y);
   y = drawRow(pdf, t("vehicle_payload"),           v.payload ? `${v.payload} kg` : null, y, true);
-  y = drawRow(pdf, t("vehicle_current_km"),        v.currentKm ? `${v.currentKm.toLocaleString()} km` : null, y);
+  y = drawRow(pdf, t("vehicle_current_km"),        v.currentKm
+    ? `${v.currentKm.toLocaleString()} km` + (v.currentKmUpdatedAt ? `  (${t("report_pdf_km_entry_date")}: ${formatDateSr(v.currentKmUpdatedAt)})` : "")
+    : null, y);
   y = drawRow(pdf, t("vehicle_reg_expiry"),        formatDateSr(v.regExpiry),  y, true);
   y = drawRow(pdf, t("vehicle_insurance_expiry"),  formatDateSr(v.insuranceExpiry), y);
   y = drawRow(pdf, t("report_pdf_insurance_policy_label"), v.insuranceCompany ? `${v.insuranceCompany} / ${v.insurancePolicy || "—"}` : null, y, true);
   y = drawRow(pdf, t("vehicle_purchase_value"),    v.purchaseValue ? `${Number(v.purchaseValue).toLocaleString()} RSD` : null, y);
+  y = drawRow(pdf, t("vehicle_tires_type"),        v.tires?.type ? t("tire_" + v.tires.type) : null, y, true);
+  y = drawRow(pdf, t("vehicle_tires_dimensions"),  v.tires?.dimensions, y);
   return y + 4;
+}
+
+// Oprema (tab Bezbednost): samo stavke obavezne za kategoriju vozila,
+// sa oznakom šta vozilo ima, a šta nedostaje.
+function drawEquipmentSection(pdf, v, y) {
+  const required = requiredEquipmentFor(v.category);
+  const owned = v.requiredEquipment || [];
+  const missing = required.filter(eq => !owned.includes(eq));
+  const catLabel = v.category ? ` — ${t("vehicle_category_" + v.category)}` : "";
+
+  y = drawSectionTitle(pdf, `${t("report_pdf_section_equipment")}${catLabel}`, y, 15);
+  required.forEach((eq, i) => {
+    const has = owned.includes(eq);
+    y = checkPageBreak(pdf, y, 7);
+    if (i % 2 === 0) {
+      pdf.setFillColor(248, 250, 255);
+      pdf.rect(M, y - 3, PW, 6, "F");
+    }
+    pdf.setFont(REPORT_FONT, "bold");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(80);
+    pdf.text(t("equipment_" + eq), M + 2, y);
+    if (has) pdf.setTextColor(22, 163, 74); else pdf.setTextColor(220, 38, 38);
+    pdf.text(has ? t("yes") : t("no"), M + 65, y);
+    y += 6;
+  });
+
+  y += 1;
+  y = checkPageBreak(pdf, y, 7);
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(8.5);
+  if (missing.length === 0) {
+    pdf.setTextColor(22, 163, 74);
+    pdf.text(t("report_pdf_equipment_complete"), M + 2, y);
+  } else {
+    pdf.setTextColor(220, 38, 38);
+    const lines = pdf.splitTextToSize(
+      `${t("report_pdf_equipment_missing")}: ${missing.map(eq => t("equipment_" + eq)).join(", ")}`, PW - 4);
+    lines.forEach(line => { y = checkPageBreak(pdf, y, 6); pdf.text(line, M + 2, y); y += 4.5; });
+    y -= 4.5;
+  }
+  return y + 8;
 }
 
 function drawAssignmentsSection(pdf, assignments, y) {
@@ -917,8 +964,8 @@ function drawFuelingsSection(pdf, fuelings, y) {
 }
 
 function drawCostsSection(pdf, costs, y) {
-  if (costs.length === 0) return y;
   y = drawSectionTitle(pdf, `${t("report_pdf_section_costs")} (${costs.length})`, y, 15);
+  if (costs.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
     [t("report_pdf_col_date"),           25],
@@ -953,8 +1000,8 @@ function drawCostsSection(pdf, costs, y) {
 }
 
 function drawIncidentsSection(pdf, incidents, y) {
-  if (incidents.length === 0) return y;
   y = drawSectionTitle(pdf, `${t("report_pdf_section_incidents")} (${incidents.length})`, y, 25);
+  if (incidents.length === 0) { return drawEmptyRow(pdf, y); }
 
   incidents.forEach((inc, i) => {
     y = checkPageBreak(pdf, y, 25);

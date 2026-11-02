@@ -13,6 +13,8 @@ import {
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import { S } from "./app.js";
 import { fuelLevelLabel, fuelLevelColorClass } from "./vehicles.js";
+import { detailButton, isAdminViewer } from "./entry-details.js";
+import { rememberEntry, rememberAssignment, rememberTrip } from "./detail-registry.js";
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderTrips(container) {
@@ -289,6 +291,7 @@ function capitalizeFirst(str) {
 // panelu (tab "Zaduženja" kod konkretnog vozača).
 export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entriesByAssignment, opts = {}) {
   const assignmentEntries = entriesByAssignment[a.id] || [];
+  rememberAssignment(a);
 
   let trips = (tripsByAssignment[a.id] || []).slice().sort((x, y) => {
     const dx = toJsDate(x.startDate), dy = toJsDate(y.startDate);
@@ -330,7 +333,7 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
   const assignmentEndKm   = lastTrip?.endKm ?? a.endKm ?? null;
 
   return `
-    <div class="assignment-history-card ${a.status !== "closed" ? "assignment-history-card--active" : ""}">
+    <div class="assignment-history-card ${a.status !== "closed" ? "assignment-history-card--active" : ""}" data-assignment-id="${a.id}">
       <div class="assignment-history-card__header" data-toggle-assignment>
         <div>
           ${opts.hideVehicle ? "" : `<div class="trip-history-card__vehicle">
@@ -345,6 +348,7 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
           ${a.status !== "closed" ? `<span class="trip-history-badge trip-history-badge--active">🟢 ${t("assignment_status_active")}</span>` : ""}
           <span class="trip-history-badge">🔑 ${trips.length} ${t("driver_trips_count")}</span>
           ${incidentCount > 0 ? `<span class="trip-history-badge trip-history-badge--warn">⚠️ ${incidentCount}</span>` : ""}
+          ${detailButton("data-detail-assignment", a.id)}
           <span class="trip-history-card__chevron">▾</span>
         </div>
       </div>
@@ -354,7 +358,7 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
           const entries = trip._legacy
             ? assignmentEntries
             : [...(entriesByTrip[trip.id] || []), ...(idx === 0 ? orphanEntries : [])];
-          return tripHistoryCard(trip, entries, idx + 1);
+          return tripHistoryCard(trip, entries, idx + 1, a.id);
         }).join("")}
       </div>
 
@@ -381,7 +385,8 @@ export function historyAssignmentCard(a, tripsByAssignment, entriesByTrip, entri
 }
 
 // ── ISTORIJA — kartica JEDNE VOŽNJE (klik = detalji/unosi) ─────
-function tripHistoryCard(trip, entries, index) {
+function tripHistoryCard(trip, entries, index, assignmentId = null) {
+  rememberTrip(trip, assignmentId);
   const km = (trip.endKm != null && trip.startKm != null) ? (trip.endKm - trip.startKm) : null;
 
   const fuelEntries = entries.filter(e => e.type === "fuel");
@@ -406,6 +411,7 @@ function tripHistoryCard(trip, entries, index) {
         </div>
         <div class="trip-history-card__summary">
           ${badges}
+          ${detailButton("data-detail-trip", trip.id)}
           <span class="trip-history-card__chevron">▾</span>
         </div>
       </div>
@@ -436,9 +442,13 @@ function escHtmlTrips(v) {
 
 // ── Pojedinačan unos unutar razvijene kartice istorije ─────────
 export function historyEntryItem(entry) {
+  rememberEntry(entry);
+  // Admin: klik na unos otvara sve detalje (vidi entry-details.js)
+  const clk = isAdminViewer() && entry.id
+    ? ` trip-history-entry--clickable" data-entry-id="${String(entry.id).replace(/"/g, "&quot;")}" role="button" tabindex="0` : "";
   if (entry.type === "fuel") {
     return `
-      <div class="trip-history-entry">
+      <div class="trip-history-entry${clk}">
         <span>⛽ ${t("trip_entry_fuel")}</span>
         <span>${entry.fuelAmount ?? "—"} L${entry.fuelCost ? ` / ${entry.fuelCost.toLocaleString()} RSD` : ""}</span>
         ${entry.fuelStation ? `<span>🏪 ${entry.fuelStation}</span>` : ""}
@@ -451,7 +461,7 @@ export function historyEntryItem(entry) {
     const costIcons  = { toll: "🛣️", parking: "🅿️", washing: "🚿", other_cost: "📋" };
     const costLabels = { toll: t("trip_entry_toll"), parking: t("trip_entry_parking"), washing: t("trip_entry_washing"), other_cost: t("trip_entry_cost") };
     return `
-      <div class="trip-history-entry">
+      <div class="trip-history-entry${clk}">
         <span>${costIcons[entry.type] || "📋"} ${costLabels[entry.type] || entry.type}</span>
         <span><strong>${entry.amount?.toLocaleString() ?? "—"} RSD</strong></span>
         ${entry.location ? `<span>📍 ${entry.location}</span>` : ""}
@@ -463,7 +473,7 @@ export function historyEntryItem(entry) {
   // fault / damage / accident / other
   const typeIcons = { fault: "🔧", damage: "💥", accident: "🚨", other: "📋" };
   return `
-    <div class="trip-history-entry">
+    <div class="trip-history-entry${clk}">
       <span>${typeIcons[entry.type] || "⚠️"} ${t("incident_" + entry.type) || entry.type}</span>
       ${entry.description ? `<span>${entry.description}</span>` : ""}
       ${entry.currentKm ? `<span>🛣️ ${entry.currentKm.toLocaleString()} km</span>` : ""}
@@ -638,7 +648,7 @@ function renderAdminList(entries, filter, search) {
   }
 
   list.innerHTML = `<div class="trip-entries-admin">${filtered.map(e => `
-    <div class="trip-entry-admin">
+    <div class="trip-entry-admin trip-entry-admin--clickable" data-entry-id="${String(rememberEntry(e).id).replace(/"/g, "&quot;")}" role="button" tabindex="0">
       <div class="trip-entry-admin__meta">
         <span class="trip-entry-admin__plate">${e.vehiclePlate}</span>
         <span class="trip-entry-admin__driver">👤 ${e.driverName}</span>
