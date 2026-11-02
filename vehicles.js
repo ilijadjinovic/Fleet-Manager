@@ -223,7 +223,8 @@ export async function renderVehicles(container, initialFilter = null) {
     return;
   }
 
-  if (initialFilter) currentFilter = initialFilter;
+  // Dolazak sa kontrolne table sa zadatim statusom: počni bez stare pretrage
+  if (initialFilter) { currentFilter = initialFilter; searchTerm = ""; }
 
   const canEdit = S.profile?.role === "master_admin" || S.profile?.role === "fleet_admin";
 
@@ -269,6 +270,11 @@ export async function renderVehicles(container, initialFilter = null) {
   if (canEdit) {
     document.getElementById("btn-add-vehicle")?.addEventListener("click", () => openVehicleForm());
   }
+
+  // Polje za pretragu mora da prikazuje isti tekst po kome je lista filtrirana
+  // (inače se posle povratka iz kartice vozila vidi prazno polje, a lista je filtrirana)
+  const vehicleSearchEl = document.getElementById("vehicle-search");
+  if (vehicleSearchEl) vehicleSearchEl.value = searchTerm;
 
   document.getElementById("vehicle-search")?.addEventListener("input", (e) => {
     searchTerm = e.target.value.toLowerCase();
@@ -401,7 +407,7 @@ function renderList() {
   `;
 
   list.querySelectorAll(".vehicle-row").forEach(row => {
-    row.addEventListener("click", () => openVehicleDetail(row.dataset.id));
+    row.addEventListener("click", () => openVehicleDetail(row.dataset.id, "tech", null, null));
   });
 }
 
@@ -470,7 +476,12 @@ function vehicleRow(v) {
 // (link iz liste zaduženja → vozilo → to zaduženje).
 let pendingFocusAssignmentId = null;
 
-export async function openVehicleDetail(vehicleId, initialTab = "tech", focusAssignmentId = null) {
+// Kuda vraća "← Nazad" u kartici vozila: { vehicleId, fn } ili null (= lista vozila).
+// Ponovno otvaranje iste kartice (npr. posle izmene) ne dira ovu vrednost.
+let vehicleBack = null;
+
+export async function openVehicleDetail(vehicleId, initialTab = "tech", focusAssignmentId = null, onBack = undefined) {
+  if (onBack !== undefined) vehicleBack = onBack ? { vehicleId, fn: onBack } : null;
   pendingFocusAssignmentId = focusAssignmentId;
   currentVehicleId = vehicleId;
   let vehicle = allVehicles.find(v => v.id === vehicleId);
@@ -536,7 +547,11 @@ export async function openVehicleDetail(vehicleId, initialTab = "tech", focusAss
     <div id="vehicle-tab-content"></div>
   `;
 
-  document.getElementById("btn-back")?.addEventListener("click", () => renderVehicles(container));
+  document.getElementById("btn-back")?.addEventListener("click", () => {
+    const back = vehicleBack?.vehicleId === vehicleId ? vehicleBack.fn : null;
+    vehicleBack = null;
+    if (back) back(); else renderVehicles(container);
+  });
   if (canEdit) {
     document.getElementById("btn-edit-vehicle")?.addEventListener("click", () => openVehicleForm(vehicle));
     document.getElementById("btn-delete-vehicle")?.addEventListener("click", () => archiveVehicle(vehicle));

@@ -59,6 +59,12 @@ export async function renderAssignments(container) {
     document.getElementById("btn-add-assignment")?.addEventListener("click", () => openAssignmentForm());
   }
 
+  // Zapamćeni filter/pretraga (važi kad se vraćamo sa kartice vozila)
+  document.querySelectorAll(".filter-chips .chip").forEach(c =>
+    c.classList.toggle("chip--active", c.dataset.filter === filterStatus));
+  const searchInput = document.getElementById("assignment-search");
+  if (searchInput) searchInput.value = searchTerm;
+
   document.getElementById("assignment-search")?.addEventListener("input", (e) => {
     searchTerm = e.target.value.toLowerCase();
     renderList();
@@ -136,8 +142,18 @@ function renderList() {
   `;
 
   // Klik na zaduženje → vozilo, tab "Zaduženja", to zaduženje je razvijeno
-  const openLinked = (card) =>
-    openVehicleDetail(card.dataset.openVehicle, "assignments", card.dataset.openAssignment);
+  // "← Nazad" iz vozila vraća na ovu listu (isti filter i pretraga) i na isto zaduženje
+  const openLinked = (card) => {
+    const assignmentId = card.dataset.openAssignment;
+    openVehicleDetail(card.dataset.openVehicle, "assignments", assignmentId, async () => {
+      const content = document.getElementById("content");
+      if (!content) return;
+      await renderAssignments(content);
+      const back = [...document.querySelectorAll(".assignment-card[data-open-assignment]")]
+        .find(el => el.dataset.openAssignment === assignmentId);
+      back?.scrollIntoView({ block: "center" });
+    });
+  };
   list.querySelectorAll(".assignment-card[data-open-vehicle]").forEach(card => {
     card.addEventListener("click", (e) => {
       if (e.target.closest("button, a, input, select, textarea")) return;

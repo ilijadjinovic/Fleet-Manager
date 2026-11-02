@@ -1706,7 +1706,7 @@ function attachDashboardEvents() {
       document.querySelectorAll(".nav-btn").forEach(btn => {
         btn.classList.toggle("nav-btn--active", btn.dataset.tab === "vehicles");
       });
-      openVehicleDetail(vehicleId, "service");
+      openVehicleDetail(vehicleId, "service", null, () => navigateTo("dashboard"));
     });
   });
 }
