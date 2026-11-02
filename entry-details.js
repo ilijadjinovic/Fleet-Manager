@@ -8,7 +8,8 @@
 //  Otvara se klikom na element sa jednim od atributa:
 //   data-entry-id, data-detail-assignment, data-detail-trip,
 //   data-detail-driver. Prikazuje SVE što se čuva pri unosu.
-//  Vozači (rola "driver") ovo ne vide.
+//  Vozači (rola "driver") vide samo detalje SVOJIH unosa (gorivo, putarina,
+//  parking, pranje, ostalo, prijave) — bez detalja zaduženja/vožnje/vozača.
 // ============================================================
 
 import { db } from "./firebase.js";
@@ -29,6 +30,12 @@ const ICONS  = { fuel: "⛽", toll: "🛣️", parking: "🅿️", washing: "�
 
 export function isAdminViewer() {
   return S.profile?.role !== "driver";
+}
+
+// Detalje unosa (račun za gorivo i ostali troškovi) mogu da otvore svi —
+// vozač vidi svoje unose (pravila baze mu ni ne daju tuđe preko upita).
+export function canOpenEntryDetails() {
+  return !!S.profile;
 }
 
 function typeLabel(type) {
@@ -97,7 +104,7 @@ function entryMiniRow(e) {
 }
 
 function driverLink(name, driverId) {
-  if (!driverId) return esc(name || "—");
+  if (!driverId || !isAdminViewer()) return esc(name || "—");
   return `<a href="#" class="detail-link" data-detail-driver="${esc(driverId)}">${esc(name || "—")}</a>`;
 }
 
@@ -384,11 +391,14 @@ export async function openDriverDetail(driverId) {
 
 // ── GLOBALNI KLIK (capture, da ne okine toggle roditeljskog zaglavlja) ──
 function onActivate(e) {
-  if (!isAdminViewer()) return;
+  if (!canOpenEntryDetails()) return;
   const el = e.target.closest?.(
     "[data-detail-back], [data-entry-id], [data-detail-assignment], [data-detail-trip], [data-detail-driver]"
   );
   if (!el) return;
+
+  // Vozač: dozvoljeni su samo detalji unosa i dugme "Nazad" u modalu
+  if (!isAdminViewer() && !el.hasAttribute("data-detail-back") && !el.dataset.entryId) return;
 
   e.preventDefault();
   e.stopPropagation();

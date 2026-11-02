@@ -2859,10 +2859,12 @@ tbody td {
 .detail-modal__section:first-of-type { margin-top: 4px; }
 .detail-modal__back { margin-bottom: 8px; }
 .trip-history-entry--clickable,
+.trip-entry-card--clickable,
 .trip-entry-admin--clickable,
 .finance-list-row--clickable,
 .detail-mini-row { cursor: pointer; }
 .trip-history-entry--clickable:hover,
+.trip-entry-card--clickable:hover,
 .trip-entry-admin--clickable:hover,
 .finance-list-row--clickable:hover,
 .detail-mini-row:hover { background: rgba(61, 126, 255, 0.07); }

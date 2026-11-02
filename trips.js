@@ -443,8 +443,8 @@ function escHtmlTrips(v) {
 // ── Pojedinačan unos unutar razvijene kartice istorije ─────────
 export function historyEntryItem(entry) {
   rememberEntry(entry);
-  // Admin: klik na unos otvara sve detalje (vidi entry-details.js)
-  const clk = isAdminViewer() && entry.id
+  // Klik na unos otvara sve detalje (vidi entry-details.js) — admin i vozač
+  const clk = entry.id
     ? ` trip-history-entry--clickable" data-entry-id="${String(entry.id).replace(/"/g, "&quot;")}" role="button" tabindex="0` : "";
   if (entry.type === "fuel") {
     return `
@@ -519,7 +519,7 @@ function toMillis(val) {
 // ── ENTRY CARD ────────────────────────────────────────────────
 // Eksportovano — koristi ga i dashboard.js za prikaz unosa tokom
 // aktivne vožnje na tabu "Pregled".
-export function tripEntryCard(entry) {
+export function tripEntryCard(entry, { clickable = false } = {}) {
   const typeConfig = {
     fuel:       { icon: "⛽", label: t("trip_entry_fuel"),   color: "info" },
     toll:       { icon: "🛣️", label: t("trip_entry_toll"),   color: "inactive" },
@@ -534,8 +534,12 @@ export function tripEntryCard(entry) {
 
   const cfg = typeConfig[entry.type] || { icon: "📋", label: entry.type, color: "inactive" };
 
+  const clickAttrs = clickable && entry.id
+    ? ` trip-entry-card--clickable" data-entry-id="${String(rememberEntry(entry).id).replace(/"/g, "&quot;")}" role="button" tabindex="0`
+    : "";
+
   return `
-    <div class="trip-entry-card">
+    <div class="trip-entry-card${clickAttrs}">
       <div class="trip-entry-card__type">
         <span class="trip-entry-card__icon">${cfg.icon}</span>
         <span class="badge badge--${cfg.color}">${cfg.label}</span>

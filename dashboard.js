@@ -16,7 +16,7 @@ import { isVehicleRegistered, needsTachograph, openVehicleDetail, openServiceFor
 import { mountPendingBanner } from "./pending-requests.js";
 import {
   effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
-  getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText
+  getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText, getTireSeasonReminder
 } from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
@@ -300,6 +300,18 @@ async function loadDashboardData() {
       }
     }
 
+    // Podsetnici za zamenu sezonskih guma (samo administracija parka),
+    // mesec dana pre zakonskog roka — vidi getTireSeasonReminder().
+    const tireReminders = [];
+    if (role !== "driver") {
+      activeVehicles.forEach(v => {
+        const r = getTireSeasonReminder(v);
+        if (r) tireReminders.push({ ...r, vehicle: v });
+      });
+      // Najhitnije (najviše zakasnelo / najbliži rok) prvo
+      tireReminders.sort((a, b) => a.daysLeft - b.daysLeft);
+    }
+
     const isDriver = role === "driver";
 
     // Vozač: pronađi/otvori aktivnu vožnju za SVAKO aktivno zaduženje
@@ -315,7 +327,7 @@ async function loadDashboardData() {
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrips) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders
+        total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders, tireReminders
       })}
     `;
 
@@ -330,7 +342,7 @@ async function loadDashboardData() {
   }
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders = [] }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders = [], tireReminders = [] }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // lokalna ponoć
 
@@ -437,7 +449,26 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
               </div>
             </div>`;
         }).join("")}
-        ${(!upcomingScheduled || upcomingScheduled.length === 0) && serviceReminders.length > 0 ? "" : !upcomingScheduled || upcomingScheduled.length === 0
+        ${tireReminders.map(r => {
+          const v = r.vehicle;
+          const urgent = r.overdue || r.daysLeft <= 7;
+          const curType = v.tires?.type ? t("tire_" + v.tires.type) : "";
+          const dims = v.tires?.dimensions ? ` (${v.tires.dimensions})` : "";
+          return `
+            <div class="upcoming-item upcoming-item--${urgent ? "urgent" : "warning"} tire-reminder" data-vehicle-id="${v.id}" data-vehicle-tab="safety" style="cursor:pointer">
+              <div class="upcoming-item__main">
+                <span class="upcoming-item__name">🛞 ${v.brand || ""} ${v.model || ""}</span>
+                <span class="upcoming-item__plate">${v.plate || ""}</span>
+                <span class="upcoming-item__kind">${t("tire_rem_title_" + r.needed)}</span>
+              </div>
+              <div class="upcoming-item__right">
+                <span class="upcoming-item__date">${t("tire_rem_deadline", { date: formatDate(r.deadline) })}</span>
+                <span class="upcoming-item__days">${timeLeftText(r.daysLeft)}</span>
+                <span class="upcoming-item__days">${t("tire_rem_current", { type: curType, dims })}</span>
+              </div>
+            </div>`;
+        }).join("")}
+        ${(!upcomingScheduled || upcomingScheduled.length === 0) && (serviceReminders.length > 0 || tireReminders.length > 0) ? "" : !upcomingScheduled || upcomingScheduled.length === 0
           ? `<p class="empty-text">${t("schedule_no_data")}</p>`
           : upcomingScheduled.map(s => {
               const d = s.serviceDate?.toDate ? s.serviceDate.toDate() : new Date(s.serviceDate);
@@ -673,7 +704,7 @@ function renderActiveAssignmentBlock(a, trip, entries, v) {
     <div id="trip-entries-list-${a.id}">
       ${entries.length === 0
         ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>${t("trip_no_entries")}</p></div>`
-        : entries.map(e => tripEntryCard(e)).join("")
+        : entries.map(e => tripEntryCard(e, { clickable: true })).join("")
       }
     </div>
   `;
@@ -1616,7 +1647,7 @@ async function refreshEntries() {
   if (listEl) {
     listEl.innerHTML = tripEntries.length === 0
       ? `<div class="empty-state"><div class="empty-state__icon">📋</div><p>${t("trip_no_entries")}</p></div>`
-      : tripEntries.map(e => tripEntryCard(e)).join("");
+      : tripEntries.map(e => tripEntryCard(e, { clickable: true })).join("");
   }
 
   // Ažuriraj statistike (samo za blok ovog zaduženja)
@@ -1697,16 +1728,18 @@ function attachDashboardEvents() {
     });
   });
 
-  // Klik na zakazani servis u panelu → detalji vozila, tab "Servisna istorija"
+  // Klik na nadolazeći servis u panelu → detalji vozila, tab "Servisna istorija"
+  // (za podsetnik o gumama: tab "Bezbednost", gde se vide pneumatici)
   document.querySelectorAll("[data-vehicle-id]").forEach(item => {
     item.addEventListener("click", () => {
       const vehicleId = item.dataset.vehicleId;
       if (!vehicleId) return;
+      const vehicleTab = item.dataset.vehicleTab || "service";
       S.activeTab = "vehicles";
       document.querySelectorAll(".nav-btn").forEach(btn => {
         btn.classList.toggle("nav-btn--active", btn.dataset.tab === "vehicles");
       });
-      openVehicleDetail(vehicleId, "service", null, () => navigateTo("dashboard"));
+      openVehicleDetail(vehicleId, vehicleTab, null, () => navigateTo("dashboard"));
     });
   });
 }
