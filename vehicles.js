@@ -12,7 +12,7 @@ import {
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import {
   toDMY, todayDMY, parseDMY, datePlaceholder, attachDateMask,
-  collectDates, setDateError
+  collectDates, setDateError, clearDateError
 } from "./date-input.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
@@ -1817,8 +1817,8 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
           value="${isEdit ? toDMY(s.serviceDate) : todayDMY()}" />
       </div>
       <div class="form-group">
-        <label class="form-label">${t("service_time")}</label>
-        <input id="sf-time" class="form-input" type="time" value="${s.serviceTime || ""}" />
+        <label class="form-label">${t("service_time")} *</label>
+        <input id="sf-time" class="form-input" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:MM" value="${s.serviceTime || ""}" />
       </div>
     </div>
     ${!isEdit ? `
@@ -1893,6 +1893,17 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       const isDoneRecord = isEdit
         ? effectiveServiceStatus(service) === SERVICE_STATUS.DONE
         : !!document.getElementById("sf-already-done")?.checked;
+      // Vreme je obavezno za zakazivanje (ne i za servis koji je već obavljen)
+      // Vreme u 24-časovnom formatu 00:00–23:59 (bez AM/PM)
+      const timeStr = (document.getElementById("sf-time")?.value || "").trim();
+      if (!timeStr && !isDoneRecord) {
+        setDateError("sf-time", t("service_time_required"), { focus: true });
+        return false;
+      }
+      if (timeStr && !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeStr)) {
+        setDateError("sf-time", t("service_time_invalid"), { focus: true });
+        return false;
+      }
       if (!isDoneRecord && isWeekend(serviceDateVal)) {
         serviceDateVal = shiftToWorkday(serviceDateVal, new Date());
         weekendShifted = true;
@@ -1912,7 +1923,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       const workshopAddress = document.getElementById("sf-workshop-address")?.value.trim() || null;
       // Vreme (HH:MM) se čuva zasebno od datuma — serviceDate ostaje ponoć,
       // pa se statusi, vikend-pomeranje i izveštaji ne menjaju.
-      const serviceTime = document.getElementById("sf-time")?.value || null;
+      const serviceTime = (document.getElementById("sf-time")?.value || "").trim() || null;
 
       const data = {
         vehicleId:    vehicle.id,
@@ -1983,6 +1994,16 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   });
 
   ["sf-date", "sf-endDate"].forEach(attachDateMask);
+  // Maska za vreme HH:MM (24h): kuca se samo cifre, dvotačka se dodaje sama;
+  // prva cifra veća od 2 dobija nulu ispred (9 → 09:)
+  document.getElementById("sf-time")?.addEventListener("input", (e) => {
+    const el = e.target;
+    let digits = el.value.replace(/\D/g, "");
+    if (digits.length >= 1 && Number(digits[0]) > 2) digits = "0" + digits;
+    digits = digits.slice(0, 4);
+    el.value = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+    clearDateError(el);
+  });
 
   // Prikaži slobodno polje samo kad je izabrano "Drugo"
   document.getElementById("sf-workshop-select")?.addEventListener("change", (e) => {

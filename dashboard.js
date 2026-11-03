@@ -527,7 +527,7 @@ function renderVehicleNotices(n) {
         </div>
         <div class="upcoming-item__right">
           <span class="upcoming-item__date">
-            ${s.serviceTime ? `<span class="upcoming-item__time">🕒 ${noticeEsc(s.serviceTime)}</span>` : ""}
+            <span class="upcoming-item__time${s.serviceTime ? "" : " upcoming-item__time--missing"}" ${s.serviceTime ? "" : `title="${t("service_time_missing")}"`}>🕒 ${noticeEsc(s.serviceTime || "—:—")}</span>
             ${formatDate(d)}
             ${badges}
           </span>
@@ -745,7 +745,7 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
                   </div>
                   <div class="upcoming-item__right">
                     <span class="upcoming-item__date">
-                      ${s.serviceTime ? `<span class="upcoming-item__time">🕒 ${s.serviceTime}</span>` : ""}
+                      <span class="upcoming-item__time${s.serviceTime ? "" : " upcoming-item__time--missing"}" ${s.serviceTime ? "" : `title="${t("service_time_missing")}"`}>🕒 ${s.serviceTime || "—:—"}</span>
                       ${dateStr}
                       ${today_ ? `<span class="today-badge">${t("dashboard_today")}</span>` : ""}
                       ${overdueBadge}
