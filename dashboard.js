@@ -14,6 +14,7 @@ import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js"
 import { getCompanies } from "./firebase.js";
 import { isVehicleRegistered, needsTachograph, openVehicleDetail, openServiceForm, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
 import { mountPendingBanner } from "./pending-requests.js";
+import { getServiceProviders } from "./servicers.js";
 import {
   effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
   getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText, getTireSeasonReminder
@@ -246,6 +247,13 @@ async function loadDashboardData() {
       )
     ).catch(() => ({ docs: [] }));
 
+    // Adresa servisa za starije zapise (bez snimljene adrese) — iz kartice servisera
+    let providerAddr = new Map();
+    try {
+      const provs = await getServiceProviders();
+      providerAddr = new Map(provs.map(p => [p.id, p.address || ""]));
+    } catch { /* adresa je dodatni podatak — dashboard radi i bez nje */ }
+
     const mapService = (d) => {
       const s = { id: d.id, ...d.data() };
       const veh = vehicles.find(v => v.id === s.vehicleId);
@@ -253,6 +261,7 @@ async function loadDashboardData() {
         ...s,
         vehicleBrand: veh?.brand || "",
         vehicleModel: veh?.model || "",
+        workshopAddress: s.workshopAddress || (s.servicerId ? providerAddr.get(s.servicerId) : "") || "",
       };
     };
 
@@ -526,10 +535,15 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
                   <div class="upcoming-item__main">
                     <span class="upcoming-item__name">${s.vehicleBrand} ${s.vehicleModel}</span>
                     <span class="upcoming-item__plate">${s.vehiclePlate}</span>
-                    ${s.workshop ? `<span class="upcoming-item__plate">🔧 ${s.workshop}</span>` : ""}
+                    ${s.workshop || s.workshopAddress ? `
+                      <div class="upcoming-item__place">
+                        ${s.workshop ? `<span class="upcoming-item__plate">🔧 ${s.workshop}</span>` : ""}
+                        ${s.workshopAddress ? `<span class="upcoming-item__addr">📍 ${s.workshopAddress}</span>` : ""}
+                      </div>` : ""}
                   </div>
                   <div class="upcoming-item__right">
                     <span class="upcoming-item__date">
+                      ${s.serviceTime ? `<span class="upcoming-item__time">🕒 ${s.serviceTime}</span>` : ""}
                       ${dateStr}
                       ${today_ ? `<span class="today-badge">${t("dashboard_today")}</span>` : ""}
                       ${overdueBadge}

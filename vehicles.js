@@ -1802,19 +1802,23 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   const servicers = await getServiceProviders();
 
   const bodyHTML = `
+    <div class="form-group">
+      <label class="form-label">${t("service_type")} *</label>
+      <select id="sf-type" class="form-select">
+        ${["regular","tech","tires","repair","other"].map(st =>
+          `<option value="${st}" ${s.serviceType === st ? "selected" : ""}>${t("service_type_" + st)}</option>`
+        ).join("")}
+      </select>
+    </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">${t("service_type")} *</label>
-        <select id="sf-type" class="form-select">
-          ${["regular","tech","tires","repair","other"].map(st =>
-            `<option value="${st}" ${s.serviceType === st ? "selected" : ""}>${t("service_type_" + st)}</option>`
-          ).join("")}
-        </select>
-      </div>
       <div class="form-group">
         <label class="form-label">${t("service_date")} *</label>
         <input id="sf-date" class="form-input" type="text" inputmode="numeric" maxlength="10" placeholder="${datePlaceholder()}"
           value="${isEdit ? toDMY(s.serviceDate) : todayDMY()}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t("service_time")}</label>
+        <input id="sf-time" class="form-input" type="time" value="${s.serviceTime || ""}" />
       </div>
     </div>
     ${!isEdit ? `
@@ -1844,6 +1848,12 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       </select>
       <input id="sf-workshop" class="form-input" type="text" style="margin-top:8px;display:${!s.servicerId && s.workshop ? "" : "none"}"
         placeholder="${t("service_workshop")}" value="${!s.servicerId && s.workshop ? s.workshop : ""}" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t("service_workshop_address")}</label>
+      <input id="sf-workshop-address" class="form-input" type="text"
+        placeholder="${t("service_workshop_address_ph")}"
+        value="${s.workshopAddress || (s.servicerId ? (servicers.find(x => x.id === s.servicerId)?.address || "") : "")}" />
     </div>
     <div class="form-group">
       <label class="form-label">${t("service_description")}</label>
@@ -1898,15 +1908,22 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
         workshop = sp?.name || null;
         servicerId = selectedId;
       }
+      // Adresa servisa — polje je predpopunjeno iz kartice servisera, ali se može ispraviti
+      const workshopAddress = document.getElementById("sf-workshop-address")?.value.trim() || null;
+      // Vreme (HH:MM) se čuva zasebno od datuma — serviceDate ostaje ponoć,
+      // pa se statusi, vikend-pomeranje i izveštaji ne menjaju.
+      const serviceTime = document.getElementById("sf-time")?.value || null;
 
       const data = {
         vehicleId:    vehicle.id,
         vehiclePlate: vehicle.plate,
         serviceType:  document.getElementById("sf-type")?.value,
         serviceDate:  serviceDateVal,
+        serviceTime,
         km:           numOrNull("sf-km"),
         cost:         numOrNull("sf-cost"),
         workshop,
+        workshopAddress,
         servicerId,
         description:  document.getElementById("sf-desc")?.value.trim() || null,
         endDate:      dateOrNull("sf-endDate"),
@@ -1970,13 +1987,15 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   // Prikaži slobodno polje samo kad je izabrano "Drugo"
   document.getElementById("sf-workshop-select")?.addEventListener("change", (e) => {
     const freeInput = document.getElementById("sf-workshop");
-    if (!freeInput) return;
+    const addrInput = document.getElementById("sf-workshop-address");
     if (e.target.value === "__other__") {
-      freeInput.style.display = "";
-      freeInput.focus();
+      if (freeInput) { freeInput.style.display = ""; freeInput.focus(); }
     } else {
-      freeInput.style.display = "none";
-      freeInput.value = "";
+      if (freeInput) { freeInput.style.display = "none"; freeInput.value = ""; }
+    }
+    // Izabran serviser iz liste → adresa iz njegove kartice (može se ručno ispraviti)
+    if (addrInput && e.target.value && e.target.value !== "__other__") {
+      addrInput.value = servicers.find(x => x.id === e.target.value)?.address || "";
     }
   });
 }
@@ -2165,13 +2184,14 @@ function serviceItem(s, vehicle, canEdit) {
           ${statusBadge}
           ${todayBadge}
         </div>
-        <span class="service-item__date">${formatDate(s.serviceDate)}</span>
+        <span class="service-item__date">${formatDate(s.serviceDate)}${s.serviceTime ? ` 🕒 ${s.serviceTime}` : ""}</span>
       </div>
       ${s.description ? `<div class="service-item__desc">${s.description}</div>` : ""}
       <div class="service-item__meta">
         ${s.km ? `<span>📍 ${s.km.toLocaleString()} km</span>` : ""}
         ${s.cost ? `<span>💰 ${s.cost.toLocaleString()} RSD</span>` : ""}
         ${s.workshop ? `<span>🔧 ${s.workshop}</span>` : ""}
+        ${s.workshopAddress ? `<span>🏠 ${s.workshopAddress}</span>` : ""}
       </div>
       ${s.endDate || s.endKm ? `<div class="service-item__next">${t("vehicle_service_end")}: ${formatDate(s.endDate)}${s.endKm ? " / " + s.endKm.toLocaleString() + " km" : ""}</div>` : ""}
       ${actions ? `<div class="service-item__actions">${actions}</div>` : ""}
