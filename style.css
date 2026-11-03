@@ -774,6 +774,7 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 .upcoming-item__days { font-size: 12px; font-weight: 700; color: var(--color-warning); }
 .upcoming-item__place { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
 .upcoming-item__addr { font-size: 11px; color: var(--color-text-muted); }
+.driver-notices { margin-bottom: 16px; }
 .upcoming-item__time { font-weight: 700; color: var(--color-text); margin-right: 6px; }
 
 .empty-text { font-size: 13px; color: var(--color-text-faint); text-align: center; padding: 16px 0; }
