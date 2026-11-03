@@ -470,13 +470,16 @@ function renderVehicleNotices(n, a = null) {
   if (!n) return "";
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const toD = (x) => x?.toDate ? x.toDate() : (x ? new Date(x) : null);
-  const items = [];
+  // Stavke se na kraju sortiraju po hitnosti (manji ključ = hitnije):
+  // propušteno / isteklo / kasni prvo, pa po broju preostalih dana.
+  const entries = [];
+  const add = (key, html) => entries.push({ key, html });
 
   n.deadlines.forEach(d => {
     const expired = d.daysLeft < 0;
     const urgency = expired || d.daysLeft <= 7 ? "urgent" : d.daysLeft <= 14 ? "warning" : "ok";
     const kindLabel = d.kind === "tachograph" ? t("dashboard_kind_tachograph") : t("dashboard_kind_reg");
-    items.push(`
+    add(d.daysLeft, `
       <div class="upcoming-item upcoming-item--${urgency}">
         <div class="upcoming-item__main">
           <span class="upcoming-item__name">${expired ? "⛔" : "📄"} ${noticeEsc(kindLabel)}</span>
@@ -491,7 +494,7 @@ function renderVehicleNotices(n, a = null) {
   });
 
   if (n.badStatus) {
-    items.push(`
+    add(n.badStatus === "broken" ? -9999 : -9000, `
       <div class="upcoming-item upcoming-item--${n.badStatus === "broken" ? "urgent" : "warning"}">
         <div class="upcoming-item__main">
           <span class="upcoming-item__name">🚧 ${t("driver_notice_vehicle_status")}</span>
@@ -514,7 +517,7 @@ function renderVehicleNotices(n, a = null) {
       overdue ? `<span class="today-badge" style="background:var(--color-danger)">⚠️ ${t("service_status_overdue")} — ${t("service_overdue_days", { n: overdueDays(s) })}</span>` : "",
       status === SERVICE_STATUS.IN_PROGRESS ? `<span class="today-badge" style="background:var(--color-warning)">${t("service_status_in_progress")}</span>` : "",
     ].join("");
-    items.push(`
+    add(daysLeft, `
       <div class="upcoming-item upcoming-item--${urgency}">
         <div class="upcoming-item__main">
           <span class="upcoming-item__name">🔧 ${noticeEsc(t("service_type_" + s.serviceType) || s.serviceType || "")}</span>
@@ -543,7 +546,7 @@ function renderVehicleNotices(n, a = null) {
     if (r.dateAlarm) reasons.push(`📅 ${timeLeftText(r.daysLeft)}`);
     if (r.kmAlarm)   reasons.push(`🛣️ ${kmLeftText(r.kmLeft)}`);
     const dueKm = r.nextKm != null ? ` / ${r.nextKm.toLocaleString()} km` : "";
-    items.push(`
+    add(Number.isFinite(r.urgency) ? r.urgency : r.daysLeft, `
       <div class="upcoming-item upcoming-item--${late ? "urgent" : "warning"} service-reminder">
         <div class="service-reminder__body">
           <div class="upcoming-item__main">
@@ -562,7 +565,7 @@ function renderVehicleNotices(n, a = null) {
     const urgent = r.overdue || r.daysLeft <= 7;
     const curType = n.vehicle.tires?.type ? t("tire_" + n.vehicle.tires.type) : "";
     const dims = n.vehicle.tires?.dimensions ? ` (${n.vehicle.tires.dimensions})` : "";
-    items.push(`
+    add(r.daysLeft, `
       <div class="upcoming-item upcoming-item--${urgent ? "urgent" : "warning"} service-reminder tire-reminder">
         <div class="service-reminder__body">
           <div class="upcoming-item__main">
@@ -580,7 +583,7 @@ function renderVehicleNotices(n, a = null) {
   return `
     <div class="dashboard-panel driver-notices">
       <h3 class="panel-title">🔔 ${t("driver_notices_title")}${a ? ` — ${noticeEsc(a.vehicleBrand || "")} ${noticeEsc(a.vehicleModel || "")} <span class="upcoming-item__plate">${noticeEsc(a.vehiclePlate || "")}</span>` : ""}</h3>
-      ${items.length ? items.join("") : `<p class="empty-text">✅ ${t("driver_notices_none")}</p>`}
+      ${entries.length ? entries.slice().sort((x, y) => x.key - y.key).map(e => e.html).join("") : `<p class="empty-text">✅ ${t("driver_notices_none")}</p>`}
     </div>`;
 }
 
