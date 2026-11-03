@@ -466,7 +466,7 @@ function buildVehicleNotices(v, services, settings, providerAddr = new Map()) {
   return { vehicle: v, deadlines, scheduled, regular, tire, badStatus };
 }
 
-function renderVehicleNotices(n) {
+function renderVehicleNotices(n, a = null) {
   if (!n) return "";
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const toD = (x) => x?.toDate ? x.toDate() : (x ? new Date(x) : null);
@@ -579,7 +579,7 @@ function renderVehicleNotices(n) {
 
   return `
     <div class="dashboard-panel driver-notices">
-      <h3 class="panel-title">🔔 ${t("driver_notices_title")}</h3>
+      <h3 class="panel-title">🔔 ${t("driver_notices_title")}${a ? ` — ${noticeEsc(a.vehicleBrand || "")} ${noticeEsc(a.vehicleModel || "")} <span class="upcoming-item__plate">${noticeEsc(a.vehiclePlate || "")}</span>` : ""}</h3>
       ${items.length ? items.join("") : `<p class="empty-text">✅ ${t("driver_notices_none")}</p>`}
     </div>`;
 }
@@ -849,7 +849,7 @@ function renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSn
 
     return `
       <div class="trip-assignment-block" data-assignment-id="${a.id}">
-        ${renderActiveAssignmentBlock(a, trip, entries, vehicle, renderVehicleNotices(vehicleNotices.get(a.vehicleId)))}
+        ${renderActiveAssignmentBlock(a, trip, entries, vehicle)}
       </div>
     `;
   }).join("");
@@ -859,12 +859,21 @@ function renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSn
   // unutar kartice ionako re-selektuje ispravno zaduženje.
   selectAssignment(activeAssignments[0].id);
 
-  return blocksHTML;
+  // Obaveštenja (istek registracije, servisi, gume...) idu na sam VRH
+  // dashboarda, iznad kartica zaduženja — po jedan blok za svako zaduženo vozilo.
+  const seenVehicles = new Set();
+  const noticesTop = activeAssignments.map(a => {
+    if (!a.vehicleId || seenVehicles.has(a.vehicleId)) return "";
+    seenVehicles.add(a.vehicleId);
+    return renderVehicleNotices(vehicleNotices.get(a.vehicleId), a);
+  }).join("");
+
+  return noticesTop + blocksHTML;
 }
 
 // ── AKTIVNO ZADUŽENJE: kartica vozila, km potvrda, statistike,
 //    akcije i lista unosa tokom vožnje ──────────────────────────
-function renderActiveAssignmentBlock(a, trip, entries, v, noticesHTML = "") {
+function renderActiveAssignmentBlock(a, trip, entries, v) {
   const totalFuel     = entries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelAmount || 0), 0);
   const totalFuelCost = entries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelCost || 0), 0);
   const totalTolls    = entries.filter(e => e.type === "toll").reduce((s, e) => s + (e.amount || 0), 0);
@@ -921,9 +930,6 @@ function renderActiveAssignmentBlock(a, trip, entries, v, noticesHTML = "") {
         ${kmConfirmBoxContent(a, v)}
       </div>
     </div>
-
-    <!-- OBAVEŠTENJA ZA VOZILO (registracija, servisi, gume) -->
-    ${noticesHTML}
 
     <!-- STATISTIKE (za TRENUTNU vožnju) -->
     <div class="trip-stats" data-assignment-id="${a.id}">
