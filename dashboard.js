@@ -23,6 +23,8 @@ import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
 import { scanQRCode, parseFiscalQR, fetchReceiptDetails, receiptWorkerConfigured } from "./receipt-scan.js";
 import { findReceiptDuplicate, saveTripEntry, DuplicateReceiptError, normalizeReceiptNo } from "./receipt-guard.js";
+import { COST_TYPES } from "./entries-view.js";
+import { costFieldsHTML, bindCostScanner } from "./entry-forms.js";
 
 // ── STANJE MODULA: aktivno zaduženje trenutnog vozača ─────────
 // Vozač može imati VIŠE aktivnih zaduženja istovremeno (npr. dva
@@ -880,7 +882,7 @@ function renderActiveAssignmentBlock(a, trip, entries, v) {
   const totalFuel     = entries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelAmount || 0), 0);
   const totalFuelCost = entries.filter(e => e.type === "fuel").reduce((s, e) => s + (e.fuelCost || 0), 0);
   const totalTolls    = entries.filter(e => e.type === "toll").reduce((s, e) => s + (e.amount || 0), 0);
-  const totalOther    = entries.filter(e => e.type === "other_cost").reduce((s, e) => s + (e.amount || 0), 0);
+  const totalOther    = entries.filter(e => COST_TYPES.includes(e.type) && e.type !== "toll").reduce((s, e) => s + (e.amount || 0), 0);
   const incidents     = entries.filter(e => ["fault", "damage", "accident"].includes(e.type));
 
   const tripType     = trip?.tripType ?? a.tripType;
@@ -1683,32 +1685,12 @@ async function saveFuelEntry() {
 }
 
 // ── FORMA ZA PUTARINU / TROŠAK ────────────────────────────────
+let costScanner = null;
+
 function openCostForm() {
   const bodyHTML = `
     <div class="form-section-title">${t("trip_cost_header")}</div>
-    <div class="form-group">
-      <label class="form-label">${t("trip_cost_type")}</label>
-      <select id="tc-type" class="form-select">
-        <option value="toll">🛣️ ${t("trip_cost_toll")}</option>
-        <option value="parking">🅿️ ${t("trip_cost_parking")}</option>
-        <option value="washing">🚿 ${t("trip_cost_washing")}</option>
-        <option value="other_cost">📋 ${t("trip_cost_other")}</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">${t("trip_cost_amount")}</label>
-        <input id="tc-amount" class="form-input" type="number" min="0" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">${t("trip_cost_receipt")}</label>
-        <input id="tc-receiptNo" class="form-input" type="text" />
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">${t("trip_cost_location")}</label>
-      <input id="tc-location" class="form-input" type="text" placeholder="${t("trip_cost_location_ph")}" />
-    </div>
+    ${costFieldsHTML("tc")}
     <div class="form-group">
       <label class="form-label">${t("trip_current_km")} *</label>
       <input id="tc-currentKm" class="form-input" type="number"
@@ -1723,11 +1705,13 @@ function openCostForm() {
   `;
 
   openModal(t("trip_cost_add"), bodyHTML, () => saveCostEntry());
+  // modal je u DOM-u odmah; skener se vezuje posle renderovanja
+  setTimeout(() => { costScanner = bindCostScanner("tc"); }, 0);
 }
 
 async function saveCostEntry() {
-  const amount = parseFloat(document.getElementById("tc-amount")?.value);
-  if (!amount || amount <= 0) {
+  const c = costScanner?.read();
+  if (!c || !c.amount || c.amount <= 0) {
     showEntryError("cost-form-error", t("required_field"));
     return;
   }
@@ -1735,7 +1719,7 @@ async function saveCostEntry() {
   const currentKm = validateKmInput(document.getElementById("tc-currentKm")?.value, "cost-form-error");
   if (currentKm === null) return;
 
-  const costReceiptNo = normalizeReceiptNo(document.getElementById("tc-receiptNo")?.value);
+  const costReceiptNo = normalizeReceiptNo(c.receiptNoRaw);
   if (costReceiptNo) {
     const dup = await checkReceiptDuplicate(costReceiptNo);
     if (dup.error || dup.duplicate) {
@@ -1746,7 +1730,7 @@ async function saveCostEntry() {
 
   try {
     await saveTripEntry(S.companyId, {
-      type:         document.getElementById("tc-type")?.value || "other_cost",
+      type:         c.type,
       assignmentId: activeAssignment.id,
       tripId:       activeTrip?.id || null,
       vehicleId:    activeAssignment.vehicleId,
@@ -1754,9 +1738,16 @@ async function saveCostEntry() {
       driverId:     S.profile?.driverId || null,
       driverUid:    S.user.uid,
       driverName:   activeAssignment.driverName,
-      amount,
+      amount:       c.amount,
       receiptNo:    costReceiptNo,
-      location:     document.getElementById("tc-location")?.value.trim() || null,
+      merchant:     c.merchant,
+      merchantAddress: c.merchantAddress,
+      location:     c.location,
+      receiptTime:  c.receiptTime,
+      receiptUrl:   c.receiptUrl,
+      receiptSource: c.receiptSource,
+      stationPib:   c.stationPib,
+      receiptItems: c.receiptItems,
       currentKm,
       notes:        document.getElementById("tc-notes")?.value.trim() || null,
       createdAt:    serverTimestamp(),

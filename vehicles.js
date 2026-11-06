@@ -21,7 +21,9 @@ import {
   getServiceSettings, getRegularServiceInfo, nextServiceSummary, shiftToWorkday, isWeekend,
   cleanVehicleServiceOverrides
 } from "./service-status.js";
-import { incidentCard, scheduleServiceForIncident } from "./incidents.js";
+import { incidentCard, scheduleServiceForIncident, openIncidentForm } from "./incidents.js";
+import { openAdminEntryForm } from "./entry-forms.js";
+import { COST_TYPES as COST_TYPES_V, COST_META as COST_META_V } from "./entries-view.js";
 import { detailButton, isAdminViewer } from "./entry-details.js";
 import { rememberEntry } from "./detail-registry.js";
 import { esc as escDet, fmtNum as fmtNumDet, fmtRsd as fmtRsdDet, toMillis as toMsDet } from "./entries-view.js";
@@ -699,7 +701,7 @@ function financeTotals(services, entries, from, to) {
 
   const sum = {
     fuelCount: 0, fuelL: 0, fuelCost: 0,
-    toll: 0, parking: 0, washing: 0, other: 0,
+    toll: 0, parking: 0, washing: 0, cosmetics: 0, adblue: 0, other: 0,
     serviceCount: 0, serviceCost: 0, servicePlanned: 0, serviceCancelled: 0,
   };
 
@@ -711,6 +713,8 @@ function financeTotals(services, entries, from, to) {
     } else if (e.type === "toll")       sum.toll    += Number(e.amount) || 0;
     else if (e.type === "parking")      sum.parking += Number(e.amount) || 0;
     else if (e.type === "washing")      sum.washing += Number(e.amount) || 0;
+    else if (e.type === "cosmetics")    sum.cosmetics += Number(e.amount) || 0;
+    else if (e.type === "adblue")       sum.adblue  += Number(e.amount) || 0;
     else if (e.type === "other_cost")   sum.other   += Number(e.amount) || 0;
   });
 
@@ -726,7 +730,7 @@ function financeTotals(services, entries, from, to) {
     }
   });
 
-  sum.total = sum.fuelCost + sum.toll + sum.parking + sum.washing + sum.other + sum.serviceCost;
+  sum.total = sum.fuelCost + sum.toll + sum.parking + sum.washing + sum.cosmetics + sum.adblue + sum.other + sum.serviceCost;
   return sum;
 }
 
@@ -756,6 +760,8 @@ function financeSummaryHTML(sum, from, to) {
       ${card("🛣️", t("trip_entry_toll"),    rsd(sum.toll))}
       ${card("🅿️", t("trip_entry_parking"), rsd(sum.parking))}
       ${card("🚿", t("trip_entry_washing"), rsd(sum.washing))}
+      ${card("🧴", t("trip_entry_cosmetics"), rsd(sum.cosmetics))}
+      ${card("💧", t("trip_entry_adblue"),  rsd(sum.adblue))}
       ${card("📋", t("trip_entry_cost"),    rsd(sum.other))}
       ${card("🔧", t("finance_services"),   rsd(sum.serviceCost),
           `${sum.serviceCount} ${t("finance_services_done")}${skipped.length ? " · " + t("finance_services_not_counted") + " (" + skipped.join(", ") + ")" : ""}`)}
@@ -773,10 +779,10 @@ function financeListHTML(services, entries, from, to) {
   const fromMs = from ? from.getTime() : -Infinity;
   const toMs   = to   ? to.getTime()   : Infinity;
   const inPeriod = (val) => { const ms = toMsDet(val); return ms && ms >= fromMs && ms <= toMs; };
-  const icons = { fuel: "⛽", toll: "🛣️", parking: "🅿️", washing: "🚿", other_cost: "📋" };
+  const icons = { fuel: "⛽", ...Object.fromEntries(COST_TYPES_V.map(k => [k, COST_META_V[k].icon])) };
   const labels = {
-    fuel: t("trip_entry_fuel"), toll: t("trip_entry_toll"), parking: t("trip_entry_parking"),
-    washing: t("trip_entry_washing"), other_cost: t("trip_entry_cost"),
+    fuel: t("trip_entry_fuel"),
+    ...Object.fromEntries(COST_TYPES_V.map(k => [k, t(COST_META_V[k].label)])),
   };
   const admin = isAdminViewer();
 
@@ -790,6 +796,7 @@ function financeListHTML(services, entries, from, to) {
     const sub = [
       isFuel && e.fuelType ? t("fuel_" + e.fuelType) : null,
       isFuel && e.fuelStation ? "🏪 " + e.fuelStation : null,
+      !isFuel && e.merchant ? "🏪 " + e.merchant : null,
       !isFuel && e.location ? "📍 " + e.location : null,
       e.receiptNo ? `${t("trip_fuel_receipt")}: ${e.receiptNo}` : null,
       e.driverName ? "👤 " + e.driverName : null,
@@ -858,7 +865,13 @@ async function loadFinanceTab(container, v) {
     const defaultFrom = new Date();
     defaultFrom.setDate(defaultFrom.getDate() - 30);
 
+    const canAddEntries = S.profile?.role !== "driver" && !v.archived;
     container.innerHTML = `
+      ${canAddEntries ? `
+        <div class="admin-entry-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button type="button" class="btn btn--primary btn--sm" id="btn-v-add-fuel">⛽ ${t("admin_entry_fuel_add")}</button>
+          <button type="button" class="btn btn--primary btn--sm" id="btn-v-add-cost">🧾 ${t("admin_entry_cost_add")}</button>
+        </div>` : ""}
       <div class="finance-period">
         <div class="form-row">
           <div class="form-group">
@@ -892,6 +905,11 @@ async function loadFinanceTab(container, v) {
 
     attachDateMask("fin-from");
     attachDateMask("fin-to");
+    if (canAddEntries) {
+      const reload = () => loadFinanceTab(container, v);
+      document.getElementById("btn-v-add-fuel")?.addEventListener("click", () => openAdminEntryForm("fuel", { vehicleId: v.id, onSaved: reload }));
+      document.getElementById("btn-v-add-cost")?.addEventListener("click", () => openAdminEntryForm("cost", { vehicleId: v.id, onSaved: reload }));
+    }
 
     const apply = () => {
       // Oba datuma su opciona: prazno "Od" = od početka, prazno "Do" = do danas i dalje
@@ -1057,9 +1075,14 @@ async function loadIncidentsTab(container, vehicle) {
     );
     const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    container.innerHTML = items.length === 0
+    const addBtn = canEdit
+      ? `<div style="margin-bottom:12px"><button type="button" class="btn btn--warning btn--sm" id="btn-v-add-incident">⚠️ ${t("incident_add")}</button></div>`
+      : "";
+    container.innerHTML = addBtn + (items.length === 0
       ? `<div class="empty-state"><div class="empty-state__icon">⚠️</div><p>${t("no_data")}</p></div>`
-      : `<div class="incidents-list">${items.map(i => incidentCard(i, false, canEdit)).join("")}</div>`;
+      : `<div class="incidents-list">${items.map(i => incidentCard(i, false, canEdit)).join("")}</div>`);
+    document.getElementById("btn-v-add-incident")?.addEventListener("click", () =>
+      openIncidentForm(null, () => loadIncidentsTab(container, vehicle), null, vehicle.id));
 
     if (canEdit) {
       container.querySelectorAll(".btn-incident-schedule-service").forEach(btn => {

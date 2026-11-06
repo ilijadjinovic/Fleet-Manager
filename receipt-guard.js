@@ -44,7 +44,7 @@ export function receiptKey(normalized) {
   return normalized ? encodeURIComponent(normalized) : null;
 }
 
-const EXPENSE_TYPES = ["fuel", "toll", "parking", "washing", "other_cost"];
+const EXPENSE_TYPES = ["fuel", "toll", "parking", "washing", "cosmetics", "adblue", "other_cost"];
 
 // Vraća postojeći unos sa istim brojem računa, ili null.
 // Baca grešku ako provera ne uspe — pozivalac NE sme tada da snimi.
