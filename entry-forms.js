@@ -92,8 +92,27 @@ export function costFieldsHTML(p) {
 
 // Vezuje dugme "Skeniraj račun". Vraća objekat sa read() koji daje
 // sva polja troška (uključujući podatke dobijene skeniranjem).
-export function bindCostScanner(p) {
+export function bindCostScanner(p, notesId = `${p}-notes`) {
   const scan = { url: null, source: "manual", pib: null, items: null, merchantAddress: null };
+  let autoNotes = "";   // tekst koji je aplikacija sama upisala u napomenu
+
+  // Stavke sa računa → polje "Napomena" (ne briše ono što je korisnik sam ukucao)
+  const fmt = (n) => Number(n).toLocaleString("sr-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fillNotes = (items) => {
+    const el = document.getElementById(notesId);
+    if (!el || !items.length) return;
+    const lines = items.map(it => {
+      const qty = it.quantity != null ? Number(it.quantity).toLocaleString("sr-RS", { maximumFractionDigits: 3 }) : "";
+      const price = it.unitPrice != null ? fmt(it.unitPrice) : "";
+      const tot = it.total != null ? fmt(it.total) : "";
+      return `• ${it.name || "—"}${qty ? ` — ${qty} × ${price}` : ""}${tot ? ` = ${tot}` : ""}`;
+    });
+    const text = `${t("receipt_items_label")}\n${lines.join("\n")}`;
+    const cur = el.value.trim();
+    if (!cur || cur === autoNotes) el.value = text;                 // prazno ili prethodno auto → zameni
+    else if (!cur.includes(text)) el.value = `${cur}\n\n${text}`;  // korisnikov tekst → dopiši
+    autoNotes = text;
+  };
 
   const btn = document.getElementById(`${p}-scan-btn`);
   const setStatus = (msg, kind = "info") => {
@@ -147,6 +166,7 @@ export function bindCostScanner(p) {
         unitPrice: it.unitPrice ?? null,
         total: it.total ?? null,
       }));
+      fillNotes(scan.items);
 
       const notes = [];
       if (r.total > 0 && Math.abs(r.total - qr.amount) > 0.01) {
@@ -344,7 +364,7 @@ export async function openAdminEntryForm(kind, { vehicleId = null, onSaved = nul
   setTimeout(() => {
     attachDateMask("ae-date");
     if (isFuel) bindFuelScan(fuelScan);
-    else costScanner = bindCostScanner("ac");
+    else costScanner = bindCostScanner("ac", "ae-notes");
 
     // cena po litru se računa dok je polje prazno / nije ručno menjano
     if (isFuel) {
