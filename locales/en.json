@@ -857,5 +857,6 @@
   "entries_monthly_month": "Month",
   "entries_monthly_other": "Other",
   "entries_monthly_total": "Total",
-  "entries_monthly_sum": "Total"
+  "entries_monthly_sum": "Total",
+  "receipt_items_label": "Receipt items:"
 }

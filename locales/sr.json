@@ -857,5 +857,6 @@
   "entries_monthly_month": "Mesec",
   "entries_monthly_other": "Ostalo",
   "entries_monthly_total": "Ukupno",
-  "entries_monthly_sum": "Ukupno"
+  "entries_monthly_sum": "Ukupno",
+  "receipt_items_label": "Stavke sa računa:"
 }
