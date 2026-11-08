@@ -859,5 +859,11 @@
   "entries_monthly_other": "Other",
   "entries_monthly_total": "Total",
   "entries_monthly_sum": "Total",
-  "receipt_items_label": "Receipt items:"
+  "receipt_items_label": "Receipt items:",
+  "service_receipt_no": "Receipt number",
+  "svc_receipt_ok": "Receipt data loaded. Check the amount and the servicer before saving.",
+  "svc_receipt_qr_only": "Only the receipt number, amount and time were read. Fill in the servicer and other details.",
+  "svc_receipt_servicer_matched": "Servicer recognised: {{name}}.",
+  "svc_receipt_servicer_new": "The servicer on the receipt is not in the list — \"Other\" was selected. After saving, the Add servicer form will open."
 }
+

@@ -859,5 +859,11 @@
   "entries_monthly_other": "Ostalo",
   "entries_monthly_total": "Ukupno",
   "entries_monthly_sum": "Ukupno",
-  "receipt_items_label": "Stavke sa računa:"
+  "receipt_items_label": "Stavke sa računa:",
+  "service_receipt_no": "Broj računa",
+  "svc_receipt_ok": "Podaci sa računa su učitani. Proverite iznos i servisera pre snimanja.",
+  "svc_receipt_qr_only": "Pročitani su samo broj računa, iznos i vreme. Dopišite servisera i ostale podatke.",
+  "svc_receipt_servicer_matched": "Prepoznat serviser: {{name}}.",
+  "svc_receipt_servicer_new": "Serviser sa računa nije na listi — izabrano je „Drugo“. Posle snimanja otvoriće se forma za dodavanje servisera."
 }
+
