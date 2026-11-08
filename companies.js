@@ -12,6 +12,19 @@ import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebase
 import { t } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { mountPendingBanner } from "./pending-requests.js";
+import { normalizeServiceSettings } from "./service-status.js";
+
+// Firme čije su kartice raširene — pamti se između ponovnog iscrtavanja liste
+const openCompanyIds = new Set();
+
+function infoRow(label, value) {
+  return `
+    <div class="detail-row">
+      <div class="detail-row__label">${label}</div>
+      <div class="detail-row__value">${value ? esc(value) : "—"}</div>
+    </div>
+  `;
+}
 
 export async function renderCompanies(container) {
   if (S.profile?.role !== "master_admin") {
@@ -81,6 +94,65 @@ async function loadCompanies() {
       </div>
     `;
 
+    // ── RAŠIRIVANJE KARTICE ────────────────────────────────────
+    listEl.querySelectorAll(".company-card__toggle").forEach(head => {
+      const toggle = () => {
+        const card = head.closest(".company-card");
+        if (!card) return;
+        const open = card.classList.toggle("company-card--open");
+        head.setAttribute("aria-expanded", String(open));
+        if (open) openCompanyIds.add(card.dataset.companyId);
+        else openCompanyIds.delete(card.dataset.companyId);
+      };
+      head.addEventListener("click", toggle);
+      head.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+    });
+
+    // ── SERVISNI PODSETNIK PO FIRMI ────────────────────────────
+    listEl.querySelectorAll(".btn-company-svc-save").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const card    = btn.closest(".company-card");
+        const company = enriched.find(c => c.id === btn.dataset.id);
+        if (!card || !company) return;
+
+        const raw = (sel) => (card.querySelector(sel)?.value ?? "").trim();
+        const fields = {
+          intervalKm:     raw(".js-svc-interval-km"),
+          intervalMonths: raw(".js-svc-interval-months"),
+          alarmKm:        raw(".js-svc-alarm-km"),
+          alarmDays:      raw(".js-svc-alarm-days"),
+        };
+        const intervalKm     = Number(fields.intervalKm);
+        const intervalMonths = Number(fields.intervalMonths);
+        const alarmKm        = Number(fields.alarmKm);
+        const alarmDays      = Number(fields.alarmDays);
+
+        if (Object.values(fields).some(v => v === "")
+            || !(intervalKm > 0) || !(intervalMonths > 0)
+            || !(alarmKm >= 0) || !(alarmDays >= 0)
+            || !Number.isInteger(intervalMonths) || !Number.isInteger(alarmDays)) {
+          showToast(t("svc_settings_invalid"), "error");
+          return;
+        }
+
+        const serviceSettings = { intervalKm, intervalMonths, alarmKm, alarmDays };
+        btn.disabled = true;
+        try {
+          await updateDoc(doc(db, "companies", company.id), {
+            serviceSettings, updatedAt: serverTimestamp()
+          });
+          company.serviceSettings = serviceSettings;
+          showToast(t("svc_settings_saved"), "success");
+        } catch (e) {
+          showToast(`${t("error")}: ${e.message}`, "error");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
     listEl.querySelectorAll(".btn-company-edit").forEach(btn => {
       btn.addEventListener("click", () => openEditCompanyModal(
         enriched.find(c => c.id === btn.dataset.id)
@@ -127,52 +199,97 @@ function companyCard(c) {
   const rejectedAdmins = c.admins.filter(a => a.status === "rejected");
   const invites        = c.invites || [];
 
+  const isOpen = openCompanyIds.has(c.id);
+  const svc    = normalizeServiceSettings(c.serviceSettings);
+
   return `
-    <div class="company-card">
-      <div class="company-card__header">
+    <div class="company-card ${isOpen ? "company-card--open" : ""}" data-company-id="${c.id}">
+      <div class="company-card__header company-card__toggle" role="button" tabindex="0" aria-expanded="${isOpen}">
         <div>
-          <div class="company-card__name">${c.name}</div>
-          <div class="company-card__pib">PIB: ${c.pib || "—"} ${c.mbr ? "| MBR: " + c.mbr : ""}</div>
+          <div class="company-card__name">${esc(c.name)}</div>
+          <div class="company-card__pib">PIB: ${esc(c.pib) || "—"} ${c.mbr ? "| MBR: " + esc(c.mbr) : ""}</div>
         </div>
-        <div class="company-card__actions">
-          <button class="btn btn--ghost btn--sm btn-company-add-admin" data-id="${c.id}" title="${t("company_add_admin")}">➕👤</button>
-          <button class="btn btn--ghost btn--sm btn-company-edit" data-id="${c.id}" title="${t("edit")}">✏️</button>
-          <button class="btn btn--ghost btn--sm btn-company-delete" data-id="${c.id}" data-name="${c.name}" title="${t("delete")}">🗑️</button>
+        <div class="company-card__summary">
+          <span title="${t("company_vehicles_label")}">🚗 ${c.vehicleCount}</span>
+          <span title="${t("company_fleet_admins_label")}">👤 ${activeAdmins.length}</span>
+          ${pendingAdmins.length > 0 ? `<span title="${t("company_pending_label")}" style="color:var(--color-warning)">⏳ ${pendingAdmins.length}</span>` : ""}
+          ${blockedAdmins.length > 0 ? `<span title="${t("company_blocked_label")}" style="color:var(--color-danger)">🔒 ${blockedAdmins.length}</span>` : ""}
+          <span class="company-card__chevron">▾</span>
         </div>
       </div>
 
-      <div class="company-card__details">
-        ${c.address ? `<div class="company-detail"><span>📍</span> ${c.address}</div>` : ""}
-        ${c.phone ? `<div class="company-detail"><span>📞</span> ${c.phone}</div>` : ""}
-        ${c.email ? `<div class="company-detail"><span>✉️</span> ${c.email}</div>` : ""}
-        ${c.instagram ? `<div class="company-detail"><span>📷</span> ${c.instagram}</div>` : ""}
-        ${c.facebook ? `<div class="company-detail"><span>👥</span> ${c.facebook}</div>` : ""}
-        ${c.owner ? `<div class="company-detail"><span>👤</span> ${t("company_owner")}: ${c.owner}</div>` : ""}
-        ${c.director ? `<div class="company-detail"><span>💼</span> Direktor: ${c.director}</div>` : ""}
-      </div>
+      <div class="company-card__body">
+        <div class="company-card__toolbar">
+          <button class="btn btn--secondary btn--sm btn-company-add-admin" data-id="${c.id}">➕👤 ${t("company_add_admin")}</button>
+          <button class="btn btn--secondary btn--sm btn-company-edit" data-id="${c.id}">✏️ ${t("edit")}</button>
+          <button class="btn btn--danger btn--sm btn-company-delete" data-id="${c.id}" data-name="${esc(c.name)}">🗑️ ${t("delete")}</button>
+        </div>
 
-      <div class="company-card__stats">
-        <div class="company-stat">
-          <span class="company-stat__value">${c.vehicleCount}</span>
-          <span class="company-stat__label">${t("company_vehicles_label")}</span>
-        </div>
-        <div class="company-stat">
-          <span class="company-stat__value">${activeAdmins.length}</span>
-          <span class="company-stat__label">${t("company_fleet_admins_label")}</span>
-        </div>
-        ${pendingAdmins.length > 0 ? `
-          <div class="company-stat">
-            <span class="company-stat__value" style="color:var(--color-warning)">${pendingAdmins.length}</span>
-            <span class="company-stat__label">${t("company_pending_label")}</span>
+        <div class="company-card__section">
+          <div class="company-admins__title">${t("company_section_info")}</div>
+          <div class="detail-table">
+            ${infoRow(t("company_pib"), c.pib)}
+            ${infoRow(t("company_mbr"), c.mbr)}
+            ${infoRow(t("company_owner"), c.owner)}
+            ${infoRow(t("company_director"), c.director)}
+            ${infoRow(t("company_address"), c.address)}
+            ${infoRow(t("company_phone"), c.phone)}
+            ${infoRow(t("company_email"), c.email)}
+            ${infoRow(t("company_instagram"), c.instagram)}
+            ${infoRow(t("company_facebook"), c.facebook)}
           </div>
-        ` : ""}
-        ${blockedAdmins.length > 0 ? `
-          <div class="company-stat">
-            <span class="company-stat__value" style="color:var(--color-danger)">${blockedAdmins.length}</span>
-            <span class="company-stat__label">${t("company_blocked_label")}</span>
+        </div>
+
+        <div class="company-card__section">
+          <div class="company-admins__title">🔧 ${t("svc_settings_section")}</div>
+          <p class="form-hint">${t("svc_settings_hint")}</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">${t("svc_settings_interval_km")}</label>
+              <input class="form-input js-svc-interval-km" type="number" min="1" value="${svc.intervalKm}" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">${t("svc_settings_interval_months")}</label>
+              <input class="form-input js-svc-interval-months" type="number" min="1" value="${svc.intervalMonths}" />
+            </div>
           </div>
-        ` : ""}
-      </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">${t("svc_settings_alarm_km")}</label>
+              <input class="form-input js-svc-alarm-km" type="number" min="0" value="${svc.alarmKm}" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">${t("svc_settings_alarm_days")}</label>
+              <input class="form-input js-svc-alarm-days" type="number" min="0" value="${svc.alarmDays}" />
+            </div>
+          </div>
+          <div>
+            <button class="btn btn--primary btn--sm btn-company-svc-save" data-id="${c.id}">${t("svc_settings_save")}</button>
+          </div>
+        </div>
+
+        <div class="company-card__stats">
+          <div class="company-stat">
+            <span class="company-stat__value">${c.vehicleCount}</span>
+            <span class="company-stat__label">${t("company_vehicles_label")}</span>
+          </div>
+          <div class="company-stat">
+            <span class="company-stat__value">${activeAdmins.length}</span>
+            <span class="company-stat__label">${t("company_fleet_admins_label")}</span>
+          </div>
+          ${pendingAdmins.length > 0 ? `
+            <div class="company-stat">
+              <span class="company-stat__value" style="color:var(--color-warning)">${pendingAdmins.length}</span>
+              <span class="company-stat__label">${t("company_pending_label")}</span>
+            </div>
+          ` : ""}
+          ${blockedAdmins.length > 0 ? `
+            <div class="company-stat">
+              <span class="company-stat__value" style="color:var(--color-danger)">${blockedAdmins.length}</span>
+              <span class="company-stat__label">${t("company_blocked_label")}</span>
+            </div>
+          ` : ""}
+        </div>
 
       ${activeAdmins.length > 0 ? `
         <div class="company-card__admins">
@@ -201,6 +318,7 @@ function companyCard(c) {
           ${invites.map(inviteItem).join("")}
         </div>
       ` : ""}
+      </div>
     </div>
   `;
 }
@@ -315,6 +433,7 @@ async function confirmDeleteCompany(id, name) {
   if (!confirm(`${t("company_delete_confirm")} "${name}"?`)) return;
   try {
     await deleteDoc(doc(db, "companies", id));
+    openCompanyIds.delete(id);
     showToast(t("success"), "success");
     loadCompanies();
   } catch (e) {

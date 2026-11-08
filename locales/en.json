@@ -319,6 +319,7 @@
   "access_denied_msg": "You do not have permission to access this application.",
   "pending_title": "Awaiting Approval",
   "pending_msg": "Your account is awaiting administrator approval.",
+  "company_section_info": "Company details",
   "company_pib": "Tax ID (PIB)",
   "company_mbr": "Company Reg. No. (MBR)",
   "company_name": "Company name",
