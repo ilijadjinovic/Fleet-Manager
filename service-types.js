@@ -22,7 +22,7 @@ export const SERVICE_CATALOG = [
   { key: "brakes",     items: ["brakes_pads", "brakes_discs", "brakes_calipers", "brakes_fluid"] },
   { key: "tires",      items: ["tires_seasonal", "tires_balance", "tires_repair"] },
   { key: "ac",         items: ["ac_gas", "ac_install", "ac_compressor"] },
-  { key: "repair",     items: ["repair_timing", "repair_clutch", "repair_gearbox", "repair_injector", "repair_plugs", "repair_exhaust"] },
+  { key: "repair",     items: ["repair_timing", "repair_clutch", "repair_gearbox", "repair_injector", "repair_plugs", "repair_exhaust", "repair_cooling"] },
   { key: "suspension", items: ["susp_rack", "susp_shocks", "susp_links", "susp_geometry"] },
   { key: "electrical", items: ["elec_battery", "elec_obd", "elec_computer", "elec_bulbs"] },
   { key: "body",       items: ["body_paint", "body_rim", "body_light"] },
