@@ -18,6 +18,7 @@ import {
 } from "./date-input.js";
 import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js";
 import { COST_TYPES, COST_META } from "./entries-view.js";
+import { serviceTypeLabel, serviceDetailText } from "./service-types.js";
 
 // ── FONT ZA SRPSKA SLOVA (š đ č ć ž) ───────────────────────────
 // jsPDF-ov ugradjeni "helvetica" font ne sadrzi ova slova (koristi
@@ -889,19 +890,20 @@ function drawServicesSection(pdf, services, y) {
   y = drawTableHeader(pdf, cols, y);
   services.forEach((s, i) => {
     y = drawTableRow(pdf, cols, [
-      t("service_type_" + s.serviceType) || s.serviceType,
+      serviceTypeLabel(s.serviceType || ""),
       formatDateSr(s.serviceDate),
       s.km ? s.km.toLocaleString() : "—",
       serviceCostCell(s),
       s.workshop || "—",
     ], y, i % 2 === 0);
 
-    if (s.description) {
+    const extra = [serviceDetailText(s), s.description].filter(Boolean).join(" · ");
+    if (extra) {
       y = checkPageBreak(pdf, y, 6);
       pdf.setFont(REPORT_FONT, "italic");
       pdf.setFontSize(7.5);
       pdf.setTextColor(100);
-      pdf.text(`  → ${s.description.substring(0, 80)}`, M + 4, y);
+      pdf.text(`  → ${extra.substring(0, 110)}`, M + 4, y);
       y += 5;
     }
   });

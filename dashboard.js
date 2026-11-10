@@ -15,6 +15,7 @@ import { getCompanies } from "./firebase.js";
 import { isVehicleRegistered, needsTachograph, openVehicleDetail, openServiceForm, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
 import { mountPendingBanner } from "./pending-requests.js";
 import { getServiceProviders } from "./servicers.js";
+import { serviceTitle, isSeasonalTireService } from "./service-types.js";
 import {
   effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
   getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText, getTireSeasonReminder
@@ -403,7 +404,7 @@ function computeTireReminder(v, tireServices, now = new Date()) {
   if (snoozedUntil && snoozedUntil > now) return null;
   // početak perioda podsetnika = mesec dana pre roka
   const windowStart = new Date(r.deadline.getFullYear(), r.deadline.getMonth() - 1, 1);
-  const handled = (tireServices || []).some(sv => {
+  const handled = (tireServices || []).filter(isSeasonalTireService).some(sv => {
     const st = effectiveServiceStatus(sv);
     if (st === SERVICE_STATUS.PLANNED || st === SERVICE_STATUS.IN_PROGRESS) return true;
     if (st === SERVICE_STATUS.DONE) { const d = toD(sv.serviceDate); return d && d >= windowStart; }
@@ -522,7 +523,7 @@ function renderVehicleNotices(n, a = null) {
     add(daysLeft, `
       <div class="upcoming-item upcoming-item--${urgency}">
         <div class="upcoming-item__main">
-          <span class="upcoming-item__name">🔧 ${noticeEsc(t("service_type_" + s.serviceType) || s.serviceType || "")}</span>
+          <span class="upcoming-item__name">🔧 ${noticeEsc(serviceTitle(s))}</span>
           ${s.workshop || s.workshopAddress ? `
             <div class="upcoming-item__place">
               ${s.workshop ? `<span class="upcoming-item__plate">🏭 ${noticeEsc(s.workshop)}</span>` : ""}
@@ -1991,7 +1992,7 @@ function attachDashboardEvents() {
       e.stopPropagation();
       const vehicle = dashboardVehicles.find(v => v.id === btn.dataset.vehicle);
       if (!vehicle) return;
-      await openServiceForm(vehicle, null, { serviceType: "tires" }, {
+      await openServiceForm(vehicle, null, { serviceType: "tires", serviceItems: ["tires_seasonal"] }, {
         onSaved: () => loadDashboardData(),
       });
     });

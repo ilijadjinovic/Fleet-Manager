@@ -16,6 +16,10 @@ import {
 } from "./date-input.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders, openServicerForm } from "./servicers.js";
+import {
+  serviceTypePickerHTML, bindServiceTypePicker, readServiceType,
+  serviceTypeLabel, serviceDetailText,
+} from "./service-types.js";
 import { scanQRCode, parseFiscalQR, fetchReceiptDetails, receiptWorkerConfigured } from "./receipt-scan.js";
 import { findReceiptDuplicate, normalizeReceiptNo } from "./receipt-guard.js";
 import {
@@ -822,6 +826,7 @@ function financeListHTML(services, entries, from, to) {
     const status = effectiveServiceStatus(sv);
     const done = status === SERVICE_STATUS.DONE;
     const sub = [
+      serviceDetailText(sv) || null,
       sv.workshop ? "🏭 " + sv.workshop : null,
       sv.km ? "🛣️ " + fmtNumDet(sv.km) + " km" : null,
       sv.description || null,
@@ -832,7 +837,7 @@ function financeListHTML(services, entries, from, to) {
         <div class="finance-list-row">
           <span class="finance-list-row__icon">🔧</span>
           <div class="finance-list-row__body">
-            <div class="finance-list-row__main"><span class="badge badge--service">${escDet(t("service_type_" + sv.serviceType) || sv.serviceType || "")}</span>
+            <div class="finance-list-row__main"><span class="badge badge--service">${escDet(serviceTypeLabel(sv.serviceType || ""))}</span>
               <strong>${done ? fmtRsdDet(sv.cost) : escDet(t("service_status_" + status))}</strong></div>
             ${sub ? `<div class="finance-list-row__sub">${sub}</div>` : ""}
           </div>
@@ -2143,11 +2148,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   const bodyHTML = `
     <div class="form-group">
       <label class="form-label">${t("service_type")} *</label>
-      <select id="sf-type" class="form-select">
-        ${["regular","tech","tires","repair","other"].map(st =>
-          `<option value="${st}" ${s.serviceType === st ? "selected" : ""}>${t("service_type_" + st)}</option>`
-        ).join("")}
-      </select>
+      ${serviceTypePickerHTML("sf", s)}
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -2198,7 +2199,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
     </div>
   `;
 
-  openModal(isEdit ? `${t("edit")}: ${t("service_type_" + s.serviceType) || s.serviceType}` : t("service_add"), bodyHTML, async () => {
+  openModal(isEdit ? `${t("edit")}: ${serviceTypeLabel(s.serviceType)}` : t("service_add"), bodyHTML, async () => {
     const svcDates = collectDates([
       { id: "sf-date", required: true },
       { id: "sf-endDate" },
@@ -2210,6 +2211,12 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       setDateError("sf-endDate", t("date_err_service_end_before_start"), { focus: true });
       return false;
     }
+    // Vrsta servisa: podstavke (opciono) i slobodan tekst za "Ostalo".
+    // Stari zapis "Ostalo" bez teksta može da se menja bez obaveznog unosa.
+    const st = readServiceType("sf", {
+      requireOther: !isEdit || service.serviceOther !== undefined,
+    });
+    if (!st.ok) return false;
     try {
       // Servis se ne zakazuje vikendom (subota → petak, nedelja → ponedeljak).
       // Ne važi za servis koji je već obavljen (unos unazad) — tu se upisuje
@@ -2245,7 +2252,8 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       const data = {
         vehicleId:    vehicle.id,
         vehiclePlate: vehicle.plate,
-        serviceType:  document.getElementById("sf-type")?.value,
+        serviceType:  st.serviceType,
+        serviceOther: st.serviceOther,
         serviceDate:  serviceDateVal,
         serviceTime,
         km:           numOrNull("sf-km"),
@@ -2258,6 +2266,12 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
         endKm:        numOrNull("sf-endKm"),
         ...scanner.read(rc.receiptNo),
       };
+
+      // Stari zapis bez serviceItems ostaje bez tog polja dok se nešto ne čekira
+      // (tako se ponašanje podsetnika za stare unose ne menja nehotice).
+      if (!isEdit || st.serviceItems.length || Array.isArray(service.serviceItems)) {
+        data.serviceItems = st.serviceItems;
+      }
 
       let savedServiceId = isEdit ? service.id : null;
       if (isEdit) {
@@ -2328,6 +2342,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
     clearDateError(el);
   });
 
+  bindServiceTypePicker("sf", s);
   bindWorkshopSelect("sf", servicers);
   scanner = bindServiceReceipt("sf", {
     servicers, existing: s, ignoreId: isEdit ? service.id : null,
@@ -2548,12 +2563,13 @@ function serviceItem(s, vehicle, canEdit) {
     <div class="service-item ${cancelled ? "service-item--cancelled" : overdue ? "service-item--overdue" : today && status !== SERVICE_STATUS.DONE ? "service-item--today" : ""}">
       <div class="service-item__header">
         <div class="service-item__badges">
-          <span class="badge badge--info">${t("service_type_" + s.serviceType) || s.serviceType}</span>
+          <span class="badge badge--info">${escText(serviceTypeLabel(s.serviceType || ""))}</span>
           ${statusBadge}
           ${todayBadge}
         </div>
         <span class="service-item__date">${formatDate(s.serviceDate)}${s.serviceTime ? ` 🕒 ${s.serviceTime}` : ""}</span>
       </div>
+      ${serviceDetailText(s) ? `<div class="service-item__desc service-item__items">${escText(serviceDetailText(s))}</div>` : ""}
       ${s.description ? `<div class="service-item__desc">${s.description}</div>` : ""}
       <div class="service-item__meta">
         ${s.km ? `<span>📍 ${s.km.toLocaleString()} km</span>` : ""}
