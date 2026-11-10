@@ -282,6 +282,7 @@
   "service_item_repair_injector": "Servis/zamena dizne",
   "service_item_repair_plugs": "Zamena svećica",
   "service_item_repair_exhaust": "Servis izduvnog sistema (zamena lonca, katalizatora, DPF)",
+  "service_item_repair_cooling": "Servis sistema za hlađenje",
   "service_item_susp_rack": "Servis/zamena letve volana",
   "service_item_susp_shocks": "Zamena amortizera/opruga",
   "service_item_susp_links": "Zamena spone/poluosovine/selen blokova",
