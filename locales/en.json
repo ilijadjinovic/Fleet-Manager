@@ -282,6 +282,7 @@
   "service_item_repair_injector": "Injector service/replacement",
   "service_item_repair_plugs": "Spark plug replacement",
   "service_item_repair_exhaust": "Exhaust system service (muffler, catalytic converter, DPF replacement)",
+  "service_item_repair_cooling": "Cooling system service",
   "service_item_susp_rack": "Steering rack service/replacement",
   "service_item_susp_shocks": "Shock absorber/spring replacement",
   "service_item_susp_links": "Tie rod/drive shaft/bushing replacement",
