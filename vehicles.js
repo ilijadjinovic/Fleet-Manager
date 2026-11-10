@@ -1442,6 +1442,12 @@ async function openVehicleForm(vehicle = null) {
           placeholder="${datePlaceholder()}" value="${toDMY(v.insuranceExpiry)}" />
       </div>
     </div>
+    <div class="form-group form-group--checkbox">
+      <label class="form-checkbox-label">
+        <input id="f-regReminderDisabled" type="checkbox" ${v.regReminderDisabled === true ? "checked" : ""} />
+        ${t("vehicle_reg_reminder_disabled")}
+      </label>
+    </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("vehicle_insurance_company")}</label>
@@ -1459,7 +1465,12 @@ async function openVehicleForm(vehicle = null) {
           placeholder="${datePlaceholder()}" value="${toDMY(v.tachographExpiry)}" />
         <div id="f-tachograph-badge" style="margin-top:6px">${tachographBadge(v)}</div>
       </div>
-      <div class="form-group"></div>
+      <div class="form-group form-group--checkbox">
+        <label class="form-checkbox-label">
+          <input id="f-tachographReminderDisabled" type="checkbox" ${v.tachographReminderDisabled === true ? "checked" : ""} />
+          ${t("vehicle_tachograph_reminder_disabled")}
+        </label>
+      </div>
     </div>
 
     <div class="form-section-title" style="margin-top:8px">${t("vehicle_section_safety")}</div>
@@ -1730,6 +1741,8 @@ async function saveVehicle(vehicleId) {
       requiredEquipment,
       tires: (tiresType || tiresDimensions) ? { type: tiresType, dimensions: tiresDimensions } : null,
       tireReminderDisabled: !!document.getElementById("f-tireReminderDisabled")?.checked,
+      regReminderDisabled:  !!document.getElementById("f-regReminderDisabled")?.checked,
+      tachographReminderDisabled: !!document.getElementById("f-tachographReminderDisabled")?.checked,
       purchaseDate:     dateOrNull("f-purchaseDate"),
       purchaseType:     document.getElementById("f-purchaseType")?.value.trim() || null,
       purchaseValue:    numOrNull("f-purchaseValue"),

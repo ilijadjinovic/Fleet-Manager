@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, loadLanguage, getCurrentLang, SUPPORTED_LANGS } from "./i18n.js";
 import { S, showToast, openModal, buildNav, rerenderCurrentTab } from "./app.js";
-import { normalizeServiceSettings } from "./service-status.js";
+import { normalizeServiceSettings, normalizeReminderSettings } from "./service-status.js";
 
 // ── GLAVNI RENDER ─────────────────────────────────────────────
 export async function renderProfile(container) {
@@ -359,6 +359,7 @@ function openEditCompanyModal(company) {
 function renderSettingsTab({ profile, company }) {
   const canEditServiceSettings = !!company && profile.role === "fleet_admin";
   const svc = normalizeServiceSettings(company?.serviceSettings);
+  const rem = normalizeReminderSettings(company?.reminderSettings);
   const currentLang = getCurrentLang();
   const isLocalLogin = !!profile.username;
   const canSetLocalLogin = profile.role === "fleet_admin" || profile.role === "master_admin";
@@ -408,6 +409,21 @@ function renderSettingsTab({ profile, company }) {
             <input id="svc-alarm-days" class="form-input" type="number" min="0" value="${svc.alarmDays}" />
           </div>
         </div>
+
+        <div style="border-top:1px solid var(--color-border, rgba(128,128,128,.25)); margin:16px 0 12px"></div>
+        <h4 class="profile-section__title" style="font-size:1em; margin:0 0 4px">📄 ${t("reminder_settings_section")}</h4>
+        <p class="form-hint">${t("reminder_settings_hint")}</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">${t("reminder_settings_reg_days")}</label>
+            <input id="rem-reg-days" class="form-input" type="number" min="0" value="${rem.regDays}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t("reminder_settings_tachograph_days")}</label>
+            <input id="rem-tachograph-days" class="form-input" type="number" min="0" value="${rem.tachographDays}" />
+          </div>
+        </div>
+
         <button class="btn btn--primary btn--sm" id="btn-save-service-settings">${t("svc_settings_save")}</button>
       </div>
     ` : ""}
@@ -477,10 +493,20 @@ function bindSettingsTab({ profile, company }) {
       showToast(t("svc_settings_invalid"), "error");
       return;
     }
+    const regDays = Number(val("rem-reg-days"));
+    const tachographDays = Number(val("rem-tachograph-days"));
+    if (val("rem-reg-days") === "" || val("rem-tachograph-days") === ""
+        || !Number.isInteger(regDays) || !Number.isInteger(tachographDays)
+        || regDays < 0 || tachographDays < 0) {
+      showToast(t("reminder_settings_invalid"), "error");
+      return;
+    }
     const serviceSettings = { intervalKm, intervalMonths, alarmKm, alarmDays };
+    const reminderSettings = { regDays, tachographDays };
     try {
-      await updateDoc(doc(db, "companies", company.id), { serviceSettings, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "companies", company.id), { serviceSettings, reminderSettings, updatedAt: serverTimestamp() });
       company.serviceSettings = serviceSettings;
+      company.reminderSettings = reminderSettings;
       showToast(t("svc_settings_saved"), "success");
     } catch (e) {
       showToast(`${t("error")}: ${e.message}`, "error");

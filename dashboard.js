@@ -18,7 +18,8 @@ import { getServiceProviders } from "./servicers.js";
 import { serviceTitle, isSeasonalTireService } from "./service-types.js";
 import {
   effectiveServiceStatus, isServiceToday, isServiceOverdue, overdueDays, SERVICE_STATUS,
-  getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText, getTireSeasonReminder
+  getServiceSettings, getRegularServiceInfo, timeLeftText, kmLeftText, getTireSeasonReminder,
+  getReminderSettings, normalizeReminderSettings
 } from "./service-status.js";
 import { openIncidentForm } from "./incidents.js";
 import { tripEntryCard } from "./trips.js";
@@ -143,22 +144,12 @@ async function loadDashboardData() {
     const broken = activeVehicles.filter(v => v.status === "broken").length;
     const inactive = activeVehicles.filter(v => v.status === "inactive").length;
 
-    // Nadolazeće registracije i tahografi (u sledećih 30 dana) — spajamo oba
-    // roka u istu listu/karticu, svaka stavka nosi oznaku o kom se roku radi.
+    // Registracija i tahograf se prate kao DVA ODVOJENA podsetnika (svaki ima
+    // svoje zakazivanje, odlaganje i isključivanje) — računaju se niže, posle
+    // učitavanja servisa, u deadlineReminders. Ovde ostaju samo datumi za
+    // upite nadolazećih servisa.
     const today = new Date();
     const in30 = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const upcomingReg = [];
-    activeVehicles.forEach(v => {
-      if (v.regExpiry) {
-        const d = v.regExpiry.toDate ? v.regExpiry.toDate() : new Date(v.regExpiry);
-        if (d >= today && d <= in30) upcomingReg.push({ vehicle: v, date: d, kind: "reg" });
-      }
-      if (needsTachograph(v) && v.tachographExpiry) {
-        const d = v.tachographExpiry.toDate ? v.tachographExpiry.toDate() : new Date(v.tachographExpiry);
-        if (d >= today && d <= in30) upcomingReg.push({ vehicle: v, date: d, kind: "tachograph" });
-      }
-    });
-    upcomingReg.sort((a, b) => a.date - b.date);
 
     // Danas — početak dana u lokalnom vremenu (ponoć)
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -341,6 +332,40 @@ async function loadDashboardData() {
       tireReminders.sort((a, b) => a.daysLeft - b.daysLeft);
     }
 
+    // Podsetnici za istek registracije i tahografa (samo administracija parka).
+    // Isti obrazac kao za gume: pojavljuje se X dana pre isteka (podešavanje
+    // firme), NE nestaje posle isteka nego ostaje crveno sa vremenom u minusu,
+    // a gasi se kada je servis (tehnički / tahograf) zakazan, u toku ili
+    // odrađen, ili ako je podsetnik odložen / trajno isključen za vozilo.
+    const deadlineReminders = [];
+    if (role !== "driver") {
+      let reminderSettings = normalizeReminderSettings(null);
+      try { reminderSettings = await getReminderSettings(cid); } catch { /* podrazumevane vrednosti */ }
+      const svcByVehicle = new Map();
+      for (const type of ["tech", "tachograph"]) {
+        try {
+          const snap = await getDocs(
+            query(collection(db, "companies", cid, "services"), where("serviceType", "==", type))
+          );
+          snap.docs.forEach(d => {
+            const sv = { id: d.id, ...d.data() };
+            if (!svcByVehicle.has(sv.vehicleId)) svcByVehicle.set(sv.vehicleId, []);
+            svcByVehicle.get(sv.vehicleId).push(sv);
+          });
+        } catch (e) {
+          console.error("Deadline services error:", e);
+        }
+      }
+      activeVehicles.forEach(v => {
+        ["reg", "tachograph"].forEach(kind => {
+          const r = computeDeadlineReminder(v, kind, svcByVehicle.get(v.id) || [], reminderSettings);
+          if (r) deadlineReminders.push(r);
+        });
+      });
+      // Najhitnije (najviše isteklo / najbliži rok) prvo
+      deadlineReminders.sort((a, b) => a.daysLeft - b.daysLeft);
+    }
+
     const isDriver = role === "driver";
 
     // Vozač: pronađi/otvori aktivnu vožnju za SVAKO aktivno zaduženje
@@ -359,6 +384,7 @@ async function loadDashboardData() {
     if (isDriver) {
       try {
         const settings = await getServiceSettings(cid);
+        const reminderSettings = await getReminderSettings(cid);
         const assignedIds = [...new Set((assignmentsSnap?.docs || []).map(d => d.data().vehicleId).filter(Boolean))];
         for (const vid of assignedIds) {
           const veh = vehicles.find(x => x.id === vid);
@@ -368,7 +394,7 @@ async function loadDashboardData() {
             const snap = await getDocs(query(collection(db, "companies", cid, "services"), where("vehicleId", "==", vid)));
             vehSvcs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           } catch (e) { console.error("Driver vehicle services error:", e); }
-          vehicleNotices.set(vid, buildVehicleNotices(veh, vehSvcs, settings, providerAddr));
+          vehicleNotices.set(vid, buildVehicleNotices(veh, vehSvcs, settings, providerAddr, reminderSettings));
         }
       } catch (e) {
         console.error("Driver vehicle notices error:", e);
@@ -377,7 +403,7 @@ async function loadDashboardData() {
 
     content.innerHTML = `
       ${isDriver ? renderDriverDashboard(assignmentsSnap, allAssignmentsSnap, allEntriesSnap, vehicles, resolvedActiveTrips, vehicleNotices) : renderAdminDashboard({
-        total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders, tireReminders
+        total, active, inService, unregistered, broken, inactive, deadlineReminders, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders, tireReminders
       })}
     `;
 
@@ -390,6 +416,58 @@ async function loadDashboardData() {
     console.error("Dashboard load error:", e);
     content.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
+}
+
+// ── PODSETNIK ZA ISTEK REGISTRACIJE / TAHOGRAFA ────────────────
+// Registracija ("reg") i tahograf ("tachograph") su dva odvojena procesa:
+// svaki ima svoj servis (tech / tachograph), svoje odlaganje i svoje
+// trajno isključivanje na vozilu.
+const DEADLINE_KINDS = {
+  reg: {
+    field: "regExpiry", disabled: "regReminderDisabled", snoozed: "regReminderSnoozedUntil",
+    serviceType: "tech", daysKey: "regDays",
+  },
+  tachograph: {
+    field: "tachographExpiry", disabled: "tachographReminderDisabled", snoozed: "tachographReminderSnoozedUntil",
+    serviceType: "tachograph", daysKey: "tachographDays",
+  },
+};
+
+// Vraća { vehicle, kind, deadline, daysLeft, expired } ili null ako podsetnik
+// ne treba da se prikaže (nema datuma, još nije vreme, isključen, odložen ili
+// je odgovarajući servis već zakazan / u toku / odrađen).
+// Posle isteka roka podsetnik NE nestaje — daysLeft postaje negativan.
+function computeDeadlineReminder(v, kind, services, settings, now = new Date()) {
+  const cfg = DEADLINE_KINDS[kind];
+  if (!cfg || !v) return null;
+  if (kind === "tachograph" && !needsTachograph(v)) return null;
+  const toD = (x) => x?.toDate ? x.toDate() : (x ? new Date(x) : null);
+  const raw = toD(v[cfg.field]);
+  if (!raw || isNaN(raw)) return null;
+  if (v[cfg.disabled] === true) return null; // trajno isključeno
+  const snoozedUntil = toD(v[cfg.snoozed]);
+  if (snoozedUntil && snoozedUntil > now) return null;
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const deadline = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
+  const windowDays = normalizeReminderSettings(settings)[cfg.daysKey];
+  const daysLeft = Math.round((deadline - today) / dayMs);
+  if (daysLeft > windowDays) return null; // još nije vreme
+
+  // Servis je već rešen: zakazan / u toku, ili odrađen u tekućem periodu
+  // (do 60 dana pre isteka — tehnički se često radi pre same registracije).
+  const lookback = Math.max(windowDays, 60);
+  const windowStart = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate() - lookback);
+  const handled = (services || []).filter(sv => sv.serviceType === cfg.serviceType).some(sv => {
+    const st = effectiveServiceStatus(sv);
+    if (st === SERVICE_STATUS.PLANNED || st === SERVICE_STATUS.IN_PROGRESS) return true;
+    if (st === SERVICE_STATUS.DONE) { const d = toD(sv.serviceDate); return d && d >= windowStart; }
+    return false;
+  });
+  if (handled) return null;
+
+  return { vehicle: v, kind, deadline, daysLeft, expired: daysLeft < 0 };
 }
 
 // ── POMOĆNE FUNKCIJE ZA OBAVEŠTENJA O VOZILU ───────────────────
@@ -423,24 +501,21 @@ function noticeEsc(v) {
 // Sve što admin vidi za jedno vozilo, spakovano za vozača:
 // istek registracije/tahografa, status vozila, zakazani servisi,
 // podsetnik za redovni servis i za sezonske gume.
-function buildVehicleNotices(v, services, settings, providerAddr = new Map()) {
+function buildVehicleNotices(v, services, settings, providerAddr = new Map(), reminderSettings = null) {
   const toD = (x) => x?.toDate ? x.toDate() : (x ? new Date(x) : null);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const in30 = new Date(today.getTime() + 30 * 86400000);
   const dayMs = 86400000;
 
-  // Registracija / tahograf — rok u narednih 30 dana ili već istekao
+  // Registracija / tahograf — ista pravila kao kod admina (rok u okviru
+  // podešenog broja dana ili već istekao; odloženo / isključeno / servis
+  // već zakazan se ne prikazuje).
   const deadlines = [];
-  const addDeadline = (kind, raw) => {
-    const d = toD(raw);
-    if (!d || isNaN(d)) return;
-    const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    if (dd > in30) return;
-    deadlines.push({ kind, date: dd, daysLeft: Math.round((dd - today) / dayMs) });
-  };
-  addDeadline("reg", v.regExpiry);
-  if (needsTachograph(v)) addDeadline("tachograph", v.tachographExpiry);
+  ["reg", "tachograph"].forEach(kind => {
+    const r = computeDeadlineReminder(v, kind, services, reminderSettings, now);
+    if (r) deadlines.push({ kind: r.kind, date: r.deadline, daysLeft: r.daysLeft });
+  });
 
   // Zakazani / aktivni servisi: propušteni + narednih 30 dana
   const scheduled = (services || [])
@@ -590,7 +665,7 @@ function renderVehicleNotices(n, a = null) {
     </div>`;
 }
 
-function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, upcomingReg, vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders = [], tireReminders = [] }) {
+function renderAdminDashboard({ total, active, inService, unregistered, broken, inactive, deadlineReminders = [], vehicles, assignedCount, upcomingScheduled, archivedCount, serviceReminders = [], tireReminders = [] }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // lokalna ponoć
 
@@ -639,24 +714,30 @@ function renderAdminDashboard({ total, active, inService, unregistered, broken, 
     <div class="dashboard-grid">
       <div class="dashboard-panel">
         <h3 class="panel-title" data-i18n="dashboard_upcoming_reg">${t("dashboard_upcoming_reg")}</h3>
-        ${upcomingReg.length === 0
+        ${deadlineReminders.length === 0
           ? `<p class="empty-text" data-i18n="dashboard_no_upcoming">${t("dashboard_no_upcoming")}</p>`
-          : upcomingReg.map(item => {
-              const v = item.vehicle;
-              const d = item.date;
-              const daysLeft = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
-              const urgency = daysLeft <= 7 ? "urgent" : daysLeft <= 14 ? "warning" : "ok";
-              const kindLabel = item.kind === "tachograph" ? t("dashboard_kind_tachograph") : t("dashboard_kind_reg");
+          : deadlineReminders.map(r => {
+              const v = r.vehicle;
+              const urgency = r.expired || r.daysLeft <= 7 ? "urgent" : r.daysLeft <= 14 ? "warning" : "ok";
+              const isTach = r.kind === "tachograph";
+              const kindLabel = isTach ? t("dashboard_kind_tachograph") : t("dashboard_kind_reg");
+              const scheduleLabel = isTach ? t("dashboard_schedule_tachograph") : t("dashboard_schedule_tech");
               return `
-                <div class="upcoming-item upcoming-item--${urgency}">
-                  <div class="upcoming-item__main">
-                    <span class="upcoming-item__name">${v.brand} ${v.model}</span>
-                    <span class="upcoming-item__plate">${v.plate}</span>
-                    <span class="upcoming-item__kind">${kindLabel}</span>
-                  </div>
-                  <div class="upcoming-item__right">
-                    <span class="upcoming-item__date">${formatDate(d)}</span>
-                    <span class="upcoming-item__days">${daysLeft} ${t("dashboard_days_left")}</span>
+                <div class="upcoming-item upcoming-item--${urgency} service-reminder deadline-reminder" data-deadline-vehicle="${v.id}" data-deadline-kind="${r.kind}">
+                  <div class="service-reminder__body">
+                    <div class="upcoming-item__main">
+                      <span class="upcoming-item__name">${r.expired ? "⛔" : "📄"} ${v.brand || ""} ${v.model || ""}</span>
+                      <span class="upcoming-item__plate">${v.plate || ""}</span>
+                      <span class="upcoming-item__kind">${kindLabel}</span>
+                    </div>
+                    <div class="service-reminder__info">
+                      ${t("dashboard_deadline_date", { date: formatDate(r.deadline) })}<br>
+                      <strong>📅 ${timeLeftText(r.daysLeft)}</strong>
+                    </div>
+                    <div class="service-reminder__actions">
+                      <button class="btn btn--primary btn--sm btn-deadline-schedule" data-vehicle="${v.id}" data-kind="${r.kind}">${scheduleLabel}</button>
+                      <button class="btn btn--secondary btn--sm btn-deadline-snooze" data-vehicle="${v.id}" data-kind="${r.kind}">${t("svc_rem_snooze")}</button>
+                    </div>
                   </div>
                 </div>
               `;
@@ -2023,6 +2104,48 @@ function attachDashboardEvents() {
     });
   });
 
+  // Rok registracije / tahografa: "Zakaži tehnički" / "Zakaži tahograf" → forma
+  // za dodavanje servisa sa unapred izabranim vozilom i tipom servisa
+  document.querySelectorAll(".btn-deadline-schedule").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const vehicle = dashboardVehicles.find(v => v.id === btn.dataset.vehicle);
+      if (!vehicle) return;
+      const serviceType = DEADLINE_KINDS[btn.dataset.kind]?.serviceType || "tech";
+      await openServiceForm(vehicle, null, { serviceType }, {
+        onSaved: () => loadDashboardData(),
+      });
+    });
+  });
+
+  // Rok registracije / tahografa: "Podseti me kasnije" → odlaganje ili trajno isključivanje
+  document.querySelectorAll(".btn-deadline-snooze").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const vehicleId = btn.dataset.vehicle;
+      const cfg = DEADLINE_KINDS[btn.dataset.kind];
+      if (!cfg) return;
+      openSnoozeModal({
+        permanent: true,
+        hintKey: "deadline_snooze_forever_hint",
+        onPick: async (days) => {
+          const ref = doc(db, "companies", S.companyId, "vehicles", vehicleId);
+          const v = dashboardVehicles.find(x => x.id === vehicleId);
+          if (days === "forever") {
+            await updateDoc(ref, { [cfg.disabled]: true });
+            if (v) v[cfg.disabled] = true;
+            showToast(t("deadline_snoozed_forever_toast"), "success");
+          } else {
+            const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+            await updateDoc(ref, { [cfg.snoozed]: until });
+            if (v) v[cfg.snoozed] = until;
+            showToast(t("deadline_snoozed_toast", { n: days }), "success");
+          }
+        },
+      });
+    });
+  });
+
   // Klik na nadolazeći servis u panelu → detalji vozila, tab "Servisna istorija"
   // (za podsetnik o gumama: tab "Bezbednost", gde se vide pneumatici)
   document.querySelectorAll("[data-vehicle-id]").forEach(item => {
@@ -2041,7 +2164,7 @@ function attachDashboardEvents() {
 
 // Zajednički prozor "Podseti me kasnije": pita za koliko dana odložiti
 // (opciono i "Trajno"). onPick(days | "forever") snima odluku.
-function openSnoozeModal({ permanent = false, onPick }) {
+function openSnoozeModal({ permanent = false, onPick, hintKey = "tire_snooze_forever_hint" }) {
   const opts = [1, 3, 7, 14];
   openModal(t("svc_rem_snooze"), `
     <div class="form-group">
@@ -2050,7 +2173,7 @@ function openSnoozeModal({ permanent = false, onPick }) {
         ${opts.map(n => `<option value="${n}" ${n === 3 ? "selected" : ""}>${t("tire_snooze_opt_" + n)}</option>`).join("")}
         ${permanent ? `<option value="forever">${t("tire_snooze_opt_forever")}</option>` : ""}
       </select>
-      ${permanent ? `<div class="form-hint">${t("tire_snooze_forever_hint")}</div>` : ""}
+      ${permanent ? `<div class="form-hint">${t(hintKey)}</div>` : ""}
     </div>
   `, async () => {
     const raw = document.getElementById("snooze-days")?.value;

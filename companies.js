@@ -12,7 +12,7 @@ import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebase
 import { t } from "./i18n.js";
 import { S, showToast, openModal } from "./app.js";
 import { mountPendingBanner } from "./pending-requests.js";
-import { normalizeServiceSettings } from "./service-status.js";
+import { normalizeServiceSettings, normalizeReminderSettings } from "./service-status.js";
 
 // Firme čije su kartice raširene — pamti se između ponovnog iscrtavanja liste
 const openCompanyIds = new Set();
@@ -137,13 +137,26 @@ async function loadCompanies() {
           return;
         }
 
+        const regRaw = raw(".js-rem-reg-days");
+        const tachRaw = raw(".js-rem-tachograph-days");
+        const regDays = Number(regRaw);
+        const tachographDays = Number(tachRaw);
+        if (regRaw === "" || tachRaw === ""
+            || !Number.isInteger(regDays) || !Number.isInteger(tachographDays)
+            || regDays < 0 || tachographDays < 0) {
+          showToast(t("reminder_settings_invalid"), "error");
+          return;
+        }
+
         const serviceSettings = { intervalKm, intervalMonths, alarmKm, alarmDays };
+        const reminderSettings = { regDays, tachographDays };
         btn.disabled = true;
         try {
           await updateDoc(doc(db, "companies", company.id), {
-            serviceSettings, updatedAt: serverTimestamp()
+            serviceSettings, reminderSettings, updatedAt: serverTimestamp()
           });
           company.serviceSettings = serviceSettings;
+          company.reminderSettings = reminderSettings;
           showToast(t("svc_settings_saved"), "success");
         } catch (e) {
           showToast(`${t("error")}: ${e.message}`, "error");
@@ -201,6 +214,7 @@ function companyCard(c) {
 
   const isOpen = openCompanyIds.has(c.id);
   const svc    = normalizeServiceSettings(c.serviceSettings);
+  const rem    = normalizeReminderSettings(c.reminderSettings);
 
   return `
     <div class="company-card ${isOpen ? "company-card--open" : ""}" data-company-id="${c.id}">
@@ -263,6 +277,21 @@ function companyCard(c) {
               <input class="form-input js-svc-alarm-days" type="number" min="0" value="${svc.alarmDays}" />
             </div>
           </div>
+
+          <div style="border-top:1px solid var(--color-border, rgba(128,128,128,.25)); margin:14px 0 10px"></div>
+          <div class="company-admins__title">📄 ${t("reminder_settings_section")}</div>
+          <p class="form-hint">${t("reminder_settings_hint")}</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">${t("reminder_settings_reg_days")}</label>
+              <input class="form-input js-rem-reg-days" type="number" min="0" value="${rem.regDays}" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">${t("reminder_settings_tachograph_days")}</label>
+              <input class="form-input js-rem-tachograph-days" type="number" min="0" value="${rem.tachographDays}" />
+            </div>
+          </div>
+
           <div>
             <button class="btn btn--primary btn--sm btn-company-svc-save" data-id="${c.id}">${t("svc_settings_save")}</button>
           </div>

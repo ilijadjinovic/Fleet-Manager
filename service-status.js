@@ -131,6 +131,40 @@ export function hasVehicleServiceOverrides(vehicle) {
   return Object.keys(cleanVehicleServiceOverrides(vehicle?.serviceSettings)).length > 0;
 }
 
+// ============================================================
+//  PODSETNICI ZA ROKOVE: REGISTRACIJA I TAHOGRAF
+//  Koliko dana pre isteka se vozilo pojavljuje na dashboardu.
+//  Čuva se u dokumentu firme (reminderSettings), odvojeno za
+//  registraciju i tahograf. Gume se ne podešavaju (sezonski rok).
+// ============================================================
+export const DEFAULT_REMINDER_SETTINGS = {
+  regDays:        30, // registracija: dana unapred
+  tachographDays: 30, // tahograf: dana unapred
+};
+
+export function normalizeReminderSettings(raw) {
+  const r = raw || {};
+  const d = DEFAULT_REMINDER_SETTINGS;
+  const days = (v, def) => {
+    if (v === null || v === undefined || v === "") return def;
+    const n = Number(v);
+    return (isFinite(n) && n >= 0) ? Math.round(n) : def;
+  };
+  return {
+    regDays:        days(r.regDays,        d.regDays),
+    tachographDays: days(r.tachographDays, d.tachographDays),
+  };
+}
+
+export async function getReminderSettings(companyId) {
+  try {
+    const snap = await getDoc(doc(db, "companies", companyId));
+    return normalizeReminderSettings(snap.exists() ? snap.data().reminderSettings : null);
+  } catch (e) {
+    return normalizeReminderSettings(null);
+  }
+}
+
 /** Podešavanja servisnog podsetnika firme (sa podrazumevanim vrednostima). */
 export async function getServiceSettings(companyId) {
   try {
