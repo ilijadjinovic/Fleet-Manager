@@ -244,6 +244,12 @@ service cloud.firestore {
         allow create, update, delete: if isMasterAdmin() || isFleetAdmin(companyId);
       }
 
+      // ── KATALOG USLUGA SERVISERA (usluge koje je admin dodao) ──
+      match /serviceCatalog/{svcId} {
+        allow read: if isCompanyMember(companyId);
+        allow create, update, delete: if isMasterAdmin() || isFleetAdmin(companyId);
+      }
+
       // ── ZAKAZANI SERVISI ──────────────────────────────────
       match /scheduledServices/{scheduleId} {
         allow read: if isCompanyMember(companyId);

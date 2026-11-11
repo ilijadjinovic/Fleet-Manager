@@ -1412,30 +1412,110 @@ tbody td {
    Napomena: ove klase koristi servicers.js, ali do sada nisu
    bile definisane ovde — zato su se serviseri prikazivali kao
    goli tekst bez okvira. Isti pattern kao .company-card. */
-.servicer-list { display: flex; flex-direction: column; gap: 16px; }
+.servicer-list { display: flex; flex-direction: column; gap: 8px; }
 
-.servicer-card {
-  padding: 16px;
+/* Pretraga + brojač */
+.servicer-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.servicer-search { position: relative; }
+.servicer-search__icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+.servicer-search__input { width: 100%; padding-left: 36px; padding-right: 40px; }
+.servicer-search__clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.servicer-search__clear:hover { color: var(--color-text); background: var(--color-surface-3); }
+.servicer-search__clear.hidden { display: none; }
+.servicer-count { font-size: 13px; color: var(--color-text-muted); min-height: 18px; }
+
+/* Sažet red + ekspandirani detalji */
+.servicer-card {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 .servicer-card__header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  user-select: none;
 }
-.servicer-card__name    { font-size: 16px; font-weight: 700; }
+.servicer-card__header:hover { background: var(--color-primary-soft); }
+.servicer-card__header:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.servicer-card__num {
+  flex-shrink: 0;
+  min-width: 24px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+  text-align: right;
+}
+.servicer-card__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
 .servicer-card__actions { display: flex; gap: 4px; flex-shrink: 0; }
+.servicer-card__chevron {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+}
+.servicer-card--open .servicer-card__chevron { transform: rotate(180deg); }
+.servicer-card--open .servicer-card__header { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 
 .servicer-card__details {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 10px;
+  margin: 0 16px;
+  padding: 12px 0 14px 36px;
   border-top: 1px solid var(--color-border);
 }
+.servicer-card:not(.servicer-card--open) .servicer-card__details { display: none; }
+
+.servicer-services { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.servicer-services__label { font-size: 12px; color: var(--color-text-muted); }
+.servicer-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.servicer-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--color-primary-glow);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+}
+
 .servicer-detail {
   font-size: 13px;
   color: var(--color-text-muted);
@@ -1446,6 +1526,69 @@ tbody td {
 .servicer-detail a { color: var(--color-primary); text-decoration: none; }
 .servicer-detail a:hover { text-decoration: underline; }
 .servicer-detail--notes { color: var(--color-text); }
+
+/* Ček-lista usluga u formi servisera */
+.svc-picker { display: flex; flex-direction: column; gap: 6px; }
+.svc-note-hint {
+  font-size: 12px;
+  color: var(--color-warning);
+  background: var(--color-warning-bg-faint);
+  border: 1px solid var(--color-warning-border-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.svc-msg { font-size: 13px; margin: 0 0 4px; padding: 6px 10px; border-radius: var(--radius-sm); }
+.svc-msg--error { color: var(--color-danger); background: var(--color-danger-bg-faint); }
+.svc-msg--ok    { color: var(--color-success); background: var(--color-success-soft); }
+.svc-cat {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+.svc-cat__summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+.svc-cat__count { font-size: 12px; font-weight: 400; color: var(--color-primary); }
+.svc-cat__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 12px 10px;
+}
+.svc-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.svc-check { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 14px; cursor: pointer; flex: 1; }
+.svc-check input { flex-shrink: 0; }
+.svc-item__tools { display: flex; gap: 2px; flex-shrink: 0; }
+.svc-tool {
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+}
+.svc-tool:hover { background: var(--color-surface-3); }
+.svc-add-link {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 13px;
+  padding: 6px 0 0;
+  cursor: pointer;
+}
+.svc-add-link:hover { text-decoration: underline; }
+.svc-edit-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+.svc-edit-row .form-input { flex: 1; min-width: 0; }
 
 /* Kvadratno "ikona" dugme — koristi ga servicers.js za ✏️/🗑️ */
 .btn--icon {
