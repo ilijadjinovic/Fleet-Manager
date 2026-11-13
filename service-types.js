@@ -144,3 +144,12 @@ export function readServiceType(prefix, { requireOther = true } = {}) {
   }
   return { ok: true, serviceType, serviceItems, serviceOther };
 }
+
+// Opis radova BEZ automatski ubačene liste "Stavke sa računa" (ona se prikazuje
+// kao tabela iz polja receiptItems). Zapisi bez receiptItems zadržavaju ceo tekst.
+export function serviceWorkText(s) {
+  const text = String(s?.description || "").trim();
+  if (!text) return "";
+  if (!Array.isArray(s.receiptItems) || s.receiptItems.length === 0) return text;
+  return text.replace(/(^|\n+)[^\n]*:[ \t]*\n•[\s\S]*$/, "").trim();
+}

@@ -9,7 +9,7 @@ import {
   doc, addDoc, updateDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
-import { todayDMY, datePlaceholder, attachDateMask, collectDates } from "./date-input.js";
+import { todayDMY, datePlaceholder, attachDateMask, collectDates, validateDateTimeFields } from "./date-input.js";
 import { S, setActiveCompany, navigateTo, showToast, openModal } from "./app.js";
 import { getCompanies } from "./firebase.js";
 import { isVehicleRegistered, needsTachograph, openVehicleDetail, openServiceForm, fuelLevelScaleHTML, bindFuelLevelScale, fuelLevelLabel } from "./vehicles.js";
@@ -1558,7 +1558,7 @@ function openFuelForm() {
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_receipt_time")}</label>
-        <input id="tf-receiptTime" class="form-input" type="datetime-local" step="1" />
+        <input id="tf-receiptTime" class="form-input" type="text" data-datetime="1" />
       </div>
     </div>
     <div class="form-group">
@@ -1705,6 +1705,7 @@ function applyReceiptDetails(r, qr, setStatus) {
 }
 
 async function saveFuelEntry() {
+  if (!validateDateTimeFields()) return false; // datum i vreme računa (24h)
   const fuelAmount  = parseFloat(document.getElementById("tf-fuelAmount")?.value);
   const fuelCost    = parseFloat(document.getElementById("tf-fuelCost")?.value);
   const fuelStation = document.getElementById("tf-fuelStation")?.value.trim();
@@ -1792,6 +1793,7 @@ function openCostForm() {
 }
 
 async function saveCostEntry() {
+  if (!validateDateTimeFields()) return false;
   const c = costScanner?.read();
   if (!c || !c.amount || c.amount <= 0) {
     showEntryError("cost-form-error", t("required_field"));

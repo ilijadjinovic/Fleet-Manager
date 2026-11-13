@@ -11,6 +11,7 @@ import {
   addDoc, updateDoc, serverTimestamp, where
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
+import { rememberIncident } from "./detail-registry.js";
 import { S, showToast, openModal } from "./app.js";
 import { openServiceForm, incidentToServicePrefill } from "./vehicles.js";
 import { Timestamp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
@@ -230,9 +231,11 @@ export function incidentCard(inc, canEdit, canSchedule = canEdit) {
 
   const tc = typeConfig[inc.type]   || typeConfig.other;
   const sc = statusConfig[inc.status] || statusConfig.open;
+  rememberIncident(inc);
 
   return `
-    <div class="incident-card incident-card--${inc.status}">
+    <div class="incident-card incident-card--${inc.status} incident-card--clickable"
+      data-incident-id="${String(inc.id).replace(/[^\w-]/g, "")}" role="button" tabindex="0" title="${t("det_btn_details")}">
       <div class="incident-card__header">
         <div class="incident-card__type">
           <span class="incident-card__type-icon">${tc.icon}</span>
@@ -248,7 +251,7 @@ export function incidentCard(inc, canEdit, canSchedule = canEdit) {
         </div>
       </div>
 
-      <div class="incident-card__desc">${inc.description}</div>
+      <div class="incident-card__desc incident-card__desc--clamp">${inc.description}</div>
 
       <div class="incident-card__meta">
         ${inc.vehiclePlate ? `<span>🚗 ${inc.vehiclePlate}</span>` : ""}

@@ -12,13 +12,13 @@ import {
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
 import {
   toDMY, todayDMY, parseDMY, datePlaceholder, attachDateMask,
-  collectDates, setDateError, clearDateError
+  collectDates, setDateError, clearDateError, validateDateTimeFields
 } from "./date-input.js";
 import { S, showToast, openModal, closeModal } from "./app.js";
 import { getServiceProviders, openServicerForm } from "./servicers.js";
 import {
   serviceTypePickerHTML, bindServiceTypePicker, readServiceType,
-  serviceTypeLabel, serviceDetailText,
+  serviceTypeLabel, serviceDetailText, serviceWorkText,
 } from "./service-types.js";
 import { scanQRCode, parseFiscalQR, fetchReceiptDetails, receiptWorkerConfigured } from "./receipt-scan.js";
 import { findReceiptDuplicate, normalizeReceiptNo } from "./receipt-guard.js";
@@ -31,7 +31,7 @@ import { incidentCard, scheduleServiceForIncident, openIncidentForm } from "./in
 import { openAdminEntryForm } from "./entry-forms.js";
 import { COST_TYPES as COST_TYPES_V, COST_META as COST_META_V } from "./entries-view.js";
 import { detailButton, isAdminViewer } from "./entry-details.js";
-import { rememberEntry } from "./detail-registry.js";
+import { rememberEntry, rememberService } from "./detail-registry.js";
 import { esc as escDet, fmtNum as fmtNumDet, fmtRsd as fmtRsdDet, toMillis as toMsDet } from "./entries-view.js";
 import {
   loadVehicleAssignmentHistory, groupAssignmentsByDriver, summarizeAssignments,
@@ -825,21 +825,25 @@ function financeListHTML(services, entries, from, to) {
   services.filter(sv => inPeriod(sv.serviceDate)).forEach(sv => {
     const status = effectiveServiceStatus(sv);
     const done = status === SERVICE_STATUS.DONE;
+    const itemsCount = Array.isArray(sv.receiptItems) ? sv.receiptItems.length : 0;
     const sub = [
       serviceDetailText(sv) || null,
       sv.workshop ? "🏭 " + sv.workshop : null,
       sv.km ? "🛣️ " + fmtNumDet(sv.km) + " km" : null,
-      sv.description || null,
+      itemsCount ? "🧾 " + t("det_items_chip", { n: itemsCount }) : null,
+      serviceWorkText(sv) || null,
     ].filter(Boolean).map(escDet).join(" · ");
+    if (admin) rememberService(sv);
     items.push({
       ms: toMsDet(sv.serviceDate),
       html: `
-        <div class="finance-list-row">
+        <div class="finance-list-row${admin ? " finance-list-row--clickable" : ""}"
+          ${admin ? `data-service-id="${escDet(sv.id)}" role="button" tabindex="0"` : ""}>
           <span class="finance-list-row__icon">🔧</span>
           <div class="finance-list-row__body">
             <div class="finance-list-row__main"><span class="badge badge--service">${escDet(serviceTypeLabel(sv.serviceType || ""))}</span>
               <strong>${done ? fmtRsdDet(sv.cost) : escDet(t("service_status_" + status))}</strong></div>
-            ${sub ? `<div class="finance-list-row__sub">${sub}</div>` : ""}
+            ${sub ? `<div class="finance-list-row__sub finance-list-row__sub--clamp">${sub}</div>` : ""}
           </div>
           <div class="finance-list-row__date">${formatDate(sv.serviceDate)}</div>
         </div>`,
@@ -1932,7 +1936,7 @@ function receiptBlockHTML(p, s = {}) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_receipt_time")}</label>
-        <input id="${p}-receiptTime" class="form-input" type="datetime-local" step="1" value="${escDet(s.receiptTime || "")}" />
+        <input id="${p}-receiptTime" class="form-input" type="text" data-datetime="1" value="${escDet(s.receiptTime || "")}" />
       </div>
     </div>`;
 }
@@ -2090,6 +2094,7 @@ function bindServiceReceipt(p, { servicers, existing = {}, ignoreId = null, cost
 // Normalizuje broj računa i proverava da isti račun nije već unet
 // (troškovi, gorivo ili drugi servis). Vraća { ok, receiptNo }.
 async function checkServiceReceipt(p, ignoreId) {
+  if (!validateDateTimeFields()) return { ok: false }; // datum i vreme računa (24h)
   const norm = normalizeReceiptNo($id(`${p}-receiptNo`)?.value);
   if (!norm) return { ok: true, receiptNo: null };
   try {
@@ -2171,7 +2176,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       </div>
       <div class="form-group">
         <label class="form-label">${t("service_time")} *</label>
-        <input id="sf-time" class="form-input" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:MM" value="${s.serviceTime || ""}" />
+        <input id="sf-time" class="form-input" type="text" data-timefield="1" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="HH:MM" value="${s.serviceTime || ""}" />
       </div>
     </div>
     ${!isEdit ? `
@@ -2344,16 +2349,7 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   });
 
   ["sf-date", "sf-endDate"].forEach(attachDateMask);
-  // Maska za vreme HH:MM (24h): kuca se samo cifre, dvotačka se dodaje sama;
-  // prva cifra veća od 2 dobija nulu ispred (9 → 09:)
-  document.getElementById("sf-time")?.addEventListener("input", (e) => {
-    const el = e.target;
-    let digits = el.value.replace(/\D/g, "");
-    if (digits.length >= 1 && Number(digits[0]) > 2) digits = "0" + digits;
-    digits = digits.slice(0, 4);
-    el.value = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
-    clearDateError(el);
-  });
+  // Vreme HH:MM (24h): maska i provera dolaze iz attachTimeMask (data-timefield)
 
   bindServiceTypePicker("sf", s);
   bindWorkshopSelect("sf", servicers);
@@ -2572,8 +2568,14 @@ function serviceItem(s, vehicle, canEdit) {
     actions += `<button class="btn btn--ghost btn--sm btn-delete-service" data-id="${s.id}" title="${t("delete")}">🗑️</button>`;
   }
 
+  const itemsCount = Array.isArray(s.receiptItems) ? s.receiptItems.length : 0;
+  const workText = serviceWorkText(s);
+  const clickable = isAdminViewer();
+  if (clickable) rememberService(s);
+
   return `
-    <div class="service-item ${cancelled ? "service-item--cancelled" : overdue ? "service-item--overdue" : today && status !== SERVICE_STATUS.DONE ? "service-item--today" : ""}">
+    <div class="service-item${clickable ? " service-item--clickable" : ""} ${cancelled ? "service-item--cancelled" : overdue ? "service-item--overdue" : today && status !== SERVICE_STATUS.DONE ? "service-item--today" : ""}"
+      ${clickable ? `data-service-id="${escText(s.id)}" role="button" tabindex="0" title="${escText(t("det_btn_details"))}"` : ""}>
       <div class="service-item__header">
         <div class="service-item__badges">
           <span class="badge badge--info">${escText(serviceTypeLabel(s.serviceType || ""))}</span>
@@ -2583,12 +2585,13 @@ function serviceItem(s, vehicle, canEdit) {
         <span class="service-item__date">${formatDate(s.serviceDate)}${s.serviceTime ? ` 🕒 ${s.serviceTime}` : ""}</span>
       </div>
       ${serviceDetailText(s) ? `<div class="service-item__desc service-item__items">${escText(serviceDetailText(s))}</div>` : ""}
-      ${s.description ? `<div class="service-item__desc">${s.description}</div>` : ""}
+      ${workText ? `<div class="service-item__desc service-item__desc--clamp">${escText(workText)}</div>` : ""}
       <div class="service-item__meta">
         ${s.km ? `<span>📍 ${s.km.toLocaleString()} km</span>` : ""}
         ${s.cost ? `<span>💰 ${s.cost.toLocaleString()} RSD</span>` : ""}
         ${s.workshop ? `<span>🔧 ${s.workshop}</span>` : ""}
         ${s.workshopAddress ? `<span>🏠 ${s.workshopAddress}</span>` : ""}
+        ${itemsCount ? `<span>🧾 ${escText(t("det_items_chip", { n: itemsCount }))}</span>` : ""}
       </div>
       ${s.endDate || s.endKm ? `<div class="service-item__next">${t("vehicle_service_end")}: ${formatDate(s.endDate)}${s.endKm ? " / " + s.endKm.toLocaleString() + " km" : ""}</div>` : ""}
       ${actions ? `<div class="service-item__actions">${actions}</div>` : ""}

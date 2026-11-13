@@ -297,3 +297,287 @@ export function attachDateMask(id) {
     el.focus();
   });
 }
+
+// ============================================================
+//  DATUM + VREME (24h) i samo VREME
+//  Nativni <input type="datetime-local"> / <input type="time"> prikazuju
+//  format po jeziku/regionu browsera ili sistema (npr. 11/09/2026 12:41 PM).
+//  Zato se ta polja zamenjuju tekstualnim poljem sa maskom:
+//    datum + vreme: dd.mm.gggg HH:MM:SS (24h)     vreme: HH:MM (24h)
+//  Ostalo u aplikaciji se ne menja: .value polja datum+vreme i dalje
+//  daje/prima "gggg-mm-ddTHH:MM:SS" (kako se čuva i kako šalje skener računa).
+//  Polja se označavaju atributima data-datetime="1" i data-timefield="1";
+//  pripremu radi initDateTimeFields() (jednom, iz app.js).
+// ============================================================
+const INPUT_VALUE = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+const rawGet = (el) => INPUT_VALUE.get.call(el);
+const rawSet = (el, v) => INPUT_VALUE.set.call(el, v);
+
+export function dateTimePlaceholder() {
+  return getCurrentLang() === "en" ? "dd.mm.yyyy hh:mm:ss" : "dd.mm.gggg čč:mm:ss";
+}
+
+const ISO_DT_RE = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
+
+/** Date | Firestore Timestamp | ISO string → "dd.mm.gggg HH:MM:SS" ("" ako je prazno/nevažeće) */
+export function toDMYHMS(val) {
+  if (!val) return "";
+  const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val));
+  if (isNaN(d)) return "";
+  return `${toDMY(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+// ISO ("2026-11-09T12:41:40") → prikaz "09.11.2026 12:41:40"; sve ostalo ostaje kako jeste
+function isoToDisplay(v) {
+  const s = String(v ?? "").trim();
+  const m = s.match(ISO_DT_RE);
+  if (!m) return s;
+  return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}:${m[6] || "00"}`;
+}
+
+/**
+ * Provera teksta "dd.mm.gggg HH:MM[:SS]".
+ * Vraća { empty, ok, iso, code, params } — code: "format" | "year" | "month" |
+ * "day_range" | "day" (greške datuma), "dt_format" ili "time_range".
+ */
+export function inspectDateTime(str) {
+  const s = String(str ?? "").trim();
+  if (!s) return { empty: true, ok: false, iso: null, code: null, params: {} };
+
+  const m = s.match(/^(\d{1,2}[./-]\d{1,2}[./-]\d{4})\.?[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return { empty: false, ok: false, iso: null, code: "dt_format", params: {} };
+
+  const dr = inspectDMY(m[1]);
+  if (!dr.ok) return { empty: false, ok: false, iso: null, code: dr.code, params: dr.params };
+
+  const hh = Number(m[2]), mi = Number(m[3]), ss = m[4] == null ? 0 : Number(m[4]);
+  if (hh > 23 || mi > 59 || ss > 59) {
+    return { empty: false, ok: false, iso: null, code: "time_range", params: {} };
+  }
+  return {
+    empty: false, ok: true, code: null, params: {},
+    iso: `${toISODate(dr.date)}T${pad2(hh)}:${pad2(mi)}:${pad2(ss)}`,
+  };
+}
+
+function dateTimeMessage(r) {
+  if (r.code === "dt_format") return t("datetime_err_format");
+  if (r.code === "time_range") return t("time_err_range");
+  return t("date_err_" + r.code, r.params);
+}
+
+function maskDateTime(raw) {
+  const d = String(raw).replace(/\\D/g, "").slice(0, 14);
+  let out = d.slice(0, 2);
+  if (d.length > 2) out += "." + d.slice(2, 4);
+  if (d.length > 4) out += "." + d.slice(4, 8);
+  if (d.length > 8) out += " " + d.slice(8, 10);
+  if (d.length > 10) out += ":" + d.slice(10, 12);
+  if (d.length > 12) out += ":" + d.slice(12, 14);
+  return out;
+}
+
+/** Pretvara polje (type datetime-local ili text) u polje "dd.mm.gggg HH:MM:SS". */
+export function attachDateTimeMask(target) {
+  const el = resolveEl(target);
+  if (!el || el.dataset.dateTimeField === "1") return;
+  el.dataset.dateTimeField = "1";
+
+  const initial = rawGet(el); // pre promene tipa (datetime-local ga vraća kao ISO)
+  if (el.type !== "text") el.type = "text";
+  el.removeAttribute("step");
+  el.setAttribute("autocomplete", "off");
+  el.setAttribute("inputmode", "numeric");
+  el.setAttribute("maxlength", "19");
+  if (!el.getAttribute("placeholder")) el.setAttribute("placeholder", dateTimePlaceholder());
+
+  // .value: spolja uvek ISO ("" ako je prazno ili neispravno), u polju se vidi dd.mm.gggg HH:MM:SS
+  Object.defineProperty(el, "value", {
+    configurable: true,
+    get() {
+      const r = inspectDateTime(rawGet(el));
+      return r.ok ? r.iso : "";
+    },
+    set(v) { rawSet(el, isoToDisplay(v)); },
+  });
+  rawSet(el, isoToDisplay(initial));
+
+  const wrap = document.createElement("div");
+  wrap.className = "date-field";
+  el.parentNode.insertBefore(wrap, el);
+  wrap.appendChild(el);
+
+  const native = document.createElement("input");
+  native.type = "date";
+  native.className = "date-field__native";
+  native.tabIndex = -1;
+  native.setAttribute("aria-hidden", "true");
+  native.min = `${MIN_YEAR}-01-01`;
+  native.max = `${MAX_YEAR}-12-31`;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "date-field__btn";
+  btn.title = t("date_pick");
+  btn.setAttribute("aria-label", t("date_pick"));
+  btn.innerHTML = CALENDAR_SVG;
+  btn.disabled = el.disabled;
+  wrap.append(native, btn);
+
+  const fire = () => {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  el.addEventListener("input", () => {
+    rawSet(el, maskDateTime(rawGet(el)));
+    clearDateError(el);
+  });
+
+  // Nalepljeno: gggg-mm-ddTHH:MM:SS ili dd.mm.gggg HH:MM:SS (i sa kosim crtama)
+  el.addEventListener("paste", (e) => {
+    const text = ((e.clipboardData || window.clipboardData)?.getData("text") ?? "").trim();
+    const shown = isoToDisplay(text);
+    const r = inspectDateTime(shown);
+    if (!r.ok) return; // ostalo prepusti maski
+    e.preventDefault();
+    rawSet(el, toDMYHMS(r.iso));
+    clearDateError(el);
+    fire();
+  });
+
+  const validateOnLeave = () => {
+    const r = inspectDateTime(rawGet(el));
+    if (r.empty || r.ok) clearDateError(el);
+    else setDateError(el, dateTimeMessage(r));
+  };
+  el.addEventListener("blur", validateOnLeave);
+  el.addEventListener("change", validateOnLeave);
+
+  // Kalendar bira samo DAN — vreme ostaje ono što je ukucano (ili trenutno vreme)
+  btn.addEventListener("click", () => {
+    const r = inspectDateTime(rawGet(el));
+    native.value = r.ok ? r.iso.slice(0, 10) : "";
+    try { native.showPicker(); } catch { native.focus(); native.click(); }
+  });
+  native.addEventListener("change", () => {
+    const m = native.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return;
+    const old = rawGet(el).match(/[ T]+(\d{1,2}:\d{2}(?::\d{2})?)\\s*$/);
+    const now = new Date();
+    const time = old ? old[1] : `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+    rawSet(el, `${m[3]}.${m[2]}.${m[1]} ${time}`);
+    clearDateError(el);
+    fire();
+    el.focus();
+  });
+}
+
+/** Proveri polje datum+vreme: { ok, iso, message }. Pri grešci prikazuje poruku ispod polja. */
+export function readDateTimeField(id, { required = false, requiredMessage = null, focus = true } = {}) {
+  const el = document.getElementById(id);
+  if (!el) return { ok: true, iso: null, message: null };
+  const r = inspectDateTime(rawGet(el));
+  if (r.empty) {
+    if (required) {
+      const message = requiredMessage || t("datetime_err_required");
+      setDateError(el, message, { focus });
+      return { ok: false, iso: null, message };
+    }
+    clearDateError(el);
+    return { ok: true, iso: null, message: null };
+  }
+  if (!r.ok) {
+    const message = dateTimeMessage(r);
+    setDateError(el, message, { focus });
+    return { ok: false, iso: null, message };
+  }
+  clearDateError(el);
+  return { ok: true, iso: r.iso, message: null };
+}
+
+/** Proveri SVA polja datum+vreme u dokumentu (ili u `root`). false = neko je neispravno (fokus na prvo). */
+export function validateDateTimeFields(root = document) {
+  let ok = true;
+  root.querySelectorAll("[data-datetime]").forEach((el) => {
+    if (!el.id) return;
+    const r = readDateTimeField(el.id, { focus: ok }); // fokus samo na prvo pogrešno
+    if (!r.ok) ok = false;
+  });
+  return ok;
+}
+
+// ── SAMO VREME (HH:MM, 24h) ───────────────────────────────────
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Pretvara polje (type time ili text) u tekstualno polje HH:MM sa maskom (24h, bez AM/PM). */
+export function attachTimeMask(target) {
+  const el = resolveEl(target);
+  if (!el || el.dataset.timeMask === "1") return;
+  el.dataset.timeMask = "1";
+
+  const initial = rawGet(el);
+  if (el.type !== "text") el.type = "text";
+  el.removeAttribute("step");
+  el.setAttribute("autocomplete", "off");
+  el.setAttribute("inputmode", "numeric");
+  el.setAttribute("maxlength", "5");
+  if (!el.getAttribute("placeholder")) el.setAttribute("placeholder", "HH:MM");
+  rawSet(el, String(initial || "").slice(0, 5));
+
+  // Samo cifre, dvotačka se dodaje sama; prva cifra veća od 2 dobija nulu (9 → 09:)
+  el.addEventListener("input", () => {
+    let digits = rawGet(el).replace(/\\D/g, "");
+    if (digits.length >= 1 && Number(digits[0]) > 2) digits = "0" + digits;
+    digits = digits.slice(0, 4);
+    rawSet(el, digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits);
+    clearDateError(el);
+  });
+  el.addEventListener("blur", () => {
+    const v = rawGet(el).trim();
+    if (!v || TIME_RE.test(v)) clearDateError(el);
+    else setDateError(el, t("service_time_invalid"));
+  });
+}
+
+/** Proveri polje HH:MM: { ok, value, message }. Prazno je ok osim ako je required. */
+export function readTimeField(id, { required = false, requiredMessage = null } = {}) {
+  const el = document.getElementById(id);
+  if (!el) return { ok: true, value: "", message: null };
+  const v = String(el.value || "").trim();
+  if (!v) {
+    if (required) {
+      const message = requiredMessage || t("service_time_required");
+      setDateError(el, message, { focus: true });
+      return { ok: false, value: "", message };
+    }
+    clearDateError(el);
+    return { ok: true, value: "", message: null };
+  }
+  if (!TIME_RE.test(v)) {
+    const message = t("service_time_invalid");
+    setDateError(el, message, { focus: true });
+    return { ok: false, value: v, message };
+  }
+  clearDateError(el);
+  return { ok: true, value: v, message: null };
+}
+
+// ── AUTOMATSKO POVEZIVANJE ────────────────────────────────────
+// Forme se crtaju dinamički (modali), pa se polja označena sa
+// data-datetime / data-timefield povezuju čim se pojave u DOM-u.
+export function initDateTimeFields() {
+  if (initDateTimeFields.done) return;
+  initDateTimeFields.done = true;
+  const scan = (root) => {
+    if (!root.querySelectorAll) return;
+    if (root.matches?.("[data-datetime]")) attachDateTimeMask(root);
+    if (root.matches?.("[data-timefield]")) attachTimeMask(root);
+    root.querySelectorAll("[data-datetime]").forEach(attachDateTimeMask);
+    root.querySelectorAll("[data-timefield]").forEach(attachTimeMask);
+  };
+  new MutationObserver((muts) => {
+    for (const m of muts) m.addedNodes.forEach((n) => { if (n.nodeType === 1) scan(n); });
+  }).observe(document.body, { childList: true, subtree: true });
+  scan(document.body);
+}

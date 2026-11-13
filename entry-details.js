@@ -22,7 +22,10 @@ import { esc, fmtNum, fmtRsd, toMillis, COST_TYPES, COST_META } from "./entries-
 import {
   rememberEntry, rememberAssignment, rememberTrip,
   getRememberedEntry, getRememberedAssignment, getRememberedTrip,
+  getRememberedService, getRememberedIncident,
 } from "./detail-registry.js";
+import { serviceTypeLabel, serviceDetailText, serviceWorkText } from "./service-types.js";
+import { effectiveServiceStatus } from "./service-status.js";
 
 const ICONS  = { fuel: "⛽", ...Object.fromEntries(COST_TYPES.map(k => [k, COST_META[k].icon])),
                  fault: "🔧", damage: "💥", accident: "🚨", other: "📋" };
@@ -207,6 +210,110 @@ export function entryDetailHTML(e) {
     ])),
     section(t("det_section_entry"), rows([...common, [t("notes"), e.notes]])),
   ].join("");
+}
+
+// ── DETALJI SERVISA ───────────────────────────────────────────
+const money2 = (v) => v != null && v !== "" && !isNaN(v)
+  ? Number(v).toLocaleString("sr-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  : "—";
+
+function receiptItemsTable(items) {
+  const allTotals = items.length > 0 && items.every(it => it.total != null && !isNaN(it.total));
+  const sum = allTotals ? items.reduce((a, it) => a + Number(it.total), 0) : null;
+  return `<div class="detail-items-wrap"><table class="detail-items">
+    <thead><tr>
+      <th>${esc(t("det_items_name"))}</th><th class="num">${esc(t("det_items_qty"))}</th>
+      <th class="num">${esc(t("det_items_price"))}</th><th class="num">${esc(t("det_items_total"))}</th>
+    </tr></thead>
+    <tbody>${items.map(it => `<tr>
+      <td>${esc(it.name || "—")}</td>
+      <td class="num">${it.quantity != null ? esc(fmtNum(it.quantity, 3)) : "—"}</td>
+      <td class="num">${esc(money2(it.unitPrice))}</td>
+      <td class="num">${esc(money2(it.total))}</td>
+    </tr>`).join("")}</tbody>
+    ${sum != null ? `<tfoot><tr><td colspan="3">${esc(t("det_items_sum"))}</td><td class="num">${esc(money2(sum))}</td></tr></tfoot>` : ""}
+  </table></div>`;
+}
+
+export function serviceDetailHTML(s) {
+  const status = effectiveServiceStatus(s);
+  const items = Array.isArray(s.receiptItems) ? s.receiptItems : [];
+  const work = serviceWorkText(s);
+  return [
+    section(t("det_section_service"), rows([
+      [t("service_type"),          serviceTypeLabel(s.serviceType || "")],
+      [t("det_service_works"),     serviceDetailText(s)],
+      [t("det_service_status"),    t("service_status_" + status)],
+      [t("service_date"),          d(s.serviceDate)],
+      [t("service_time"),          s.serviceTime],
+      [t("service_km"),            km(s.km)],
+      [t("det_service_cost"),      s.cost != null && s.cost !== "" ? fmtRsd(s.cost) : null],
+      [t("service_end_date"),      d(s.endDate)],
+      [t("service_end_km"),        km(s.endKm)],
+    ])),
+    section(t("service_workshop"), rows([
+      [t("service_workshop"),         s.workshop],
+      [t("service_workshop_address"), s.workshopAddress],
+      [t("servicer_pib"),             s.receiptPib],
+    ])),
+    work ? section(t("service_description"), `<div class="vehicle-notes-box">${esc(work)}</div>`) : "",
+    items.length ? section(`${t("det_section_items")} (${items.length})`, receiptItemsTable(items)) : "",
+    section(t("det_section_receipt"), rows([
+      [t("trip_fuel_receipt"),      s.receiptNo],
+      [t("trip_fuel_receipt_time"), receiptDateTime(s.receiptTime)],
+      [t("det_receipt_link"),       safeReceiptLink(s.receiptUrl), true],
+      [t("det_receipt_source"),     s.receiptSource ? t(s.receiptSource === "qr" ? "det_source_qr" : "det_source_manual") : null],
+    ])),
+    section(t("det_section_entry"), rows([
+      [t("assignment_vehicle"),  s.vehiclePlate],
+      [t("det_entered_at"),      dt(s.createdAt)],
+      [t("det_taken_at"),        dt(s.takenAt)],
+      [t("det_updated_at"),      dt(s.updatedAt)],
+    ])),
+  ].join("");
+}
+
+export function openServiceDetail(service) {
+  if (!service) return;
+  show(`🔧 ${serviceTypeLabel(service.serviceType || "")}`, serviceDetailHTML(service));
+}
+
+// ── DETALJI PRIJAVE ───────────────────────────────────────────
+export function incidentDetailHTML(inc) {
+  const type   = ["fault", "damage", "accident", "other"].includes(inc.type) ? inc.type : "other";
+  const status = ["open", "in_progress", "closed"].includes(inc.status) ? inc.status : "open";
+  return [
+    section(t("det_section_incident"), rows([
+      [t("incident_type"),         t("incident_" + type)],
+      [t("det_incident_status"),   t("incident_status_" + status)],
+      [t("incident_description"),  inc.description],
+      [t("incident_location"),     inc.location],
+      [t("incident_km_label"),     km(inc.currentKm)],
+    ])),
+    type === "accident" && (inc.thirdParty || inc.policeReport || inc.insurance)
+      ? section(t("incident_accident_section"), rows([
+          [t("incident_third_party"),  inc.thirdParty],
+          [t("incident_police_report"), inc.policeReport],
+          [t("incident_insurance"),    inc.insurance],
+        ]))
+      : "",
+    inc.adminNote
+      ? section(t("incident_note_label"), `<div class="vehicle-notes-box">${esc(inc.adminNote)}</div>`) : "",
+    inc.resolution
+      ? section(t("incident_resolution_label"), `<div class="vehicle-notes-box">${esc(inc.resolution)}</div>`) : "",
+    section(t("det_section_entry"), rows([
+      [t("assignment_vehicle"), inc.vehiclePlate],
+      [t("assignment_driver"),  inc.driverName ? driverLink(inc.driverName, inc.driverId) : null, true],
+      [t("det_reported_at"),    dt(inc.createdAt)],
+      [t("det_updated_at"),     dt(inc.updatedAt)],
+    ])),
+  ].join("");
+}
+
+export function openIncidentDetail(inc) {
+  if (!inc) return;
+  const type = ["fault", "damage", "accident", "other"].includes(inc.type) ? inc.type : "other";
+  show(`${ICONS[type]} ${t("incident_" + type)}`, incidentDetailHTML(inc));
 }
 
 export function openEntryDetail(entry) {
@@ -405,18 +512,28 @@ export async function openDriverDetail(driverId) {
 function onActivate(e) {
   if (!canOpenEntryDetails()) return;
   const el = e.target.closest?.(
-    "[data-detail-back], [data-entry-id], [data-detail-assignment], [data-detail-trip], [data-detail-driver]"
+    "[data-detail-back], [data-entry-id], [data-service-id], [data-incident-id], [data-detail-assignment], [data-detail-trip], [data-detail-driver]"
   );
   if (!el) return;
 
+  // Kartice servisa i prijava imaju svoja dugmad (Završi, Izmeni, Zakaži servis…):
+  // klik na dugme/link/polje unutar kartice radi svoju akciju, ne otvara detalje.
+  if ((el.dataset.serviceId || el.dataset.incidentId) && e.target.closest) {
+    const inner = e.target.closest("button, a, input, select, textarea, label");
+    if (inner && inner !== el && el.contains(inner)) return;
+  }
+
   // Vozač: dozvoljeni su samo detalji unosa i dugme "Nazad" u modalu
-  if (!isAdminViewer() && !el.hasAttribute("data-detail-back") && !el.dataset.entryId) return;
+  if (!isAdminViewer() && !el.hasAttribute("data-detail-back") && !el.dataset.entryId && !el.dataset.incidentId) return;
+  if (el.dataset.serviceId && !isAdminViewer()) return;
 
   e.preventDefault();
   e.stopPropagation();
 
   if (el.hasAttribute("data-detail-back"))       { goBack(); return; }
   if (el.dataset.entryId)                         { openEntryDetail(getRememberedEntry(el.dataset.entryId)); return; }
+  if (el.dataset.serviceId)                       { openServiceDetail(getRememberedService(el.dataset.serviceId)); return; }
+  if (el.dataset.incidentId)                      { openIncidentDetail(getRememberedIncident(el.dataset.incidentId)); return; }
   if (el.dataset.detailAssignment)                { openAssignmentDetail(el.dataset.detailAssignment); return; }
   if (el.dataset.detailTrip)                      { openTripDetail(el.dataset.detailTrip); return; }
   if (el.dataset.detailDriver)                    { openDriverDetail(el.dataset.detailDriver); return; }
@@ -427,7 +544,8 @@ if (!window.__fmDetailHandlersInstalled) {
   document.addEventListener("click", onActivate, true);
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
-    if (!e.target.closest?.("[role='button'][data-entry-id], [role='button'][data-detail-assignment], [role='button'][data-detail-trip]")) return;
+    const hit = e.target.closest?.("[role='button'][data-entry-id], [role='button'][data-service-id], [role='button'][data-incident-id], [role='button'][data-detail-assignment], [role='button'][data-detail-trip]");
+    if (!hit || hit !== e.target) return; // Enter/Space samo kad je fokus na samoj kartici (ne na dugmetu u njoj)
     onActivate(e);
   }, true);
 }

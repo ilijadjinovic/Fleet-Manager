@@ -3088,3 +3088,39 @@ tbody td {
 .svc-sub__row { padding: 7px 0; line-height: 1.35; }
 .svc-sub__row span { flex: 1; }
 .service-item__items { font-weight: 500; }
+
+/* ── KLIKABILNI SERVISI I PRIJAVE (detalji u modalu, kao kod goriva) ── */
+.service-item--clickable,
+.incident-card--clickable { cursor: pointer; }
+.service-item--clickable:hover,
+.incident-card--clickable:hover { background: rgba(61, 126, 255, 0.07); }
+.service-item--clickable:focus-visible,
+.incident-card--clickable:focus-visible,
+.finance-list-row--clickable:focus-visible {
+  outline: 2px solid var(--color-primary); outline-offset: 2px;
+}
+/* Dugmad unutar kartice zadržavaju običan kursor i svoju akciju */
+.service-item--clickable button,
+.incident-card--clickable button { cursor: pointer; }
+
+/* Dugi opisi (npr. lista stavki sa računa) u sažetom prikazu: najviše 2–3 reda */
+.finance-list-row__sub--clamp,
+.service-item__desc--clamp,
+.incident-card__desc--clamp {
+  display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+}
+.finance-list-row__sub--clamp { -webkit-line-clamp: 2; line-clamp: 2; }
+.service-item__desc--clamp    { -webkit-line-clamp: 2; line-clamp: 2; white-space: pre-line; }
+.incident-card__desc--clamp   { -webkit-line-clamp: 3; line-clamp: 3; }
+
+/* Tabela stavki sa računa u modalu detalja */
+.detail-items-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.detail-items { width: 100%; border-collapse: collapse; font-size: 13px; }
+.detail-items th, .detail-items td {
+  padding: 7px 8px; border-bottom: 1px solid var(--color-border); text-align: left; vertical-align: top;
+}
+.detail-items th { color: var(--color-text-muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
+.detail-items td:first-child { overflow-wrap: anywhere; }
+.detail-items .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.detail-items tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
+.detail-items tfoot td { font-weight: 700; border-bottom: none; border-top: 2px solid var(--color-border); }

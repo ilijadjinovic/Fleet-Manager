@@ -18,7 +18,7 @@ import { S, openModal, showToast } from "./app.js";
 import { scanQRCode, parseFiscalQR, fetchReceiptDetails, receiptWorkerConfigured } from "./receipt-scan.js";
 import { findReceiptDuplicate, saveTripEntry, DuplicateReceiptError, normalizeReceiptNo } from "./receipt-guard.js";
 import { COST_TYPES, COST_META, esc } from "./entries-view.js";
-import { attachDateMask, todayDMY, collectDates } from "./date-input.js";
+import { attachDateMask, todayDMY, collectDates, validateDateTimeFields } from "./date-input.js";
 
 // ── POMOĆNE ───────────────────────────────────────────────────
 function setField(id, value) {
@@ -80,7 +80,7 @@ export function costFieldsHTML(p) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_receipt_time")}</label>
-        <input id="${p}-receiptTime" class="form-input" type="datetime-local" step="1" />
+        <input id="${p}-receiptTime" class="form-input" type="text" data-datetime="1" />
       </div>
     </div>
     <div class="form-group">
@@ -337,7 +337,7 @@ export async function openAdminEntryForm(kind, { vehicleId = null, onSaved = nul
       </div>
       <div class="form-group">
         <label class="form-label">${t("trip_fuel_receipt_time")}</label>
-        <input id="af-receiptTime" class="form-input" type="datetime-local" step="1" />
+        <input id="af-receiptTime" class="form-input" type="text" data-datetime="1" />
       </div>
     </div>`;
 
@@ -441,6 +441,7 @@ export async function openAdminEntryForm(kind, { vehicleId = null, onSaved = nul
     if (!vd) return false;
     const ts = dateFieldToTimestamp("ae-date");
     if (!ts.ok) return false;
+    if (!validateDateTimeFields()) return false; // datum i vreme računa (24h)
 
     const base = {
       assignmentId: null,

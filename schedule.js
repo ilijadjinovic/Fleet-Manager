@@ -9,7 +9,7 @@ import {
   query, where, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, getCurrentLang, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
-import { toDMY, datePlaceholder, attachDateMask, collectDates } from "./date-input.js";
+import { toDMY, datePlaceholder, attachDateMask, collectDates, readTimeField } from "./date-input.js";
 import { S, showToast, openModal } from "./app.js";
 import { getServiceProviders } from "./servicers.js";
 
@@ -60,7 +60,7 @@ export async function openScheduleForm(vehicle, options = {}) {
       </div>
       <div class="form-group">
         <label class="form-label">${t("schedule_time")}</label>
-        <input id="sch-time" class="form-input" type="time" value="${timeVal0}" />
+        <input id="sch-time" class="form-input" type="text" data-timefield="1" value="${timeVal0}" />
       </div>
 
       <div class="form-group" style="grid-column:1/-1">
@@ -113,7 +113,9 @@ export async function openScheduleForm(vehicle, options = {}) {
       : `📅 ${t("schedule_title_prefix")} — ${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
     bodyHTML,
     async () => {
-      const timeVal = document.getElementById("sch-time")?.value || "08:00";
+      const timeRes = readTimeField("sch-time");
+      if (!timeRes.ok) return false; // vreme mora biti HH:MM (24h)
+      const timeVal = timeRes.value || "08:00";
       const type    = document.getElementById("sch-type")?.value;
 
       // Datum: poruka ispod polja + fokus; `false` drži dijalog otvorenim

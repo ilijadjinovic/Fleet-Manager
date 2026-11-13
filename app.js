@@ -6,6 +6,7 @@
 import { auth, getUserProfile, logout, acceptInviteIfAny } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { loadLanguage, t, applyTranslations } from "./i18n.js";
+import { initDateTimeFields } from "./date-input.js";
 import { renderDashboard } from "./dashboard.js";
 import { renderVehicles } from "./vehicles.js";
 import { renderDrivers } from "./drivers.js";
@@ -31,6 +32,7 @@ export const S = {
 // ── INIT ──────────────────────────────────────────────────────
 async function init() {
   await loadLanguage(localStorage.getItem("fm_lang") || "sr");
+  initDateTimeFields(); // polja datum+vreme (24h) i vreme (HH:MM) u svim formama
 
   onAuthStateChanged(auth, async (firebaseUser) => {
     if (firebaseUser) {
