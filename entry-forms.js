@@ -359,7 +359,7 @@ export async function openAdminEntryForm(kind, { vehicleId = null, onSaved = nul
   openModal(t(isFuel ? "admin_entry_fuel_add" : "admin_entry_cost_add"), bodyHTML, () => save());
 
   let costScanner = null;
-  const fuelScan = { url: null, source: "manual", pib: null, object: null };
+  const fuelScan = { url: null, source: "manual", pib: null, object: null, items: null };
 
   setTimeout(() => {
     attachDateMask("ae-date");
@@ -416,6 +416,14 @@ export async function openAdminEntryForm(kind, { vehicleId = null, onSaved = nul
         setField("af-fuelStationAddress", [r.address, r.city].filter(Boolean).join(", "));
         setField("af-receiptTime", r.time);
         state.pib = r.pib || null; state.object = r.object || null;
+        // Sve stavke sa računa (ne samo gorivo) — prikazuju se u detaljima unosa
+        state.items = items.length ? items.map(it => ({
+        name: it.name || null,
+        quantity: it.quantity ?? null,
+        unitPrice: it.unitPrice ?? null,
+        total: it.total ?? null,
+        fuelType: it.fuelType || null,
+      })) : null;
         if (fuelItem) {
           setField("af-fuelType", fuelItem.fuelType);
           setField("af-fuelAmount", fuelItem.quantity);
@@ -486,6 +494,7 @@ export async function openAdminEntryForm(kind, { vehicleId = null, onSaved = nul
           receiptTime:   document.getElementById("af-receiptTime")?.value || null,
           receiptUrl:    fuelScan.url || null,
           receiptSource: fuelScan.source,
+          receiptItems:  fuelScan.items || null,
         });
       } else {
         const c = costScanner.read();

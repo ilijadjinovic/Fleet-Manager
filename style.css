@@ -3124,3 +3124,32 @@ tbody td {
 .detail-items .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .detail-items tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
 .detail-items tfoot td { font-weight: 700; border-bottom: none; border-top: 2px solid var(--color-border); }
+
+/* Stavke sa računa: u modalu (flex kolona) omotač ne sme da se skupi na 0 visine */
+.detail-items-wrap, .detail-items-section { flex-shrink: 0; }
+.detail-items-section > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between;
+}
+.detail-items-section > summary::-webkit-details-marker { display: none; }
+.detail-items-section > summary::after { content: "▾"; font-size: 12px; transition: transform 0.15s; }
+.detail-items-section:not([open]) > summary::after { transform: rotate(-90deg); }
+.detail-items__fuel td { font-weight: 700; color: var(--color-primary, #3d7eff); }
+
+/* Stavke sa računa kao obični redovi (bez tabele) */
+.detail-items-section { flex-shrink: 0; display: flex; flex-direction: column; }
+.detail-items-toggle { cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+.detail-items-toggle__arrow { font-size: 12px; transition: transform 0.15s; }
+.detail-items-toggle.is-collapsed .detail-items-toggle__arrow { transform: rotate(-90deg); }
+.detail-items-body { display: flex; flex-direction: column; flex-shrink: 0; }
+.detail-items-body[hidden] { display: none; }
+.detail-item {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;
+  padding: 9px 0; border-bottom: 1px solid var(--color-border); font-size: 14px;
+}
+.detail-item__name { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--color-text); }
+.detail-item__sum { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.detail-item__sum strong { display: block; font-weight: 600; color: var(--color-text); }
+.detail-item__sum small { display: block; color: var(--color-text-muted); font-size: 12px; }
+.detail-item--fuel .detail-item__name,
+.detail-item--fuel .detail-item__sum strong { color: var(--color-primary, #3d7eff); font-weight: 700; }
+.detail-item--total { border-bottom: none; border-top: 2px solid var(--color-border); font-weight: 700; }

@@ -158,6 +158,7 @@ export function entryDetailHTML(e) {
         [t("trip_fuel_price_per_l"), e.pricePerL ? `${fmtNum(e.pricePerL, 2)} RSD/L` : null],
         [t("det_km_at_entry"),       km(e.currentKm)],
       ])),
+      itemsSection(e.receiptItems),
       section(t("det_section_station"), rows([
         [t("trip_fuel_station"),  e.fuelStation],
         [t("trip_fuel_address"),  e.fuelStationAddress],
@@ -185,12 +186,7 @@ export function entryDetailHTML(e) {
         [t("trip_cost_location").replace(" *", ""), e.location],
         [t("det_km_at_entry"),       km(e.currentKm)],
       ])),
-      ...(Array.isArray(e.receiptItems) && e.receiptItems.length ? [
-        section(t("det_section_items"), rows(e.receiptItems.map(it => [
-          it.name || "—",
-          `${it.quantity != null ? fmtNum(it.quantity, 3) + " × " : ""}${it.total != null ? fmtRsd(it.total) : ""}`,
-        ]))),
-      ] : []),
+      itemsSection(e.receiptItems),
       section(t("det_section_receipt"), rows([
         [t("trip_fuel_receipt"),      e.receiptNo],
         [t("trip_fuel_receipt_time"), receiptDateTime(e.receiptTime)],
@@ -217,22 +213,43 @@ const money2 = (v) => v != null && v !== "" && !isNaN(v)
   ? Number(v).toLocaleString("sr-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   : "—";
 
-function receiptItemsTable(items) {
+// Stavke sa računa: obični redovi (bez <table> i skrolujućeg omotača), da se
+// u modalu uvek iscrtaju. Levo naziv, desno ukupno + "količina × cena".
+function receiptItemsList(items) {
   const allTotals = items.length > 0 && items.every(it => it.total != null && !isNaN(it.total));
   const sum = allTotals ? items.reduce((a, it) => a + Number(it.total), 0) : null;
-  return `<div class="detail-items-wrap"><table class="detail-items">
-    <thead><tr>
-      <th>${esc(t("det_items_name"))}</th><th class="num">${esc(t("det_items_qty"))}</th>
-      <th class="num">${esc(t("det_items_price"))}</th><th class="num">${esc(t("det_items_total"))}</th>
-    </tr></thead>
-    <tbody>${items.map(it => `<tr>
-      <td>${esc(it.name || "—")}</td>
-      <td class="num">${it.quantity != null ? esc(fmtNum(it.quantity, 3)) : "—"}</td>
-      <td class="num">${esc(money2(it.unitPrice))}</td>
-      <td class="num">${esc(money2(it.total))}</td>
-    </tr>`).join("")}</tbody>
-    ${sum != null ? `<tfoot><tr><td colspan="3">${esc(t("det_items_sum"))}</td><td class="num">${esc(money2(sum))}</td></tr></tfoot>` : ""}
-  </table></div>`;
+  const rowsHtml = items.map(it => {
+    const calc = [
+      it.quantity != null ? esc(fmtNum(it.quantity, 3)) : null,
+      it.unitPrice != null && !isNaN(it.unitPrice) ? esc(money2(it.unitPrice)) : null,
+    ].filter(Boolean).join(" × ");
+    return `<div class="detail-item${it.fuelType ? " detail-item--fuel" : ""}">
+      <div class="detail-item__name">${it.fuelType ? "⛽ " : ""}${esc(it.name || "—")}</div>
+      <div class="detail-item__sum">
+        <strong>${esc(money2(it.total))}</strong>
+        ${calc ? `<small>${calc}</small>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+  const totalRow = sum != null
+    ? `<div class="detail-item detail-item--total">
+         <div class="detail-item__name">${esc(t("det_items_sum"))}</div>
+         <div class="detail-item__sum"><strong>${esc(money2(sum))}</strong></div>
+       </div>`
+    : "";
+  return `<div class="detail-items-body">${rowsHtml}${totalRow}</div>`;
+}
+
+// Sekcija je uvek otvorena; klik na naslov je sklapa/otvara
+function itemsSection(items) {
+  if (!Array.isArray(items) || items.length === 0) return "";
+  return `<div class="detail-items-section">
+    <div class="form-section-title detail-modal__section detail-items-toggle" data-toggle-items
+      role="button" tabindex="0" aria-expanded="true">
+      <span>${esc(t("det_section_items"))} (${items.length})</span><span class="detail-items-toggle__arrow">▾</span>
+    </div>
+    ${receiptItemsList(items)}
+  </div>`;
 }
 
 export function serviceDetailHTML(s) {
@@ -257,7 +274,7 @@ export function serviceDetailHTML(s) {
       [t("servicer_pib"),             s.receiptPib],
     ])),
     work ? section(t("service_description"), `<div class="vehicle-notes-box">${esc(work)}</div>`) : "",
-    items.length ? section(`${t("det_section_items")} (${items.length})`, receiptItemsTable(items)) : "",
+    itemsSection(items),
     section(t("det_section_receipt"), rows([
       [t("trip_fuel_receipt"),      s.receiptNo],
       [t("trip_fuel_receipt_time"), receiptDateTime(s.receiptTime)],
@@ -510,6 +527,18 @@ export async function openDriverDetail(driverId) {
 
 // ── GLOBALNI KLIK (capture, da ne okine toggle roditeljskog zaglavlja) ──
 function onActivate(e) {
+  // Sklapanje/otvaranje liste stavki sa računa (dostupno svima koji vide detalje)
+  const tg = e.target.closest?.("[data-toggle-items]");
+  if (tg) {
+    e.preventDefault(); e.stopPropagation();
+    const body = tg.parentElement?.querySelector(".detail-items-body");
+    if (body) {
+      body.hidden = !body.hidden;
+      tg.setAttribute("aria-expanded", String(!body.hidden));
+      tg.classList.toggle("is-collapsed", body.hidden);
+    }
+    return;
+  }
   if (!canOpenEntryDetails()) return;
   const el = e.target.closest?.(
     "[data-detail-back], [data-entry-id], [data-service-id], [data-incident-id], [data-detail-assignment], [data-detail-trip], [data-detail-driver]"
@@ -544,7 +573,7 @@ if (!window.__fmDetailHandlersInstalled) {
   document.addEventListener("click", onActivate, true);
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
-    const hit = e.target.closest?.("[role='button'][data-entry-id], [role='button'][data-service-id], [role='button'][data-incident-id], [role='button'][data-detail-assignment], [role='button'][data-detail-trip]");
+    const hit = e.target.closest?.("[role='button'][data-entry-id], [role='button'][data-service-id], [role='button'][data-incident-id], [role='button'][data-detail-assignment], [role='button'][data-detail-trip], [role='button'][data-toggle-items]");
     if (!hit || hit !== e.target) return; // Enter/Space samo kad je fokus na samoj kartici (ne na dugmetu u njoj)
     onActivate(e);
   }, true);

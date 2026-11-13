@@ -1574,7 +1574,7 @@ function openFuelForm() {
     <p id="fuel-form-error" class="login-error hidden"></p>
   `;
 
-  fuelScan = { url: null, source: "manual", pib: null, object: null };
+  fuelScan = { url: null, source: "manual", pib: null, object: null, items: null };
   openModal(t("trip_with_fueling"), bodyHTML, () => saveFuelEntry());
 
   // Auto-izračun cene po litru (osim ako je cenu vozač upisao ručno)
@@ -1597,7 +1597,7 @@ function openFuelForm() {
 
 // ── SKENIRANJE FISKALNOG RAČUNA ───────────────────────────────
 // Stanje poslednjeg skeniranja (čuva se uz unos goriva)
-let fuelScan = { url: null, source: "manual", pib: null, object: null };
+let fuelScan = { url: null, source: "manual", pib: null, object: null, items: null };
 
 // Poruka "Račun X je već unet (datum, vozač, vozilo)"
 function duplicateReceiptMessage(pfr, existing) {
@@ -1686,6 +1686,14 @@ function applyReceiptDetails(r, qr, setStatus) {
   fuelFormSet("tf-receiptTime", r.time);
   fuelScan.pib = r.pib || null;
   fuelScan.object = r.object || null;
+  // Sve stavke sa računa (ne samo gorivo) — prikazuju se u detaljima unosa
+  fuelScan.items = items.length ? items.map(it => ({
+        name: it.name || null,
+        quantity: it.quantity ?? null,
+        unitPrice: it.unitPrice ?? null,
+        total: it.total ?? null,
+        fuelType: it.fuelType || null,
+      })) : null;
 
   if (fuelItem) {
     fuelFormSet("tf-fuelType", fuelItem.fuelType);
@@ -1750,6 +1758,7 @@ async function saveFuelEntry() {
       receiptTime:  document.getElementById("tf-receiptTime")?.value || null,
       receiptUrl:   fuelScan.url || null,
       receiptSource: fuelScan.source,
+      receiptItems: fuelScan.items || null,
       currentKm,
       notes:        document.getElementById("tf-notes")?.value.trim() || null,
       createdAt:    serverTimestamp(),
