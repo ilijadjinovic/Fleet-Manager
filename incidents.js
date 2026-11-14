@@ -23,6 +23,7 @@ let allIncidents  = [];
 let filterType    = "all";
 let filterStatus  = "all";
 let searchTerm    = "";
+let noServiceIds  = new Set(); // prijave "u obradi" bez ijednog povezanog (neotkazanog) servisa
 let onSavedCallback = null; // opcioni hook — poziva se posle uspešnog snimanja (npr. iz trips.js)
 let adminLists = null;       // { vehicles, drivers } — samo kad prijavu unosi admin
 let adminPreVehicleId = null;
@@ -78,6 +79,7 @@ export async function renderIncidents(container) {
         <button class="chip" data-istatus="open">🔴 ${t("incident_status_open")}</button>
         <button class="chip" data-istatus="in_progress">🟡 ${t("incident_status_in_progress")}</button>
         <button class="chip" data-istatus="closed">🟢 ${t("incident_status_closed")}</button>
+        ${S.profile?.role !== "driver" ? `<button class="chip" data-istatus="no_service">⚠️ ${t("incident_filter_no_service")}</button>` : ""}
       </div>
     </div>
 
@@ -144,11 +146,26 @@ async function loadIncidents() {
 
     const snap = await getDocs(q);
     allIncidents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    await computeNoServiceIds();
     renderList();
   } catch (e) {
     const list = document.getElementById("incidents-list");
     if (list) list.innerHTML = `<div class="error-state">${t("error")}: ${e.message}</div>`;
   }
+}
+
+// Prijave u statusu "u obradi" za koje ne postoji nijedan povezan servis (osim otkazanih)
+async function computeNoServiceIds() {
+  noServiceIds = new Set();
+  if (S.profile?.role === "driver") return;
+  await Promise.all(allIncidents.filter(i => i.status === "in_progress").map(async (i) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, "companies", S.companyId, "services"), where("incidentId", "==", i.id)
+      ));
+      if (!snap.docs.some(d => d.data().status !== "cancelled")) noServiceIds.add(i.id);
+    } catch (e) { /* bez provere — prijava se ne označava */ }
+  }));
 }
 
 // ── RENDER LISTA ──────────────────────────────────────────────
@@ -159,7 +176,8 @@ function renderList() {
   let filtered = allIncidents;
 
   if (filterType !== "all")   filtered = filtered.filter(i => i.type === filterType);
-  if (filterStatus !== "all") filtered = filtered.filter(i => i.status === filterStatus);
+  if (filterStatus === "no_service") filtered = filtered.filter(i => noServiceIds.has(i.id));
+  else if (filterStatus !== "all")   filtered = filtered.filter(i => i.status === filterStatus);
   if (searchTerm) {
     filtered = filtered.filter(i =>
       `${i.vehiclePlate} ${i.driverName} ${i.description} ${i.location || ""}`
@@ -243,6 +261,7 @@ export function incidentCard(inc, canEdit, canSchedule = canEdit) {
         </div>
         <div class="incident-card__header-right">
           <span class="badge badge--${sc.color}">${sc.dot} ${sc.label}</span>
+          ${noServiceIds.has(inc.id) ? `<span class="badge badge--broken" title="${t("incident_no_service_hint")}">⚠️ ${t("incident_no_service")}</span>` : ""}
           ${canSchedule && inc.status === "open" ? `
             <button class="btn btn--secondary btn--sm btn-incident-schedule-service" data-id="${inc.id}">
               🔧 ${t("incident_schedule_service_btn")}

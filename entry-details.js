@@ -14,15 +14,16 @@
 
 import { db } from "./firebase.js";
 import {
-  collection, query, where, getDocs, doc, getDoc
+  collection, query, where, getDocs, doc, getDoc, updateDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { t, formatDateDMY, formatDateTimeDMY } from "./i18n.js";
-import { S, openModal } from "./app.js";
+import { S, openModal, showToast } from "./app.js";
+import { fetchReceiptDetails, receiptWorkerConfigured } from "./receipt-scan.js";
 import { esc, fmtNum, fmtRsd, toMillis, COST_TYPES, COST_META } from "./entries-view.js";
 import {
   rememberEntry, rememberAssignment, rememberTrip,
   getRememberedEntry, getRememberedAssignment, getRememberedTrip,
-  getRememberedService, getRememberedIncident,
+  getRememberedService, getRememberedIncident, rememberService, rememberIncident,
 } from "./detail-registry.js";
 import { serviceTypeLabel, serviceDetailText, serviceWorkText } from "./service-types.js";
 import { effectiveServiceStatus } from "./service-status.js";
@@ -158,7 +159,7 @@ export function entryDetailHTML(e) {
         [t("trip_fuel_price_per_l"), e.pricePerL ? `${fmtNum(e.pricePerL, 2)} RSD/L` : null],
         [t("det_km_at_entry"),       km(e.currentKm)],
       ])),
-      itemsSection(e.receiptItems),
+      itemsOrReload(e.receiptItems, "entry", e),
       section(t("det_section_station"), rows([
         [t("trip_fuel_station"),  e.fuelStation],
         [t("trip_fuel_address"),  e.fuelStationAddress],
@@ -186,7 +187,7 @@ export function entryDetailHTML(e) {
         [t("trip_cost_location").replace(" *", ""), e.location],
         [t("det_km_at_entry"),       km(e.currentKm)],
       ])),
-      itemsSection(e.receiptItems),
+      itemsOrReload(e.receiptItems, "entry", e),
       section(t("det_section_receipt"), rows([
         [t("trip_fuel_receipt"),      e.receiptNo],
         [t("trip_fuel_receipt_time"), receiptDateTime(e.receiptTime)],
@@ -240,6 +241,19 @@ function receiptItemsList(items) {
   return `<div class="detail-items-body">${rowsHtml}${totalRow}</div>`;
 }
 
+// Unos ima račun (receiptUrl) ali nema sačuvane stavke → administrator može
+// da ih ponovo učita sa fiskalnog računa (radi dok je račun dostupan na portalu poreske uprave)
+function itemsOrReload(items, kind, obj) {
+  if (Array.isArray(items) && items.length) return itemsSection(items);
+  if (!isAdminViewer() || !obj?.receiptUrl || !obj?.id || !receiptWorkerConfigured()) return "";
+  return `<div class="detail-reload">
+    <div class="form-section-title detail-modal__section">${esc(t("det_section_items"))}</div>
+    <p class="empty-text">${esc(t("det_reload_hint"))}</p>
+    <button type="button" class="btn btn--secondary btn--sm" data-reload-receipt="${kind}" data-id="${esc(obj.id)}">${esc(t("det_reload_btn"))}</button>
+    <p class="detail-reload__status" role="status"></p>
+  </div>`;
+}
+
 // Sekcija je uvek otvorena; klik na naslov je sklapa/otvara
 function itemsSection(items) {
   if (!Array.isArray(items) || items.length === 0) return "";
@@ -252,11 +266,23 @@ function itemsSection(items) {
   </div>`;
 }
 
+function incidentLinkLabel(incidentId) {
+  const inc = getRememberedIncident(incidentId);
+  if (!inc) return t("det_open_incident");
+  const type = ["fault", "damage", "accident", "other"].includes(inc.type) ? inc.type : "other";
+  const desc = String(inc.description || "").replace(/\s+/g, " ").trim();
+  return `${ICONS[type]} ${t("incident_" + type)}${desc ? ": " + (desc.length > 70 ? desc.slice(0, 70) + "…" : desc) : ""}`;
+}
+
 export function serviceDetailHTML(s) {
   const status = effectiveServiceStatus(s);
   const items = Array.isArray(s.receiptItems) ? s.receiptItems : [];
   const work = serviceWorkText(s);
   return [
+    s.incidentId ? section(t("det_section_from_incident"), rows([
+      [t("det_incident_link"),
+       `<a href="#" class="detail-link" data-detail-incident="${esc(s.incidentId)}">${esc(incidentLinkLabel(s.incidentId))}</a>`, true],
+    ])) : "",
     section(t("det_section_service"), rows([
       [t("service_type"),          serviceTypeLabel(s.serviceType || "")],
       [t("det_service_works"),     serviceDetailText(s)],
@@ -274,7 +300,7 @@ export function serviceDetailHTML(s) {
       [t("servicer_pib"),             s.receiptPib],
     ])),
     work ? section(t("service_description"), `<div class="vehicle-notes-box">${esc(work)}</div>`) : "",
-    itemsSection(items),
+    itemsOrReload(items, "service", s),
     section(t("det_section_receipt"), rows([
       [t("trip_fuel_receipt"),      s.receiptNo],
       [t("trip_fuel_receipt_time"), receiptDateTime(s.receiptTime)],
@@ -318,6 +344,7 @@ export function incidentDetailHTML(inc) {
       ? section(t("incident_note_label"), `<div class="vehicle-notes-box">${esc(inc.adminNote)}</div>`) : "",
     inc.resolution
       ? section(t("incident_resolution_label"), `<div class="vehicle-notes-box">${esc(inc.resolution)}</div>`) : "",
+    isAdminViewer() ? incidentServicesPlaceholder(inc.id) : "",
     section(t("det_section_entry"), rows([
       [t("assignment_vehicle"), inc.vehiclePlate],
       [t("assignment_driver"),  inc.driverName ? driverLink(inc.driverName, inc.driverId) : null, true],
@@ -327,10 +354,64 @@ export function incidentDetailHTML(inc) {
   ].join("");
 }
 
+// Servisi zakazani iz ove prijave (servis pamti incidentId) — učitavaju se posle otvaranja modala
+const incidentServicesPlaceholder = (id) =>
+  `<div id="detail-incident-services" data-incident-services="${esc(id)}" hidden></div>`;
+
+function serviceMiniRow(sv) {
+  const status = effectiveServiceStatus(sv);
+  const main = [t("service_status_" + status), sv.cost != null && sv.cost !== "" ? fmtRsd(sv.cost) : null, sv.workshop]
+    .filter(Boolean).join(" · ");
+  return `<div class="detail-mini-row" data-service-id="${esc(sv.id)}" role="button" tabindex="0">
+    <span class="detail-mini-row__type">🔧 ${esc(serviceTypeLabel(sv.serviceType || ""))}</span>
+    <span class="detail-mini-row__main">${esc(main)}</span>
+    <span class="detail-mini-row__date">${esc(d(sv.serviceDate) || "")}</span>
+  </div>`;
+}
+
+// Zameni deo HTML-a i u trenutnom modalu i u steku ("Nazad" ne sme da vrati zastareo prikaz)
+function patchDetailHtml(oldHtml, newHtml) {
+  [current, ...stack].forEach(m => { if (m?.html?.includes(oldHtml)) m.html = m.html.replace(oldHtml, newHtml); });
+}
+
+async function loadIncidentServices(inc) {
+  if (!isAdminViewer() || !S.companyId || !inc?.id) return;
+  try {
+    const snap = await getDocs(query(
+      collection(db, "companies", S.companyId, "services"), where("incidentId", "==", inc.id)
+    ));
+    const list = snap.docs.map(x => rememberService({ id: x.id, ...x.data() }));
+    if (!list.length) return;
+    list.sort((a, b) => toMillis(b.serviceDate) - toMillis(a.serviceDate));
+    const filled = `<div id="detail-incident-services" data-incident-services="${esc(inc.id)}">${
+      section(t("det_section_incident_service"), `<div class="detail-mini-list">${list.map(serviceMiniRow).join("")}</div>`)
+    }</div>`;
+    patchDetailHtml(incidentServicesPlaceholder(inc.id), filled);
+    const el = document.getElementById("detail-incident-services");
+    if (el && el.dataset.incidentServices === inc.id) el.outerHTML = filled;
+  } catch (e) {
+    console.warn("Učitavanje servisa za prijavu nije uspelo:", e.message);
+  }
+}
+
+// Otvara prijavu po ID-ju (iz detalja servisa): prvo iz evidencije, pa iz baze
+async function openIncidentById(id) {
+  let inc = getRememberedIncident(id);
+  if (!inc && S.companyId) {
+    try {
+      const snap = await getDoc(doc(db, "companies", S.companyId, "incidents", id));
+      if (snap.exists()) inc = rememberIncident({ id: snap.id, ...snap.data() });
+    } catch (e) { console.warn("Učitavanje prijave nije uspelo:", e.message); }
+  }
+  if (!inc) { showToast(t("det_incident_not_found"), "error"); return; }
+  openIncidentDetail(inc);
+}
+
 export function openIncidentDetail(inc) {
   if (!inc) return;
   const type = ["fault", "damage", "accident", "other"].includes(inc.type) ? inc.type : "other";
   show(`${ICONS[type]} ${t("incident_" + type)}`, incidentDetailHTML(inc));
+  loadIncidentServices(inc);
 }
 
 export function openEntryDetail(entry) {
@@ -525,6 +606,106 @@ export async function openDriverDetail(driverId) {
   ].join(""));
 }
 
+// ── PONOVNO UČITAVANJE STAVKI SA RAČUNA ───────────────────────
+// Čita fiskalni račun preko receiptUrl i DOPUNJUJE unos: stavke sa računa, a od
+// podataka samo ono što u unosu nedostaje (PIB, objekat, vreme računa).
+// Ništa što je već uneto se ne prepisuje.
+// Jezgro: učitaj račun i dopuni unos. Vraća { status: "loaded"|"empty"|"failed", error? }
+async function applyReceiptReload(kind, obj) {
+  const r = await fetchReceiptDetails(obj.receiptUrl);
+  const isFuel = kind === "entry" && obj.type === "fuel";
+  const items = (r.items || []).map(it => ({
+    name: it.name || null,
+    quantity: it.quantity ?? null,
+    unitPrice: it.unitPrice ?? null,
+    total: it.total ?? null,
+    ...(isFuel ? { fuelType: it.fuelType || null } : {}),
+  }));
+  if (!items.length) return { status: "empty" };
+
+  const updates = { receiptItems: items };
+  if (kind === "service") {
+    if (!obj.receiptPib && r.pib) updates.receiptPib = r.pib;
+    updates.updatedAt = serverTimestamp();
+  } else {
+    if (!obj.stationPib && r.pib) updates.stationPib = r.pib;
+    if (isFuel && !obj.stationObject && r.object) updates.stationObject = r.object;
+  }
+  if (!obj.receiptTime && r.time) updates.receiptTime = r.time;
+
+  await updateDoc(doc(db, "companies", S.companyId, kind === "service" ? "services" : "tripEntries", obj.id), updates);
+
+  const local = { ...updates };
+  if (local.updatedAt) local.updatedAt = new Date();
+  Object.assign(obj, local);
+  return { status: "loaded" };
+}
+
+async function reloadReceipt(btn) {
+  const kind = btn.dataset.reloadReceipt;
+  const obj = kind === "service" ? getRememberedService(btn.dataset.id) : getRememberedEntry(btn.dataset.id);
+  const statusEl = btn.parentElement?.querySelector(".detail-reload__status");
+  const say = (msg, cls = "") => { if (statusEl) { statusEl.textContent = msg; statusEl.className = `detail-reload__status ${cls}`; } };
+  if (!obj?.receiptUrl || !isAdminViewer()) return;
+
+  btn.disabled = true;
+  say(t("det_reload_loading"));
+  try {
+    const res = await applyReceiptReload(kind, obj);
+    if (res.status === "empty") { say(t("det_reload_empty"), "is-warn"); btn.disabled = false; return; }
+
+    // Ako je isti modal još otvoren, prikaži dopunjen unos
+    if (document.body.contains(btn) && current) {
+      render(current.title, kind === "service" ? serviceDetailHTML(obj) : entryDetailHTML(obj));
+    }
+    showToast(t("det_reload_ok"), "success");
+  } catch (e) {
+    console.warn("Ponovno učitavanje računa nije uspelo:", e.message, e.diag || "");
+    say(t("det_reload_failed", { reason: e.message }), "is-error");
+    btn.disabled = false;
+  }
+}
+
+// ── GRUPNO UČITAVANJE STAVKI (za starije unose) ───────────────
+// Unosi koji imaju račun (receiptUrl), a nemaju sačuvane stavke.
+export function receiptReloadTargets(services = [], entries = []) {
+  const missing = (o) => o?.receiptUrl && !(Array.isArray(o.receiptItems) && o.receiptItems.length);
+  return [
+    ...entries.filter(missing).map(obj => ({ kind: "entry", obj })),
+    ...services.filter(missing).map(obj => ({ kind: "service", obj })),
+  ];
+}
+
+export function canBulkReloadReceipts() {
+  return isAdminViewer() && receiptWorkerConfigured();
+}
+
+/**
+ * Redom učitava račune (jedan po jedan, da se ne optereti servis poreske uprave).
+ * Staje posle 3 uzastopna neuspeha (servis nedostupan). onProgress({done,total,loaded,empty,failed}).
+ * Vraća { loaded, empty, failed, total, aborted }.
+ */
+export async function bulkReloadReceiptItems(targets, onProgress = () => {}) {
+  const res = { loaded: 0, empty: 0, failed: 0, total: targets.length, aborted: false };
+  let consecutiveFails = 0;
+  for (let i = 0; i < targets.length; i++) {
+    const { kind, obj } = targets[i];
+    try {
+      const r = await applyReceiptReload(kind, obj);
+      if (r.status === "loaded") res.loaded++; else res.empty++;
+      consecutiveFails = 0;
+    } catch (e) {
+      res.failed++;
+      consecutiveFails++;
+      console.warn("Grupno učitavanje računa:", e.message);
+      if (consecutiveFails >= 3) { res.aborted = true; onProgress({ done: i + 1, ...res }); break; }
+    }
+    onProgress({ done: i + 1, ...res });
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return res;
+}
+
 // ── GLOBALNI KLIK (capture, da ne okine toggle roditeljskog zaglavlja) ──
 function onActivate(e) {
   // Sklapanje/otvaranje liste stavki sa računa (dostupno svima koji vide detalje)
@@ -540,8 +721,17 @@ function onActivate(e) {
     return;
   }
   if (!canOpenEntryDetails()) return;
+
+  // Dugme "Učitaj stavke sa računa" (samo administrator)
+  const rl = e.target.closest?.("[data-reload-receipt]");
+  if (rl) {
+    e.preventDefault(); e.stopPropagation();
+    if (isAdminViewer() && !rl.disabled) reloadReceipt(rl);
+    return;
+  }
+
   const el = e.target.closest?.(
-    "[data-detail-back], [data-entry-id], [data-service-id], [data-incident-id], [data-detail-assignment], [data-detail-trip], [data-detail-driver]"
+    "[data-detail-back], [data-entry-id], [data-service-id], [data-incident-id], [data-detail-incident], [data-detail-assignment], [data-detail-trip], [data-detail-driver]"
   );
   if (!el) return;
 
@@ -563,6 +753,7 @@ function onActivate(e) {
   if (el.dataset.entryId)                         { openEntryDetail(getRememberedEntry(el.dataset.entryId)); return; }
   if (el.dataset.serviceId)                       { openServiceDetail(getRememberedService(el.dataset.serviceId)); return; }
   if (el.dataset.incidentId)                      { openIncidentDetail(getRememberedIncident(el.dataset.incidentId)); return; }
+  if (el.dataset.detailIncident)                  { openIncidentById(el.dataset.detailIncident); return; }
   if (el.dataset.detailAssignment)                { openAssignmentDetail(el.dataset.detailAssignment); return; }
   if (el.dataset.detailTrip)                      { openTripDetail(el.dataset.detailTrip); return; }
   if (el.dataset.detailDriver)                    { openDriverDetail(el.dataset.detailDriver); return; }

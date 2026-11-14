@@ -30,8 +30,11 @@ import {
 import { incidentCard, scheduleServiceForIncident, openIncidentForm } from "./incidents.js";
 import { openAdminEntryForm } from "./entry-forms.js";
 import { COST_TYPES as COST_TYPES_V, COST_META as COST_META_V } from "./entries-view.js";
-import { detailButton, isAdminViewer } from "./entry-details.js";
-import { rememberEntry, rememberService } from "./detail-registry.js";
+import {
+  detailButton, isAdminViewer,
+  receiptReloadTargets, canBulkReloadReceipts, bulkReloadReceiptItems,
+} from "./entry-details.js";
+import { rememberEntry, rememberService, getRememberedService } from "./detail-registry.js";
 import { esc as escDet, fmtNum as fmtNumDet, fmtRsd as fmtRsdDet, toMillis as toMsDet } from "./entries-view.js";
 import {
   loadVehicleAssignmentHistory, groupAssignmentsByDriver, summarizeAssignments,
@@ -877,7 +880,14 @@ async function loadFinanceTab(container, v) {
     defaultFrom.setDate(defaultFrom.getDate() - 30);
 
     const canAddEntries = S.profile?.role !== "driver" && !v.archived;
+    // Stariji unosi sa računom, a bez sačuvanih stavki (samo administrator)
+    const bulkTargets = canBulkReloadReceipts() ? receiptReloadTargets(services, entries) : [];
     container.innerHTML = `
+      ${bulkTargets.length ? `
+        <div class="bulk-reload">
+          <button type="button" class="btn btn--secondary btn--sm" id="btn-bulk-reload">${t("bulk_reload_btn", { n: bulkTargets.length })}</button>
+          <span class="form-hint" id="bulk-reload-status" role="status"></span>
+        </div>` : ""}
       ${canAddEntries ? `
         <div class="admin-entry-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
           <button type="button" class="btn btn--primary btn--sm" id="btn-v-add-fuel">⛽ ${t("admin_entry_fuel_add")}</button>
@@ -916,6 +926,17 @@ async function loadFinanceTab(container, v) {
 
     attachDateMask("fin-from");
     attachDateMask("fin-to");
+    document.getElementById("btn-bulk-reload")?.addEventListener("click", async (e) => {
+      if (!confirm(t("bulk_reload_confirm", { n: bulkTargets.length }))) return;
+      const btn = e.currentTarget;
+      const statusEl = document.getElementById("bulk-reload-status");
+      btn.disabled = true;
+      const res = await bulkReloadReceiptItems(bulkTargets, (p) => {
+        if (statusEl) statusEl.textContent = t("bulk_reload_progress", { done: p.done, total: p.total });
+      });
+      showToast(res.aborted ? t("bulk_reload_aborted") : t("bulk_reload_done", res), res.aborted ? "error" : "success");
+      loadFinanceTab(container, v);
+    });
     if (canAddEntries) {
       const reload = () => loadFinanceTab(container, v);
       document.getElementById("btn-v-add-fuel")?.addEventListener("click", () => openAdminEntryForm("fuel", { vehicleId: v.id, onSaved: reload }));
@@ -2163,11 +2184,24 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
   const servicers = await getServiceProviders();
   let scanner = null;   // vezuje se posle openModal (skener računa)
 
+  // Prijave za ovo vozilo koje mogu da se povežu sa servisom
+  const currentIncidentId = (isEdit ? service.incidentId : null) || options.linkedIncidentId || null;
+  const incidentOpts = await loadIncidentOptions(vehicle.id, currentIncidentId);
+
   const bodyHTML = `
     <div class="form-group">
       <label class="form-label">${t("service_type")} *</label>
       ${serviceTypePickerHTML("sf", s)}
     </div>
+    ${incidentOpts.length ? `
+    <div class="form-group">
+      <label class="form-label">${t("service_incident_label")}</label>
+      <select id="sf-incident" class="form-select">
+        <option value="">${t("service_incident_none")}</option>
+        ${incidentOpts.map(o => `<option value="${escDet(o.id)}" ${o.id === currentIncidentId ? "selected" : ""}>${escDet(o.label)}</option>`).join("")}
+      </select>
+      <div class="form-hint">${t("service_incident_hint")}</div>
+    </div>` : ""}
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">${t("service_date")} *</label>
@@ -2291,10 +2325,16 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
         data.serviceItems = st.serviceItems;
       }
 
+      // Povezana prijava: izbor u formi; ako polja nema (nema prijava), veza ostaje kakva je bila
+      const incSel = document.getElementById("sf-incident");
+      const newIncidentId = incSel ? (incSel.value || null) : currentIncidentId;
+      const oldIncidentId = isEdit ? (service.incidentId || null) : null;
+
       let savedServiceId = isEdit ? service.id : null;
       if (isEdit) {
         await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
           ...data, updatedAt: serverTimestamp(),
+          ...(newIncidentId !== oldIncidentId ? { incidentId: newIncidentId } : {}),
         });
       } else {
         // Novi zapis: status zavisi isključivo od checkbox-a "servis je već
@@ -2307,17 +2347,27 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
 
         const newRef = await addDoc(collection(db, "companies", S.companyId, "services"), {
           ...data, createdBy: S.user.uid, createdAt: serverTimestamp(),
+          // veza ka prijavi iz koje je servis zakazan (prikazuje se u detaljima)
+          ...(newIncidentId ? { incidentId: newIncidentId } : {}),
         });
         savedServiceId = newRef.id;
+      }
 
-        // Servis zakazan iz prijave — prijava prelazi u status "u obradi"
-        if (options.linkedIncidentId) {
-          await updateDoc(doc(db, "companies", S.companyId, "incidents", options.linkedIncidentId), {
+      // Povezana prijava prelazi u "u obradi" (zatvorena ostaje zatvorena)
+      if (newIncidentId && newIncidentId !== oldIncidentId) {
+        const linkedStatus = incidentOpts.find(o => o.id === newIncidentId)?.status;
+        if (linkedStatus !== "closed" && linkedStatus !== "in_progress") {
+          await updateDoc(doc(db, "companies", S.companyId, "incidents", newIncidentId), {
             status:    "in_progress",
             updatedAt: serverTimestamp(),
             updatedBy: S.user.uid,
           });
         }
+      }
+      // Veza je uklonjena ili prebačena na drugu prijavu → stara prijava se vraća u "otvoreno"
+      // ako nema nijedan drugi aktivan servis
+      if (oldIncidentId && oldIncidentId !== newIncidentId) {
+        await reopenIncidentIfNoActiveService(oldIncidentId, service.id);
       }
 
       // Km uneta uz servis (km pri servisu ili km po završetku) postaje
@@ -2384,9 +2434,31 @@ async function markServiceTaken(vehicle, service) {
 // ── SERVIS ZAVRŠEN ────────────────────────────────────────────
 // Uz završetak može da se skenira račun: iznos, serviser i podaci računa
 // upisuju se u servisni zapis.
+// Prijava koja može da se zatvori uz završetak servisa: nije zatvorena i za nju
+// ne postoji nijedan drugi nezavršen servis. Inače null (ponuda se ne prikazuje).
+async function loadClosableIncident(service) {
+  if (!service.incidentId) return null;
+  try {
+    const incSnap = await getDoc(doc(db, "companies", S.companyId, "incidents", service.incidentId));
+    if (!incSnap.exists() || incSnap.data().status === "closed") return null;
+    const svcSnap = await getDocs(query(
+      collection(db, "companies", S.companyId, "services"), where("incidentId", "==", service.incidentId)
+    ));
+    const otherOpen = svcSnap.docs.some(d =>
+      d.id !== service.id && ![SERVICE_STATUS.DONE, SERVICE_STATUS.CANCELLED].includes(d.data().status)
+    );
+    return otherOpen ? null : { id: incSnap.id, ...incSnap.data() };
+  } catch (e) {
+    console.warn("Provera prijave za servis nije uspela:", e.message);
+    return null;
+  }
+}
+
 async function openCompleteServiceModal(vehicle, service) {
   const servicers = await getServiceProviders();
   let scanner = null;
+  const closable = await loadClosableIncident(service);
+  const resolutionDefault = serviceWorkText(service) || serviceDetailText(service) || "";
 
   const bodyHTML = `
     ${receiptBlockHTML("cs", service)}
@@ -2410,6 +2482,21 @@ async function openCompleteServiceModal(vehicle, service) {
       <label class="form-label">${t("service_description")}</label>
       <textarea id="cs-desc" class="form-textarea">${escDet(service.description || "")}</textarea>
     </div>
+    ${closable ? `
+    <div class="form-section-title" style="margin-top:4px">${t("service_close_incident_section")}</div>
+    <div class="incident-summary">
+      <div class="incident-summary__desc">${escDet(closable.description || "")}</div>
+    </div>
+    <div class="form-group form-group--checkbox">
+      <label class="form-checkbox-label">
+        <input id="cs-close-incident" type="checkbox" checked />
+        ${t("service_close_incident_label")}
+      </label>
+    </div>
+    <div class="form-group" id="cs-resolution-group">
+      <label class="form-label">${t("incident_resolution_label")}</label>
+      <textarea id="cs-resolution" class="form-textarea" rows="3">${escDet(closable.resolution || resolutionDefault)}</textarea>
+    </div>` : ""}
   `;
 
   openModal(t("service_complete_title"), bodyHTML, async () => {
@@ -2448,6 +2535,23 @@ async function openCompleteServiceModal(vehicle, service) {
         vehicle.currentKmUpdatedAt = new Date();
       }
       refreshVehicleHeaderBadge(vehicle);
+
+      // Zatvaranje prijave (ako je admin potvrdio) — greška ne sme da poništi završetak servisa
+      if (closable && $id("cs-close-incident")?.checked) {
+        try {
+          await updateDoc(doc(db, "companies", S.companyId, "incidents", closable.id), {
+            status: "closed",
+            resolution: $id("cs-resolution")?.value.trim() || closable.resolution || null,
+            updatedAt: serverTimestamp(),
+            updatedBy: S.user.uid,
+          });
+          showToast(t("incident_closed_toast"), "info");
+        } catch (e) {
+          console.warn("Zatvaranje prijave nije uspelo:", e.message);
+          showToast(`${t("error")}: ${e.message}`, "error");
+        }
+      }
+
       showToast(t("success"), "success");
       const content = document.getElementById("vehicle-tab-content");
       if (content) loadServiceTab(content, vehicle);
@@ -2460,11 +2564,72 @@ async function openCompleteServiceModal(vehicle, service) {
   });
 
   attachDateMask("cs-endDate");
+  $id("cs-close-incident")?.addEventListener("change", (e) => {
+    const g = $id("cs-resolution-group");
+    if (g) g.style.display = e.target.checked ? "" : "none";
+  });
   bindWorkshopSelect("cs", servicers);
   scanner = bindServiceReceipt("cs", {
     servicers, existing: service, ignoreId: service.id,
     costId: "cs-cost", descId: "cs-desc",
   });
+}
+
+// ── PRIJAVE KOJE MOGU DA SE POVEŽU SA SERVISOM ────────────────
+// Otvorene i "u obradi" prijave za vozilo (+ već povezana, i ako je zatvorena).
+async function loadIncidentOptions(vehicleId, currentId) {
+  try {
+    const snap = await getDocs(query(
+      collection(db, "companies", S.companyId, "incidents"), where("vehicleId", "==", vehicleId)
+    ));
+    const typeIcons = { fault: "🔧", damage: "💥", accident: "🚨", other: "📋" };
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(i => i.status !== "closed" || i.id === currentId)
+      .sort((a, b) => toMsDet(b.createdAt) - toMsDet(a.createdAt))
+      .map(i => {
+        const type = typeIcons[i.type] ? i.type : "other";
+        const desc = String(i.description || "").replace(/\s+/g, " ").trim();
+        const short = desc.length > 55 ? desc.slice(0, 55) + "…" : desc;
+        return {
+          id: i.id, status: i.status,
+          label: `${typeIcons[type]} ${t("incident_" + type)}${short ? ": " + short : ""} · ${formatDate(i.createdAt)}`,
+        };
+      });
+  } catch (e) {
+    console.warn("Učitavanje prijava za vozilo nije uspelo:", e.message);
+    return [];
+  }
+}
+
+// ── VRAĆANJE PRIJAVE U "OTVORENO" ─────────────────────────────
+// Prijava prelazi u "u obradi" kad se iz nje zakaže servis. Ako se taj servis
+// obriše ili otkaže, a za prijavu ne postoji nijedan drugi aktivan servis
+// (zakazan, u toku ili obavljen), prijava se vraća u "otvoreno" da ne bi ostala
+// zaboravljena. Zatvorene prijave i prijave koje admin nije prebacio u
+// "u obradi" se ne diraju. Greška ovde nikad ne sme da obori brisanje/otkazivanje.
+async function reopenIncidentIfNoActiveService(incidentId, excludeServiceId) {
+  if (!incidentId) return false;
+  try {
+    const incRef = doc(db, "companies", S.companyId, "incidents", incidentId);
+    const incSnap = await getDoc(incRef);
+    if (!incSnap.exists() || incSnap.data().status !== "in_progress") return false;
+
+    const snap = await getDocs(query(
+      collection(db, "companies", S.companyId, "services"), where("incidentId", "==", incidentId)
+    ));
+    const stillActive = snap.docs.some(d =>
+      d.id !== excludeServiceId && d.data().status !== SERVICE_STATUS.CANCELLED
+    );
+    if (stillActive) return false;
+
+    await updateDoc(incRef, { status: "open", updatedAt: serverTimestamp(), updatedBy: S.user.uid });
+    showToast(t("incident_reopened_toast"), "info");
+    return true;
+  } catch (e) {
+    console.warn("Vraćanje prijave u status Otvoreno nije uspelo:", e.message);
+    return false;
+  }
 }
 
 // ── OTKAZIVANJE SERVISA ───────────────────────────────────────
@@ -2474,6 +2639,7 @@ async function cancelService(vehicle, service) {
     await updateDoc(doc(db, "companies", S.companyId, "services", service.id), {
       status: SERVICE_STATUS.CANCELLED,
     });
+    await reopenIncidentIfNoActiveService(service.incidentId, service.id);
 
     // Ako je servis bio "u toku" (vozilo već odvezeno) — otkazivanje vraća
     // vozilo na status koji je imalo pre odlaska na servis.
@@ -2497,7 +2663,14 @@ async function cancelService(vehicle, service) {
 async function confirmDeleteService(vehicle, serviceId) {
   if (!confirm(t("confirm_delete"))) return;
   try {
+    // incidentId se čita pre brisanja (posle brisanja zapisa više nema)
+    let incidentId = getRememberedService(serviceId)?.incidentId || null;
+    if (!incidentId) {
+      const snap = await getDoc(doc(db, "companies", S.companyId, "services", serviceId));
+      incidentId = snap.exists() ? (snap.data().incidentId || null) : null;
+    }
     await deleteDoc(doc(db, "companies", S.companyId, "services", serviceId));
+    await reopenIncidentIfNoActiveService(incidentId, serviceId);
     showToast(t("success"), "success");
     const content = document.getElementById("vehicle-tab-content");
     if (content) loadServiceTab(content, vehicle);

@@ -3153,3 +3153,14 @@ tbody td {
 .detail-item--fuel .detail-item__name,
 .detail-item--fuel .detail-item__sum strong { color: var(--color-primary, #3d7eff); font-weight: 700; }
 .detail-item--total { border-bottom: none; border-top: 2px solid var(--color-border); font-weight: 700; }
+
+/* Ponovno učitavanje stavki sa računa */
+.detail-reload { flex-shrink: 0; }
+.detail-reload .btn { margin-top: 4px; }
+.detail-reload__status { margin: 8px 0 0; font-size: 13px; color: var(--color-text-muted); }
+.detail-reload__status.is-error { color: var(--color-danger, #ff6b6b); }
+.detail-reload__status.is-warn  { color: var(--color-warning, #f5a623); }
+.detail-link { color: var(--color-primary, #3d7eff); text-decoration: underline; cursor: pointer; }
+
+/* Grupno učitavanje stavki sa računa */
+.bulk-reload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
