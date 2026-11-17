@@ -2356,12 +2356,36 @@ export async function openServiceForm(vehicle, service = null, prefill = null, o
       // Povezana prijava prelazi u "u obradi" (zatvorena ostaje zatvorena)
       if (newIncidentId && newIncidentId !== oldIncidentId) {
         const linkedStatus = incidentOpts.find(o => o.id === newIncidentId)?.status;
-        if (linkedStatus !== "closed" && linkedStatus !== "in_progress") {
+        // Servis koji je odmah unet kao obavljen ne prolazi kroz "u obradi" —
+        // prijava se zatvara u sledećem koraku.
+        if (!isDoneRecord && linkedStatus !== "closed" && linkedStatus !== "in_progress") {
           await updateDoc(doc(db, "companies", S.companyId, "incidents", newIncidentId), {
             status:    "in_progress",
             updatedAt: serverTimestamp(),
             updatedBy: S.user.uid,
           });
+        }
+      }
+      // Servis je obavljen (unet kao završen ili izmenjen zapis sa statusom "done")
+      // i povezan je sa prijavom → prijava se automatski zatvara, osim ako za nju
+      // postoji još neki nezavršen servis (to proverava loadClosableIncident).
+      // Greška ovde ne sme da poništi snimanje servisa.
+      if (isDoneRecord && newIncidentId && savedServiceId) {
+        try {
+          const closable = await loadClosableIncident({ id: savedServiceId, incidentId: newIncidentId });
+          if (closable) {
+            await updateDoc(doc(db, "companies", S.companyId, "incidents", closable.id), {
+              status:     "closed",
+              resolution: closable.resolution
+                || serviceWorkText({ ...data, serviceType: data.serviceType })
+                || data.description || null,
+              updatedAt:  serverTimestamp(),
+              updatedBy:  S.user.uid,
+            });
+            showToast(t("incident_closed_toast"), "info");
+          }
+        } catch (e) {
+          console.warn("Automatsko zatvaranje prijave nije uspelo:", e.message);
         }
       }
       // Veza je uklonjena ili prebačena na drugu prijavu → stara prijava se vraća u "otvoreno"
