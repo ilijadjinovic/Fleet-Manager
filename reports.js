@@ -18,7 +18,7 @@ import {
 } from "./date-input.js";
 import { DEJAVU_SANS_REGULAR_B64, DEJAVU_SANS_BOLD_B64 } from "./fonts-dejavu.js";
 import { COST_TYPES, COST_META } from "./entries-view.js";
-import { serviceTypeLabel, serviceDetailText } from "./service-types.js";
+import { serviceTypeLabel, serviceDetailText, serviceWorkText } from "./service-types.js";
 
 // ── FONT ZA SRPSKA SLOVA (š đ č ć ž) ───────────────────────────
 // jsPDF-ov ugradjeni "helvetica" font ne sadrzi ova slova (koristi
@@ -314,6 +314,7 @@ async function generateVehicleReport(allVehicles) {
       const costs     = entries.filter(e => COST_TYPES.includes(e.type));
 
       let y = drawHeader(pdf, company, from, to);
+      y = drawCostSummarySection(pdf, services, fuelings, costs, y);
       y = drawVehicleSection(pdf, vehicle, y);
       y = drawEquipmentSection(pdf, vehicle, y);
       y = drawAssignmentsSection(pdf, assignments, y);
@@ -661,7 +662,7 @@ function drawTableRow(pdf, cols, values, y, shade = false) {
   pdf.setTextColor(40);
   let x = M + 2;
   cols.forEach(([, width], i) => {
-    const val = String(values[i] ?? "—");
+    const val = String(values[i] ?? "—").replace(/\s*[\r\n]+\s*/g, " ");
     pdf.text(val.substring(0, 30), x, y); // max 30 chars
     x += width;
   });
@@ -755,6 +756,99 @@ function drawTableRowWrapped(pdf, cols, values, y, shade = false) {
   });
 
   return y + rowHeight + 2;
+}
+
+// ── SUMARNA TABELA TROŠKOVA (na početku izveštaja) ────────────
+// Jedna tabela sa svim vrstama troškova i ukupnim zbirom, da se
+// odmah vidi cela slika; detalji po stavkama idu u nastavku.
+function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function fmtRSD(n) {
+  return round2(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " RSD";
+}
+
+function drawCostSummarySection(pdf, services, fuelings, costs, y) {
+  y = drawSectionTitle(pdf, t("report_pdf_section_summary"), y, 60);
+
+  const doneServices = services.filter(isServiceDone);
+  const rows = [
+    {
+      label: t("report_pdf_sum_services"),
+      count: doneServices.length,
+      amount: servicesDoneTotal(services),
+    },
+    {
+      label: t("report_pdf_sum_fuel"),
+      count: fuelings.length,
+      amount: fuelings.reduce((s, f) => s + (Number(f.fuelCost) || 0), 0),
+    },
+    ...COST_TYPES.map(type => {
+      const list = costs.filter(c => c.type === type);
+      return {
+        label: t(COST_META[type].label),
+        count: list.length,
+        amount: list.reduce((s, c) => s + (Number(c.amount) || 0), 0),
+      };
+    }),
+  ];
+  const grandTotal = rows.reduce((s, r) => s + r.amount, 0);
+
+  // Kolone: naziv | broj stavki | iznos (desno poravnato)
+  const xLabel = M + 2;
+  const xCount = M + 110;          // desna ivica kolone "Broj stavki"
+  const xAmount = M + PW - 2;      // desna ivica kolone "Iznos"
+
+  y = checkPageBreak(pdf, y, 8);
+  pdf.setFillColor(26, 39, 68);
+  pdf.rect(M, y - 4, PW, 7, "F");
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(8);
+  pdf.setTextColor(255);
+  pdf.text(t("report_pdf_sum_col_type"), xLabel, y);
+  pdf.text(t("report_pdf_sum_col_count"), xCount, y, { align: "right" });
+  pdf.text(t("report_pdf_sum_col_amount"), xAmount, y, { align: "right" });
+  y += 6;
+
+  rows.forEach((r, i) => {
+    y = checkPageBreak(pdf, y, 7);
+    if (i % 2 === 0) {
+      pdf.setFillColor(248, 250, 255);
+      pdf.rect(M, y - 4, PW, 6, "F");
+    }
+    pdf.setFont(REPORT_FONT, "normal");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(r.count === 0 ? 150 : 40);
+    pdf.text(r.label, xLabel, y);
+    pdf.text(String(r.count), xCount, y, { align: "right" });
+    pdf.text(fmtRSD(r.amount), xAmount, y, { align: "right" });
+    y += 6;
+  });
+
+  // UKUPNO
+  y = checkPageBreak(pdf, y, 9);
+  pdf.setFillColor(220, 230, 255);
+  pdf.rect(M, y - 4, PW, 8, "F");
+  pdf.setDrawColor(26, 39, 68);
+  pdf.setLineWidth(0.4);
+  pdf.line(M, y - 4, M + PW, y - 4);
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(9.5);
+  pdf.setTextColor(26, 39, 68);
+  pdf.text(t("report_pdf_sum_total"), xLabel, y + 0.5);
+  pdf.text(String(rows.reduce((s, r) => s + r.count, 0)), xCount, y + 0.5, { align: "right" });
+  pdf.text(fmtRSD(grandTotal), xAmount, y + 0.5, { align: "right" });
+  y += 8;
+
+  // Napomena: servisi koji nisu završeni ne ulaze u zbir
+  const excluded = services.length - doneServices.length;
+  if (excluded > 0) {
+    pdf.setFont(REPORT_FONT, "normal");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(120);
+    pdf.text(`${t("report_pdf_sum_note_excluded")}: ${excluded}`, xLabel, y);
+    y += 5;
+  }
+
+  return y + 6;
 }
 
 // ── VOZILO SEKCIJE ────────────────────────────────────────────
@@ -867,6 +961,12 @@ function isServiceDone(srv) {
   return effectiveServiceStatus(srv) === SERVICE_STATUS.DONE;
 }
 
+function servicesDoneTotal(services) {
+  return services
+    .filter(isServiceDone)
+    .reduce((s, srv) => s + (Number(srv.cost) || 0), 0);
+}
+
 // Kolona "Trošak": za završen servis iznos, za ostale (planiran, u servisu,
 // otkazan) naziv statusa — da se vidi zašto iznos nije u ukupnom zbiru.
 function serviceCostCell(srv) {
@@ -897,21 +997,11 @@ function drawServicesSection(pdf, services, y) {
       s.workshop || "—",
     ], y, i % 2 === 0);
 
-    const extra = [serviceDetailText(s), s.description].filter(Boolean).join(" · ");
-    if (extra) {
-      y = checkPageBreak(pdf, y, 6);
-      pdf.setFont(REPORT_FONT, "italic");
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(100);
-      pdf.text(`  → ${extra.substring(0, 110)}`, M + 4, y);
-      y += 5;
-    }
+    y = drawEntryDetails(pdf, "service", s, y);
   });
 
   // U zbir ulaze samo ZAVRŠENI servisi — planirani i otkazani nisu trošak.
-  const totalCost = services
-    .filter(isServiceDone)
-    .reduce((s, srv) => s + (Number(srv.cost) || 0), 0);
+  const totalCost = servicesDoneTotal(services);
   if (totalCost > 0) {
     y += 2;
     pdf.setFont(REPORT_FONT, "bold");
@@ -930,12 +1020,12 @@ function drawFuelingsSection(pdf, fuelings, y) {
 
   const cols = [
     [t("report_pdf_col_date"),        25],
-    [t("report_pdf_col_fuel"),        20],
+    [t("report_pdf_col_fuel"),        29],
     [t("report_pdf_col_amount"),      20],
-    [t("report_pdf_col_price"),       25],
-    [t("report_pdf_col_price_per_l"), 22],
+    [t("report_pdf_col_price"),       26],
+    [t("report_pdf_col_price_per_l"), 25],
     [t("report_pdf_col_km"),          20],
-    [t("report_pdf_col_station"),     48],
+    [t("report_pdf_col_station"),     35],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -949,6 +1039,7 @@ function drawFuelingsSection(pdf, fuelings, y) {
       f.currentKm ? f.currentKm.toLocaleString() : "—",
       f.fuelStation || "—",
     ], y, i % 2 === 0);
+    y = drawEntryDetails(pdf, "fuel", f, y);
   });
 
   // Sumarni red
@@ -966,16 +1057,232 @@ function drawFuelingsSection(pdf, fuelings, y) {
   return y + 8;
 }
 
+// ══════════════════════════════════════════════════════════════
+//  JEDINSTVEN PRIKAZ DETALJA UNOSA (gorivo, ostali troškovi, servisi)
+//
+//  Postoje tačno DVA modela, nezavisno od vrste troška:
+//   A) OČITAN RAČUN (QR)  — zelena oznaka; prodavac, PIB, adresa, objekat,
+//      broj i vreme računa, tabela stavki sa zbirom, napomena.
+//   B) RUČNI UNOS         — siva oznaka; samo ono što je ručno uneto
+//      (prodavac, adresa/lokacija, broj računa, napomena). Bez stavki.
+//  Polja idu uvek istim redosledom, u dve kolone.
+// ══════════════════════════════════════════════════════════════
+const DETAIL_INDENT = M + 6;
+
+// Pomoćni: font za sitan tekst. Uvek se postavlja iznova jer
+// checkPageBreak -> drawPageNumber menja font/boju.
+function setDetailFont(pdf, bold = false, color = 90) {
+  pdf.setFont(REPORT_FONT, bold ? "bold" : "normal");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(color);
+}
+
+const oneLine = (v) => String(v).replace(/\s*[\r\n]+\s*/g, " ").trim();
+
+// Napomena unosa bez automatski ubačene liste "Stavke sa računa" (ona se u
+// izveštaju prikazuje kao tabela iz receiptItems). Bez receiptItems ostaje ceo tekst.
+function costNotesText(c) {
+  const text = String(c.notes || "").trim();
+  if (!text) return "";
+  if (!Array.isArray(c.receiptItems) || c.receiptItems.length === 0) return text;
+  // skida samo naslov + redove koji počinju sa "•"; tekst koji je korisnik
+  // ukucao pre ili posle liste ostaje
+  return text.replace(/(^|\n)[^\n]*:[ \t]*\n(?:•[^\n]*(?:\n|$))+/, "$1").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function fmtNum2(n) {
+  return Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Svodi gorivo / trošak / servis na isti oblik, pa ga jedna funkcija crta.
+function entryModel(kind, e) {
+  const items = Array.isArray(e.receiptItems) ? e.receiptItems : [];
+  // Očitan račun: izvor "qr", ili postoji link računa, ili su sačuvane stavke
+  const scanned = e.receiptSource === "qr" || !!e.receiptUrl || items.length > 0;
+  const base = { scanned, items, receiptNo: e.receiptNo, receiptTime: e.receiptTime };
+
+  if (kind === "fuel") {
+    return {
+      ...base,
+      sellerLabel: t("report_pdf_f_seller_fuel"), seller: e.fuelStation,
+      addressLabel: t("report_pdf_f_address"), address: e.fuelStationAddress,
+      pib: e.stationPib, object: e.stationObject, location: null,
+      amount: e.fuelCost,
+      texts: [{ label: t("notes"), text: costNotesText(e) }],
+    };
+  }
+  if (kind === "service") {
+    return {
+      ...base,
+      sellerLabel: t("report_pdf_f_seller_service"), seller: e.workshop,
+      addressLabel: t("report_pdf_f_address"), address: e.workshopAddress,
+      pib: e.receiptPib, object: null, location: null,
+      amount: e.cost,
+      texts: [
+        { label: t("det_service_works"), text: serviceDetailText(e) },
+        { label: t("service_description"), text: serviceWorkText(e) },
+      ],
+    };
+  }
+  // ostali troškovi
+  return {
+    ...base,
+    sellerLabel: t("report_pdf_f_seller_cost"), seller: e.merchant,
+    addressLabel: t("report_pdf_f_address"), address: e.merchantAddress,
+    pib: e.stationPib, object: null, location: e.location,
+    amount: e.amount,
+    texts: [{ label: t("notes"), text: costNotesText(e) }],
+  };
+}
+
+// Oznaka modela: zelena (očitan račun) / siva (ručni unos)
+function drawEntryTag(pdf, scanned, y) {
+  const label = scanned ? t("report_pdf_model_scanned") : t("report_pdf_model_manual");
+  y = checkPageBreak(pdf, y, 7);
+  pdf.setFont(REPORT_FONT, "bold");
+  pdf.setFontSize(6.5);
+  const w = pdf.getTextWidth(label) + 5;
+  if (scanned) pdf.setFillColor(22, 130, 80); else pdf.setFillColor(120, 128, 140);
+  pdf.roundedRect(DETAIL_INDENT, y - 3.2, w, 4.4, 1, 1, "F");
+  pdf.setTextColor(255);
+  pdf.text(label, DETAIL_INDENT + 2.5, y);
+  return y + 4.2;
+}
+
+// Polja u dve kolone (naziv sivo, vrednost tamno); prazna se preskaču.
+function drawFieldGrid(pdf, fields, y) {
+  const list = fields.filter(f => f.value != null && String(f.value).trim() !== "");
+  const colW = (PW - 10) / 2;
+  const labelW = 27;
+  for (let i = 0; i < list.length; i += 2) {
+    const pair = list.slice(i, i + 2);
+    setDetailFont(pdf);
+    const wrapped = pair.map(f => pdf.splitTextToSize(oneLine(f.value), colW - labelW - 2).slice(0, 3));
+    const rowsN = Math.max(...wrapped.map(w => w.length));
+    y = checkPageBreak(pdf, y, rowsN * 3.8 + 1.5);
+    pair.forEach((f, k) => {
+      const x = DETAIL_INDENT + k * colW;
+      setDetailFont(pdf, false, 130);
+      pdf.text(f.label, x, y);
+      setDetailFont(pdf, false, 40);
+      wrapped[k].forEach((line, li) => pdf.text(line, x + labelW, y + li * 3.8));
+    });
+    y += rowsN * 3.8 + 0.8;
+  }
+  return y;
+}
+
+// Tabela stavki: naziv | količina × cena | ukupno, red UKUPNO i provera zbira
+function drawReceiptItems(pdf, items, amount, y) {
+  y = checkPageBreak(pdf, y, 10);
+  setDetailFont(pdf, true, 60);
+  pdf.text(`${t("det_section_items")} (${items.length})`, DETAIL_INDENT, y);
+  y += 4;
+
+  const xTotal = M + PW - 2;      // ukupno (desno)
+  const xCalc  = M + PW - 38;     // "količina × cena" (desno)
+  const nameW  = xCalc - 22 - (DETAIL_INDENT + 3);
+
+  items.forEach(it => {
+    setDetailFont(pdf, false, 50);
+    const nameLines = pdf.splitTextToSize(oneLine(it.name || "—"), nameW);
+    y = checkPageBreak(pdf, y, nameLines.length * 3.8 + 1);
+    setDetailFont(pdf, false, 50);
+    pdf.text("•", DETAIL_INDENT, y);
+    nameLines.forEach((line, i) => pdf.text(line, DETAIL_INDENT + 3, y + i * 3.8));
+
+    const hasQty = it.quantity != null && !isNaN(it.quantity);
+    const hasPrice = it.unitPrice != null && !isNaN(it.unitPrice);
+    if (hasQty || hasPrice) {
+      setDetailFont(pdf, false, 120);
+      pdf.text(
+        [hasQty ? Number(it.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 }) : null,
+         hasPrice ? fmtNum2(it.unitPrice) : null].filter(Boolean).join(" × "),
+        xCalc, y, { align: "right" }
+      );
+    }
+    setDetailFont(pdf, true, 40);
+    pdf.text(it.total != null && !isNaN(it.total) ? fmtNum2(it.total) : "—", xTotal, y, { align: "right" });
+    y += nameLines.length * 3.8 + 0.8;
+  });
+
+  // Zbir stavki (samo ako sve stavke imaju iznos)
+  if (items.every(it => it.total != null && !isNaN(it.total))) {
+    const sum = items.reduce((a, it) => a + Number(it.total), 0);
+    y = checkPageBreak(pdf, y, 6);
+    pdf.setDrawColor(190);
+    pdf.setLineWidth(0.2);
+    pdf.line(xCalc - 25, y - 3, xTotal, y - 3);
+    setDetailFont(pdf, true, 26);
+    pdf.text(t("det_items_sum"), xCalc, y, { align: "right" });
+    pdf.text(fmtNum2(sum), xTotal, y, { align: "right" });
+    y += 4;
+    if (amount != null && amount !== "" && Math.abs(sum - Number(amount)) > 0.01) {
+      setDetailFont(pdf);
+      pdf.setTextColor(200, 80, 40);
+      pdf.text(`${t("report_pdf_cost_items_mismatch")}: ${fmtNum2(amount)} RSD`, xTotal, y, { align: "right" });
+      y += 4;
+    }
+  }
+  return y;
+}
+
+function drawEntryDetails(pdf, kind, e, y) {
+  const m = entryModel(kind, e);
+  y = drawEntryTag(pdf, m.scanned, y);
+
+  if (m.scanned) {
+    // MODEL A — očitan račun (fiksan redosled polja)
+    y = drawFieldGrid(pdf, [
+      { label: m.sellerLabel,              value: m.seller },
+      { label: t("report_pdf_f_pib"),            value: m.pib },
+      { label: m.addressLabel,             value: m.address },
+      { label: t("report_pdf_f_object"),         value: m.object },
+      { label: t("report_pdf_location_label"), value: m.location },
+      { label: t("report_pdf_f_receipt_no"), value: m.receiptNo },
+      { label: t("report_pdf_f_receipt_time"),
+        value: m.receiptTime
+          ? (isNaN(new Date(m.receiptTime)) ? m.receiptTime : formatDateTimeDMY(new Date(m.receiptTime)))
+          : null },
+    ], y);
+    if (m.items.length) y = drawReceiptItems(pdf, m.items, m.amount, y);
+  } else {
+    // MODEL B — ručni unos: samo ono što je ručno uneto, bez stavki
+    y = drawFieldGrid(pdf, [
+      { label: m.sellerLabel,              value: m.seller },
+      { label: m.addressLabel,             value: m.address },
+      { label: t("report_pdf_location_label"), value: m.location },
+      { label: t("report_pdf_f_receipt_no"), value: m.receiptNo },
+    ], y);
+  }
+
+  // Napomene / opis radova — isto u oba modela
+  m.texts.forEach(({ label, text }) => {
+    if (!text) return;
+    text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(line => {
+      setDetailFont(pdf);
+      pdf.splitTextToSize(`${label}: ${line}`, PW - 12).forEach(part => {
+        y = checkPageBreak(pdf, y, 5);
+        setDetailFont(pdf, false, 100);
+        pdf.text(part, DETAIL_INDENT, y);
+        y += 4;
+      });
+    });
+  });
+
+  return y + 2;
+}
+
 function drawCostsSection(pdf, costs, y) {
   y = drawSectionTitle(pdf, `${t("report_pdf_section_costs")} (${costs.length})`, y, 15);
   if (costs.length === 0) { return drawEmptyRow(pdf, y); }
 
   const cols = [
     [t("report_pdf_col_date"),           25],
-    [t("report_pdf_col_kind"),           30],
-    [t("report_pdf_col_price"),          25],
-    [t("report_pdf_col_km"),             20],
-    [t("report_pdf_location_label"),     80],
+    [t("report_pdf_col_kind"),           35],
+    [t("report_pdf_col_price"),          32],
+    [t("report_pdf_col_km"),             25],
+    [t("report_pdf_col_driver"),         60],
   ];
 
   y = drawTableHeader(pdf, cols, y);
@@ -986,8 +1293,9 @@ function drawCostsSection(pdf, costs, y) {
       typeLabels[c.type] || c.type,
       c.amount ? c.amount.toLocaleString() + " RSD" : "—",
       c.currentKm ? c.currentKm.toLocaleString() : "—",
-      c.location || "—",
+      c.driverName || "—",
     ], y, i % 2 === 0);
+    y = drawEntryDetails(pdf, "cost", c, y);
   });
 
   const total = costs.reduce((s, c) => s + (c.amount || 0), 0);
@@ -1055,8 +1363,12 @@ function drawIncidentsSection(pdf, incidents, y) {
     }
     if (inc.resolution) {
       pdf.setTextColor(34, 197, 94);
-      pdf.text(`${t("incident_resolution_label")}: ${inc.resolution.substring(0, 80)}`, M + 2, y);
-      y += 4.5;
+      const resLines = pdf.splitTextToSize(
+        `${t("incident_resolution_label")}: ${String(inc.resolution).replace(/\s*[\r\n]+\s*/g, " ")}`, PW - 4);
+      resLines.slice(0, 3).forEach(line => {
+        pdf.text(line, M + 2, y);
+        y += 4.5;
+      });
     }
     y += 2;
   });
