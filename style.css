@@ -3164,3 +3164,32 @@ tbody td {
 
 /* Grupno učitavanje stavki sa računa */
 .bulk-reload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+
+/* Nadolazeći servisi / podsetnici — mobilni prikaz: kartica u koloni da se
+   naziv vozila ne skuplja u ništa kad su datum i bedževi široki */
+@media (max-width: 640px) {
+  .upcoming-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .upcoming-item__main { width: 100%; }
+  .upcoming-item__name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .upcoming-item__right {
+    flex-shrink: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px 8px;
+  }
+  .upcoming-item__date {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+  }
+}
