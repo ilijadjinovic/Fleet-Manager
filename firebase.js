@@ -11,6 +11,7 @@ import {
   EmailAuthProvider,
   linkWithCredential,
   signInWithPopup,
+  signInWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updatePassword,
@@ -60,8 +61,19 @@ export { getSecondaryAuth };
 
 // ── AUTH HELPERI ──────────────────────────────────────────────
 
-/** Google popup login */
+/**
+ * Google login.
+ * U Android aplikaciji (Capacitor) popup ne radi u WebView-u, pa se koristi
+ * nativni Google dijalog (@capacitor-firebase/authentication), a dobijeni
+ * idToken se prosleđuje web SDK-u, tako da sesiju i dalje drži web Firebase Auth.
+ * U običnom pregledaču ostaje stari popup.
+ */
 export async function loginWithGoogle() {
+  if (window.Capacitor?.isNativePlatform?.()) {
+    const r = await window.Capacitor.Plugins.FirebaseAuthentication.signInWithGoogle();
+    const cred = GoogleAuthProvider.credential(r.credential.idToken);
+    return signInWithCredential(auth, cred);
+  }
   return signInWithPopup(auth, googleProvider);
 }
 
@@ -97,6 +109,10 @@ export async function loginWithUsername(username, password) {
 
 /** Logout */
 export async function logout() {
+  if (window.Capacitor?.isNativePlatform?.()) {
+    // odjava i izabranog Google naloga na telefonu (greška se ignoriše)
+    try { await window.Capacitor.Plugins.FirebaseAuthentication.signOut(); } catch (_) {}
+  }
   return signOut(auth);
 }
 
