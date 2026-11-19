@@ -367,7 +367,7 @@ function dateTimeMessage(r) {
 }
 
 function maskDateTime(raw) {
-  const d = String(raw).replace(/\\D/g, "").slice(0, 14);
+  const d = String(raw).replace(/\D/g, "").slice(0, 14);
   let out = d.slice(0, 2);
   if (d.length > 2) out += "." + d.slice(2, 4);
   if (d.length > 4) out += "." + d.slice(4, 8);
@@ -463,7 +463,7 @@ export function attachDateTimeMask(target) {
   native.addEventListener("change", () => {
     const m = native.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return;
-    const old = rawGet(el).match(/[ T]+(\d{1,2}:\d{2}(?::\d{2})?)\\s*$/);
+    const old = rawGet(el).match(/[ T]+(\d{1,2}:\d{2}(?::\d{2})?)\s*$/);
     const now = new Date();
     const time = old ? old[1] : `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
     rawSet(el, `${m[3]}.${m[2]}.${m[1]} ${time}`);
@@ -527,7 +527,7 @@ export function attachTimeMask(target) {
 
   // Samo cifre, dvotačka se dodaje sama; prva cifra veća od 2 dobija nulu (9 → 09:)
   el.addEventListener("input", () => {
-    let digits = rawGet(el).replace(/\\D/g, "");
+    let digits = rawGet(el).replace(/\D/g, "");
     if (digits.length >= 1 && Number(digits[0]) > 2) digits = "0" + digits;
     digits = digits.slice(0, 4);
     rawSet(el, digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits);
